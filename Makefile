@@ -1,6 +1,6 @@
 NASM			= nasm
 CC				= i686-elf-gcc
-CFLAGS		= -std=gnu99 -O2 -Wall -Wextra -MD
+CFLAGS		= -std=gnu99 -O2 -Wall -Wextra -g
 OBJCOPY		= i686-elf-objcopy
 QEMU			= qemu-system-i386
 QEMUFLAGS			= -m 512
@@ -43,11 +43,9 @@ $(BINDIR)/kernel.bin: $(BINDIR)/kernel.elf
 
 .PHONY: clean
 clean:
-	$(RM) $(OBJDIR)/*.o $(BINDIR)/*.elf $(BINDIR)/*.bin $(BINDIR)/kernel $(OBJDIR)/*.d
+	$(RM) $(OBJDIR)/*.o $(BINDIR)/*.elf $(BINDIR)/*.bin $(BINDIR)/kernel
 
 .PHONY: run
 run: $(BINDIR)/kernel
-	$(QEMU) $(QEMUFLAGS) -fda $^
+	$(QEMU) $(QEMUFLAGS) -fda $^ -monitor stdio -s
 
-
--include $(OBJDIR)/*.d

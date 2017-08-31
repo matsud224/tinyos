@@ -21,6 +21,7 @@ void phymem_init() {
   freepages = 0;
   while(map->base || map->len) {
     if(map->type == 1) {
+printf("%x - %x\n", (uint32_t)map->base, (uint32_t)(map->base + map->len));
       freepages += (map->len - ((ALIGN(map->base, PAGESIZE) - map->base))) / PAGESIZE;
     }
     map++;

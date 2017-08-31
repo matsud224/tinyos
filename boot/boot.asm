@@ -2,7 +2,7 @@
 
 mapbase equ 		0x500
 kernbase equ 		0x7e00
-kernsectors equ 4 ;kernmaxsize/512
+kernsectors equ 10
 codeseg equ		 	0x8
 dataseg equ 		0x10
 
@@ -50,7 +50,7 @@ boot:
   add di, 20
   jmp .nextent
 .maperror:
-  mov si, maperrormsg
+  mov si, maperrmsg
   call putstr
   hlt
 .mapfin:
@@ -121,9 +121,6 @@ boot:
   out 0x64, al
   call waitkbdin
 
-mov si, hellomsg
-call putstr
-
   ;to protect mode
   mov eax, cr0
   or eax, 1
@@ -143,8 +140,6 @@ db "floppy error", 0x0a, 0x0d, 0x00
 maperrmsg:
 db "memory map error", 0x0a, 0x0d, 0x00
 
-maperrormsg:
-db "memory map error", 0x0a, 0x0d, 0x00
 
 gdtptr:
   dw 8*3-1
@@ -203,13 +198,14 @@ lba2chs:
 [bits 32]
 kernstart:
   ;init segment registers
+  cli
   mov ax, dataseg
   mov ss, ax
   mov es, ax
   mov fs, ax
   mov gs, ax
   mov ds, ax
-  mov esp, 0x9000
+  mov esp, 0x7bff
   call kernbase
   hlt
 

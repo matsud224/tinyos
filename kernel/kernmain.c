@@ -11,7 +11,7 @@
 
 KERNENTRY void kernel_main(void) {
 	vga_init();
-	puts("hello, world!\n");
+	puts("hello, world!");
   phymem_init();
   printf("%d MB free\n", phymem_getfreepages()*4096/(1024*1024));
 
@@ -21,8 +21,6 @@ KERNENTRY void kernel_main(void) {
   pit_init();
   sti();
   //gengpe();
-	puts("hello, world!\n");
-  while(1);
 }
 
 

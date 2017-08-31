@@ -1,8 +1,10 @@
 [bits 16]
 
 mapbase equ 		0x500
+pdtbase equ 0x1000
 kernbase equ 		0x7e00
-kernsectors equ 10
+virtkernbase equ 0xc0007e00
+kernsectors equ 20
 codeseg equ		 	0x8
 dataseg equ 		0x10
 
@@ -21,11 +23,6 @@ boot:
   mov es, ax
   mov fs, ax
   mov gs, ax
-
-  ;clear registers
-  xor bx, bx
-  xor cx, cx
-  xor dx, dx
 
   ;prepare stack
   mov ss, ax
@@ -87,7 +84,7 @@ boot:
   add ax, 512
   mov [kerntail], ax
   cmp si, kernsectors
-  jz .setupgdt
+  jz .setuppdt
   inc si
   jmp .readloop
 .fail:
@@ -95,7 +92,28 @@ boot:
   call putstr
   hlt
 
-.setupgdt:
+.setuppdt:
+  ;create 4MB page directory table
+  ;straight mapping
+  mov eax, pdtbase
+  mov ebx, 0x83 ; P,RW,PS bit
+.nextdent:
+  mov [eax], ebx
+  add eax, 4
+  add ebx, 0x400000
+  jnc .nextdent
+  ; add mapping
+  mov eax, 4 * (virtkernbase-kernbase)/(4*1024*1024)
+  add eax, pdtbase
+  mov ebx, 0x83
+  mov [eax], ebx
+  ; prepare paging related registers
+  mov eax, pdtbase
+  mov cr3, eax
+  mov eax, cr4
+  or eax, 0x10
+  mov cr4, eax
+
   ;setup gdt
   lgdt [gdtptr]
   
@@ -206,8 +224,16 @@ kernstart:
   mov gs, ax
   mov ds, ax
   mov esp, 0x7bff
+  ; enable paging
+  mov eax, cr0
+  or eax, 0x80000000
+  mov cr0, eax
+  jmp .flush2
+.flush2:
   call kernbase
+.loop:
   hlt
+  jmp .loop
 
 times 510 - ($ - $$) db 0
 dw 0xaa55

@@ -3,7 +3,7 @@ CC				= i686-elf-gcc
 CFLAGS		= -std=gnu99 -O2 -Wall -Wextra -g
 OBJCOPY		= i686-elf-objcopy
 QEMU			= qemu-system-i386
-QEMUFLAGS			= -m 512
+QEMUFLAGS			= -m 512 -cpu pentium3
 RM						= rm -f
 
 BINDIR				= bin

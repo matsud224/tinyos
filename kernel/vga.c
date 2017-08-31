@@ -56,8 +56,14 @@ int putchar(int c) {
   return c;
 }
   
-int puts(const char *str) {
+static int putstr(const char *str) {
   while(*str) putchar(*str++);
+  return 0;
+} 
+
+int puts(const char *str) {
+  putstr(str);
+  putchar('\n');
   return 0;
 } 
 
@@ -114,7 +120,7 @@ void printf(const char *fmt, ...) {
         putchar((char)*argbase++);
         break;
       case 's':
-        puts((char *)*argbase++);
+        putstr((char *)*argbase++);
         break;
       case '%':
         putchar('%');

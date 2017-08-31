@@ -3,6 +3,6 @@
 #include <stdint.h>
 
 void gpe_inthandler() {
-  puts("General Protected Exception\n");
+  puts("General Protection Exception");
   while(1);
 }

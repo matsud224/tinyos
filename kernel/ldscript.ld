@@ -1,6 +1,6 @@
 SECTIONS
 {
-  . = 0x7e00;
+  . = 0xc0007e00;
   .entry :	{ *(.entry) }
   .text :		{ *(.text)  }
   .rodata :	{ *(.rodata)  }

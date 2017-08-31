@@ -23,7 +23,7 @@
 
 
 void pit_inthandler() {
-  puts("IRQ0\n");
+  puts("IRQ0");
   pic_sendeoi();
 }
 

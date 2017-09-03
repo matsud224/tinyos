@@ -11,9 +11,11 @@ divzero:
 
 global gengpe
 gengpe:
+  push ebx
   mov bx, 0x80
   mov ds, [bx]
   mov ax, [ecx]
+  pop ebx
   ret
 
 global out8
@@ -80,8 +82,8 @@ global lidt
 lidt:
   push ebp
   mov ebp, esp
-  mov ebx, [ebp+8]
-  lidt [ebx]
+  mov eax, [ebp+8]
+  lidt [eax]
   pop ebp
   ret
 

@@ -58,10 +58,7 @@ boot:
   mov ah, 0x00
   mov dl, 0x00
   int 0x13
-  jnc .readkern
-  mov si, floppyerrmsg
-  call putstr
-  hlt
+  jc floppyerr
 
 .readkern:
   ;read kernel to kernbase
@@ -79,32 +76,39 @@ boot:
   mov dl, 0x00
   mov bx, [kerntail]
   int 0x13
-  jc .fail
+  jc floppyerr
   mov ax, [kerntail]
   add ax, 512
   mov [kerntail], ax
   cmp si, kernsectors
-  jz .setuppdt
+  jz setuppdt
   inc si
   jmp .readloop
-.fail:
+floppyerr:
   mov si, floppyerrmsg
   call putstr
   hlt
 
-.setuppdt:
+setuppdt:
   ;create 4MB page directory table
-  ;straight mapping
-  mov eax, pdtbase
+  ;clear
+  cld
+  mov di, pdtbase
+  mov ax, 0
+  mov cx, 1024*4/2
+  rep stosw
+  ; add mapping
+  mov eax, pdtbase+(0x300*4) ; from 0xc0000000
   mov ebx, 0x83 ; P,RW,PS bit
+  mov ecx, 224
 .nextdent:
   mov [eax], ebx
   add eax, 4
   add ebx, 0x400000
-  jnc .nextdent
+  dec ecx
+  jnz .nextdent
   ; add mapping
-  mov eax, 4 * (virtkernbase-kernbase)/(4*1024*1024)
-  add eax, pdtbase
+  mov eax, pdtbase
   mov ebx, 0x83
   mov [eax], ebx
   ; prepare paging related registers
@@ -156,7 +160,7 @@ floppyerrmsg:
 db "floppy error", 0x0a, 0x0d, 0x00
 
 maperrmsg:
-db "memory map error", 0x0a, 0x0d, 0x00
+db "memmap error", 0x0a, 0x0d, 0x00
 
 
 gdtptr:

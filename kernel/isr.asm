@@ -20,3 +20,11 @@ gpe_isr:
   popad
   iretd
 
+extern pf_inthandler
+global pf_isr
+pf_isr:
+  pushad
+  cld
+  call pf_inthandler
+  popad
+  iretd

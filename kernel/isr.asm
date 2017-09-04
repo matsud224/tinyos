@@ -32,4 +32,5 @@ pf_isr:
   call pf_inthandler
   add esp, 8
   popad
+  add esp, 4 ; pop error code
   iretd

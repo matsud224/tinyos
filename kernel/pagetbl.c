@@ -35,20 +35,24 @@ static void bzero(void *s, size_t n) {
     *ptr++ = 0;
 }
 
+static void *get_zeropage() {
+  void *p = page_alloc();
+  if(p)
+    bzero(p, PAGESIZE);
+  return p;
+}
+
 static uint32_t *new_procpdt() {
-  uint32_t *pdt = page_alloc();
-  bzero(pdt, PAGESIZE);
+  uint32_t *pdt = get_zeropage();
   //fill kernel space page diectory entry
-  int st_start_index = KERNSPACE_ADDR / 0x400000;
-  for(int i = 0/*st_start_index*/; i < 1024; i++)
+  for(int i = 0; i < 1024; i++)
     pdt[i] = kernspace_pdt[i];
   return pdt;
 }
 
 void pagetbl_init() {
   //setup kernel space
-  kernspace_pdt = page_alloc();
-  bzero(kernspace_pdt, PAGESIZE);
+  kernspace_pdt = get_zeropage();
   //kernel space straight mapping(896MB)
   int st_start_index = KERNSPACE_ADDR / 0x400000;
   int st_end_index = st_start_index + (KERN_STRAIGHT_MAP_SIZE/0x400000);
@@ -59,8 +63,7 @@ void pagetbl_init() {
   }
   //kernel space virtual area
   for(int i = st_end_index; i < 1024; i++) {
-    uint32_t *pt = page_alloc();
-    bzero(pt, PAGESIZE);
+    uint32_t *pt = get_zeropage();
     kernspace_pdt[i] = ((uint32_t)pt-KERNSPACE_ADDR) | PDE_PRESENT | PDE_RW;
   }
   //for process 0
@@ -69,4 +72,13 @@ void pagetbl_init() {
   flushtlb();
 }
 
+void pagetbl_add_mapping(uint32_t *pdt, uint32_t vaddr, uint32_t paddr) {
+  int pdtindex = vaddr>>22;
+  int ptindex = (vaddr>>12) & 0x3ff;
+  if((pdt[pdtindex] & PDE_PRESENT) == 0) {
+    pdt[pdtindex] = ((uint32_t)get_zeropage()-KERNSPACE_ADDR) | PDE_PRESENT | PDE_RW;
+  }
 
+  uint32_t *pt = (uint32_t *)((pdt[pdtindex] & ~0xfff)+KERNSPACE_ADDR);
+  pt[ptindex] = ((paddr-KERNSPACE_ADDR) & ~0xfff) | PTE_PRESENT | PTE_RW;
+}

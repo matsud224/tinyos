@@ -10,6 +10,7 @@
 #include "malloc.h" 
 #include "kernasm.h"
 #include "pagetbl.h"
+#include "vmem.h"
 
 KERNENTRY void kernel_main(void) {
 	vga_init();
@@ -21,6 +22,7 @@ KERNENTRY void kernel_main(void) {
   idt_register(13, IDT_INTGATE, gpe_isr);
   idt_register(14, IDT_INTGATE, pf_isr);
   pagetbl_init();
+  vmem_init();
   //pit_init();
   sti();
   //gengpe();
@@ -35,9 +37,14 @@ KERNENTRY void kernel_main(void) {
     x->b = 123;
     printf("%d, %d\n", x->a, x->b);
     free(x);
-    puts("bye.");
+    puts(".....");
   }
-  volatile int a = *((int*)0x500000);
+  volatile int *a = (int*)0x6600;
+  *a = 12345;
+  printf("*a = %d\n", *a);
+  *a = 1234;
+  printf("*a = %d\n", *a);
+  puts("bye.");
 while(1);
 }
 

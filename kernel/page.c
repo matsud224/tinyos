@@ -55,7 +55,6 @@ void page_free(uint32_t addr) {
 static void recycle_area(uint32_t start, size_t size) {
   int startindex = (start+(PAGESIZE-1)) / PAGESIZE;
   int endindex = startindex + size / PAGESIZE;
-printf("%d - %d\n", startindex, endindex); 
   for(int i=startindex; i<endindex; i++) {
     pageinfo[i].flags &= ~PAGE_RESERVED;
     pageinfo[i].next_free = page_freelist;
@@ -76,7 +75,6 @@ void page_init() {
 
   pageinfo = (struct page *)(KERNSPACE_ADDR+PROTMEM_ADDR);
   int npages = memsize / PAGESIZE;
-printf("npages =  %d\n", npages); 
   for(int i=0; i<npages; i++)
     pageinfo[i].flags = PAGE_RESERVED;
 

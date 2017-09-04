@@ -25,6 +25,11 @@ global pf_isr
 pf_isr:
   pushad
   cld
+  mov ecx, dword [esp+32]
+  mov eax, cr2
+  push eax
+  push ecx
   call pf_inthandler
+  add esp, 8
   popad
   iretd

@@ -13,3 +13,5 @@ uint32_t in32(uint16_t port);
 void lidt(void *p);
 void sti(void);
 void cli(void);
+uint32_t getcr2(void);
+void flushtlb(void);

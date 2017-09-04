@@ -154,18 +154,22 @@ setuppdt:
   hlt
 
 hellomsg:
-db "Loading kernel...", 0x0a, 0x0d, 0x00
+db "Loading...", 0x0a, 0x0d, 0x00
 
 floppyerrmsg:
-db "floppy error", 0x0a, 0x0d, 0x00
+db "floppy err", 0x0a, 0x0d, 0x00
 
 maperrmsg:
-db "memmap error", 0x0a, 0x0d, 0x00
+db "map err", 0x0a, 0x0d, 0x00
 
 
 gdtptr:
   dw 8*3-1
   dd gdt
+
+gdtptr_virtaddr:
+  dw 8*3-1
+  dd gdt+0xc0000000
 
 gdt:
   db 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 					;null
@@ -227,14 +231,15 @@ kernstart:
   mov fs, ax
   mov gs, ax
   mov ds, ax
-  mov esp, 0x7bff
+  mov esp, 0xc0007bff
   ; enable paging
   mov eax, cr0
   or eax, 0x80000000
   mov cr0, eax
   jmp .flush2
 .flush2:
-  call kernbase
+  lgdt [gdtptr_virtaddr]
+  call virtkernbase
 .loop:
   hlt
   jmp .loop

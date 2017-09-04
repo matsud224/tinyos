@@ -96,3 +96,19 @@ global cli
 cli:
   cli
   ret
+
+global getcr2
+getcr2:
+  mov eax, cr2
+  ret
+
+extern current_pdt
+global flushtlb
+flushtlb:
+  mov eax, [current_pdt]
+  sub eax, 0xc0000000
+  mov cr3, eax
+  jmp .flush
+.flush:
+  ret
+

@@ -30,7 +30,6 @@ static struct chunkhdr *getnewchunk(size_t objsize) {
     return NULL;
 
   struct chunkhdr *newchunk = (struct chunkhdr *)page_alloc();
-printf("New chunk: %x\n", newchunk);
   newchunk->next_chunk = NULL;
   newchunk->freelist = NULL;
   int nobjs = (PAGESIZE - sizeof(struct chunkhdr)) / objsize;

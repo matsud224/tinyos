@@ -11,6 +11,25 @@ pit_isr:
   popad
   iretd
 
+extern ide1_inthandler
+global ide1_isr
+ide1_isr:
+  pushad
+  cld
+  call ide1_inthandler
+  popad
+  iretd
+
+extern ide2_inthandler
+global ide2_isr
+ide2_isr:
+  pushad
+  cld
+  call ide2_inthandler
+  popad
+  iretd
+
+
 extern gpe_inthandler
 global gpe_isr
 gpe_isr:

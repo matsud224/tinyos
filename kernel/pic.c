@@ -44,24 +44,24 @@ void pic_init() {
   out8(PIC_SLAVE_IMR, slave_imr);
 }
 
-void pic_setmask_master(int irq) {
-  master_imr |= 1<<irq;
-  out8(PIC_MASTER_IMR, master_imr);
+void pic_setmask(int irq) {
+  if(irq < 8) {
+    master_imr |= 1<<irq;
+    out8(PIC_MASTER_IMR, master_imr);
+  } else {
+    slave_imr |= 1<<(irq-8);
+    out8(PIC_SLAVE_IMR, slave_imr);
+  }
 }
 
-void pic_setmask_slave(int irq) {
-  slave_imr |= 1<<irq;
-  out8(PIC_SLAVE_IMR, slave_imr);
-}
-
-void pic_clearmask_master(int irq) {
-  master_imr &= ~(1<<irq);
-  out8(PIC_MASTER_IMR, master_imr);
-}
-
-void pic_clearmask_slave(int irq) {
-  slave_imr &= ~(1<<irq);
-  out8(PIC_SLAVE_IMR, slave_imr);
+void pic_clearmask(int irq) {
+  if(irq < 8) {
+    master_imr &= ~(1<<irq);
+    out8(PIC_MASTER_IMR, master_imr);
+  } else {
+    slave_imr &= ~(1<<(irq-8));
+    out8(PIC_SLAVE_IMR, slave_imr);
+  }
 }
 
 void pic_sendeoi() {

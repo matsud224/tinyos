@@ -4,7 +4,7 @@ mapbase equ 		0x500
 pdtbase equ 0x1000
 kernbase equ 		0x7e00
 virtkernbase equ 0xc0007e00
-kernsectors equ 20
+kernsectors equ 30
 codeseg equ		 	0x8
 dataseg equ 		0x10
 

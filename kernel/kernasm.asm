@@ -13,7 +13,7 @@ global gengpe
 gengpe:
   push ebx
   mov bx, 0x80
-  mov ds, [bx]
+  mov ds, bx
   mov ax, [ecx]
   pop ebx
   ret

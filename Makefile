@@ -2,8 +2,10 @@ NASM			= nasm
 CC				= i686-elf-gcc
 CFLAGS		= -std=gnu99 -O2 -Wall -Wextra -g
 OBJCOPY		= i686-elf-objcopy
-QEMU			= qemu-system-i386
-QEMUFLAGS			= -m 512 -cpu pentium3
+#QEMU			= qemu-system-i386
+QEMU			= ~/qemu-2.10.0/i386-softmmu/qemu-system-i386 
+QEMUFLAGS			= -m 512 -hdb sample -hdc sample2 
+
 RM						= rm -f
 
 BINDIR				= bin

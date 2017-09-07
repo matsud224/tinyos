@@ -33,5 +33,5 @@ void pit_init() {
   out8(PIT_CH0_DATA, CNT_100HZ >> 8);
   out8(PIT_CH0_DATA, CNT_100HZ & 0xff);
   idt_register(PIT_INT_VEC, IDT_INTGATE, pit_isr);
-  pic_clearmask_master(PIT_IRQ);
+  pic_clearmask(PIT_IRQ);
 }

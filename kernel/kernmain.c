@@ -13,6 +13,7 @@
 #include "pagetbl.h"
 #include "vmem.h"
 #include "ide.h"
+#include "params.h"
 
 KERNENTRY void kernel_main(void) {
 	vga_init();
@@ -24,15 +25,22 @@ KERNENTRY void kernel_main(void) {
   idt_register(13, IDT_INTGATE, gpe_isr);
   idt_register(14, IDT_INTGATE, pf_isr);
   pagetbl_init();
-  //vmem_init();
+  vmem_init();
   //pit_init();
   sti();
   pci_printinfo();
   ide_init();
-  int err;
-  if((err=ide_ata_access(0, 2, 0, 1, 0, 0)) < 0)
-    printf("ata_error:%d\n", err);
+  char *page1 = page_alloc();
+  struct io_request *req = NULL;
+  req=ide_request(0, 1, 2, (void *)((uint32_t)page1-KERNSPACE_ADDR), 0);
+  ioreq_wait(req);
   puts("bye");
+  if(ioreq_checkerror(req))
+    puts("error occered");
+  else
+    for(int i=0; i<1024; i++)
+      printf("%c", page1[i]);
+
   while(1);
 }
 

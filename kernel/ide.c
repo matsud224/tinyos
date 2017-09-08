@@ -3,7 +3,10 @@
 #include "pci.h"
 #include "idt.h"
 #include "pic.h"
+#include "page.h"
+#include "malloc.h"
 #include "kernasm.h"
+#include "params.h"
 #include <stdint.h>
 #include <stddef.h>
 
@@ -74,8 +77,8 @@
 #define ATA_REG_CONTROL    0x206
 #define ATA_REG_ALTSTATUS  0x206
 
-#define ATA_PRIMARY      0x00
-#define ATA_SECONDARY    0x01
+#define IDE_PRIMARY      0x00
+#define IDE_SECONDARY    0x01
  
 #define ATA_READ      0x00
 #define ATA_WRITE     0x01
@@ -88,17 +91,41 @@
 #define IDE_PRIMARY_IRQ							14
 #define IDE_SECONDARY_IRQ						15
 
+#define BMIDE_PRIMARY_COMMAND				0x00
+#define BMIDE_PRIMARY_STATUS				0x02
+#define BMIDE_PRIMARY_PRDTADDR			0x04
+#define BMIDE_SECONDARY_COMMAND			0x08
+#define BMIDE_SECONDARY_STATUS			0x0a
+#define BMIDE_SECONDARY_PRDTADDR		0x0c
+
+#define BMIDE_CMD_RW					0x08
+#define BMIDE_CMD_OP					0x01
+#define BMIDE_STATUS_SIMPLEX	0x80
+#define BMIDE_STATUS_D1CAP		0x40
+#define BMIDE_STATUS_D0CAP		0x20
+#define BMIDE_STATUS_INT			0x4
+#define BMIDE_STATUS_ERROR		0x2
+#define BMIDE_STATUS_ACTIVE		0x1
+
+#define EOT 0x80000000
+
 #define SRST 0x4
 #define HOB 0x80
 #define NIEN 0x2
+
 
 struct {
   uint16_t base;
   uint16_t bmide;
   uint8_t nien;
+  uint8_t irq;
+  uint8_t intvec;
+  struct prd *prdt;
+  void (*isr)(void);
+  struct io_request *queue_head;
+  struct io_request *queue_tail;
 } ide_channel[2];
 
-uint8_t ide_buf[2048];
 
 struct {
   uint8_t exist;
@@ -111,6 +138,23 @@ struct {
   uint32_t size;
   char model[41];
 } ide_devs[4];
+
+#define IOREQ_RW 0x1
+#define IOREQ_ERROR 0x2
+
+struct io_request {
+  uint8_t drvno;
+  volatile uint8_t wait;
+  uint8_t nsect;
+  uint8_t rem_nsect;
+  uint64_t blockno;
+  uint16_t *paddr;
+  uint16_t *next_paddr;
+  uint32_t flags;
+  struct io_request *next;
+};
+
+static uint8_t ide_buf[2048];
 
 static void ide_out8(uint8_t chan, uint16_t reg, uint8_t data) {
   if(reg > 0x07 && reg < 0x0c) {
@@ -176,21 +220,26 @@ static void ide_sendcmd(uint8_t chan, uint8_t cmd) {
   ide_out8(chan, ATA_REG_COMMAND, cmd);
 }
 
+static void ide_channel_init(uint8_t chan) {
+  ide_channel[chan].base = chan==IDE_PRIMARY ? IDE_PRIMARY_BASE : IDE_SECONDARY_BASE;
+  ide_channel[chan].nien = 1;
+  ide_channel[chan].intvec = chan==IDE_PRIMARY ? IDE_PRIMARY_INTVEC : IDE_SECONDARY_INTVEC;
+  ide_channel[chan].isr = chan==IDE_PRIMARY ? ide1_isr : ide2_isr;
+  ide_channel[chan].irq = chan==IDE_PRIMARY ? IDE_PRIMARY_IRQ : IDE_SECONDARY_IRQ;
+  ide_channel[chan].queue_head = NULL;
+  ide_channel[chan].queue_tail = NULL;
+  ide_setnien(chan);
+}
+
 void ide_init() {
-  int devno = -1;
+  int drvno = -1;
 
-  ide_channel[0].base = IDE_PRIMARY_BASE;
-  ide_channel[0].nien = 1;
-  ide_channel[1].base = IDE_SECONDARY_BASE;
-  ide_channel[1].nien = 1;
+  for(int chan = IDE_PRIMARY; chan <= IDE_SECONDARY; chan++) {
+    ide_channel_init(chan);
 
-  ide_setnien(ATA_PRIMARY);
-  ide_setnien(ATA_SECONDARY); 
-
-  for(int chan = 0; chan < 2; chan++) {
     for(int drv = 0; drv < 2; drv++) {
-      devno++;
-      ide_devs[devno].exist = 0;
+      drvno++;
+      ide_devs[drvno].exist = 0;
       // select drive
       ide_drivesel(chan, drv);
       // send identify command
@@ -215,25 +264,24 @@ void ide_init() {
         continue; //ATAPI is not supported
       ide_in_idspace(chan, ide_buf, 512);
 
-      printf("channel %d, drive %d exists!\n", chan, drv);
-      ide_devs[devno].exist = 1;
-      ide_devs[devno].channel = chan;
-      ide_devs[devno].drive = drv;
-      ide_devs[devno].signature = *(uint16_t *)(ide_buf + ATA_IDENT_DEVICETYPE);
-      ide_devs[devno].capabilities = *(uint16_t *)(ide_buf + ATA_IDENT_CAPABILITIES);
-      ide_devs[devno].cmdsets = *(uint32_t *)(ide_buf + ATA_IDENT_COMMANDSETS);
+      ide_devs[drvno].exist = 1;
+      ide_devs[drvno].channel = chan;
+      ide_devs[drvno].drive = drv;
+      ide_devs[drvno].signature = *(uint16_t *)(ide_buf + ATA_IDENT_DEVICETYPE);
+      ide_devs[drvno].capabilities = *(uint16_t *)(ide_buf + ATA_IDENT_CAPABILITIES);
+      ide_devs[drvno].cmdsets = *(uint32_t *)(ide_buf + ATA_IDENT_COMMANDSETS);
      
-      if(ide_devs[devno].cmdsets & (1<<26))
-        ide_devs[devno].size = *(uint32_t *)(ide_buf + ATA_IDENT_MAX_LBA_EXT);
+      if(ide_devs[drvno].cmdsets & (1<<26))
+        ide_devs[drvno].size = *(uint32_t *)(ide_buf + ATA_IDENT_MAX_LBA_EXT);
       else
-        ide_devs[devno].size = *(uint32_t *)(ide_buf + ATA_IDENT_MAX_LBA);
+        ide_devs[drvno].size = *(uint32_t *)(ide_buf + ATA_IDENT_MAX_LBA);
 
       int k;
       for(k = 0; k < 40; k += 2) {
-        ide_devs[devno].model[k] = ide_buf[ATA_IDENT_MODEL + k + 1];
-        ide_devs[devno].model[k+1] = ide_buf[ATA_IDENT_MODEL + k];
+        ide_devs[drvno].model[k] = ide_buf[ATA_IDENT_MODEL + k + 1];
+        ide_devs[drvno].model[k+1] = ide_buf[ATA_IDENT_MODEL + k];
       }
-      ide_devs[devno].model[k] = 0;
+      ide_devs[drvno].model[k] = 0;
     }
   }
 
@@ -245,22 +293,20 @@ void ide_init() {
     }
   }
 
-  idt_register(IDE_PRIMARY_INTVEC, IDT_INTGATE, ide1_isr);
-  idt_register(IDE_SECONDARY_INTVEC, IDT_INTGATE, ide2_isr);
-  pic_clearmask(IDE_PRIMARY_IRQ);
-  pic_clearmask(IDE_SECONDARY_IRQ);
+  for(int chan = IDE_PRIMARY; chan<=IDE_SECONDARY; chan++) {
+    idt_register(ide_channel[chan].intvec, IDT_INTGATE, ide_channel[chan].isr);
+    pic_clearmask(ide_channel[chan].irq);
+  }
 }
 
-int ide_ata_access(uint8_t dir, uint8_t drv, uint32_t lba, uint8_t nsect, uint16_t sel, uint32_t edi) {
+static int ide_ata_access(uint8_t dir, uint8_t drv, uint32_t lba, uint8_t nsect) {
   uint8_t lba_mode, lba_io[6], chan = drv>>1, slave = drv&1;
-  uint32_t words = 256;
-  uint8_t head, err, cmd;
-
+  uint8_t head, cmd;
 
   if(!ide_devs[drv].exist)
     return -1;
   if((ide_devs[drv].capabilities & 0x100) == 0)
-    return -2; //DMA not supported
+    puts("DMA is not supported!");
 
   ide_clrnien(chan);
   if(lba >= 0x10000000) {
@@ -284,7 +330,7 @@ int ide_ata_access(uint8_t dir, uint8_t drv, uint32_t lba, uint8_t nsect, uint16
     lba_io[5] = 0; // These Registers are not used here.
     head      = (lba & 0xF000000) >> 24;
   } else {
-    // LBA not supported
+    // LBA is not supported
     return -3;
   }
 
@@ -310,48 +356,102 @@ int ide_ata_access(uint8_t dir, uint8_t drv, uint32_t lba, uint8_t nsect, uint16
   ide_out8(chan, ATA_REG_LBA1,   lba_io[1]);
   ide_out8(chan, ATA_REG_LBA2,   lba_io[2]);
 
-  if (lba_mode == 1 && dir == 0) cmd = ATA_CMD_READ_DMA;
-  else if (lba_mode == 2 && dir == 0) cmd = ATA_CMD_READ_DMA_EXT;
-  else if (lba_mode == 1 && dir == 1) cmd = ATA_CMD_WRITE_DMA;
-  else if (lba_mode == 2 && dir == 1) cmd = ATA_CMD_WRITE_DMA_EXT;
+  if (lba_mode == 1 && dir == 0) cmd = ATA_CMD_READ_PIO;
+  else if (lba_mode == 2 && dir == 0) cmd = ATA_CMD_READ_PIO_EXT;
+  else if (lba_mode == 1 && dir == 1) cmd = ATA_CMD_WRITE_PIO;
+  else if (lba_mode == 2 && dir == 1) cmd = ATA_CMD_WRITE_PIO_EXT;
 
-  //ide_out8(chan, ATA_REG_COMMAND, cmd);
   ide_wait(chan, ATA_SR_BSY, 0);
   ide_wait(chan, ATA_SR_DRDY, 1);
-  ide_sendcmd(chan, ATA_CMD_READ_PIO);
+  ide_sendcmd(chan, cmd);
   return 0;
+}
+
+void ioreq_wait(struct io_request *req) {
+  while(req->wait);
+}
+
+int ioreq_checkerror(struct io_request *req) {
+  return (req->flags&IOREQ_ERROR)!=0;
+}
+
+static void ioreq_access(uint8_t chan);
+
+struct io_request *ide_request(uint8_t drvno, uint64_t blockno, uint16_t nsect, void *paddr, uint32_t flags) {
+  uint8_t chan = (drvno>>1)&1;
+  struct io_request *req = malloc(sizeof(struct io_request*));
+  req->drvno = drvno;
+  req->wait = 1;
+  req->blockno = blockno;
+  req->nsect = req->rem_nsect = nsect;
+  req->paddr = req->next_paddr = (uint16_t *)((uint32_t)paddr+KERNSPACE_ADDR);
+  req->flags = flags;
+  req->next = NULL;
+
+  if(ide_channel[chan].queue_tail == NULL) {
+    ide_channel[chan].queue_head = req;
+    ide_channel[chan].queue_tail = req;
+  } else {
+    ide_channel[chan].queue_tail->next = req;
+    ide_channel[chan].queue_tail = req;
+  }
+
+	if(ide_channel[chan].queue_head->next == NULL)
+  	ioreq_access(chan);
+  
+  return req;
+}
+
+static void ioreq_access(uint8_t chan) {
+  struct io_request *req = ide_channel[chan].queue_head;
+  if(req == NULL)
+    return;
+
+  ide_ata_access(req->flags&IOREQ_RW, req->drvno, req->blockno, req->nsect);
+}
+
+static void dequeue_and_nextreq(uint8_t chan) {
+  struct io_request *headreq = ide_channel[chan].queue_head;
+  if(headreq) {
+    headreq->wait = 0;
+    ide_channel[chan].queue_head = headreq->next;
+    headreq->next = NULL;
+    if(ide_channel[chan].queue_head == NULL)
+      ide_channel[chan].queue_tail = NULL;
+  }
+  
+  ioreq_access(chan);
+}
+
+static void ide_inthandler_common(uint8_t chan) {
+  struct io_request *req = ide_channel[chan].queue_head;
+  if((ide_in8(chan, ATA_REG_STATUS) & ATA_SR_ERR) == 0) {
+    if(req != NULL) {
+      for(int i=0; i<512; i+=2) {
+        uint16_t data;
+        data = in16(ide_channel[chan].base + ATA_REG_DATA);
+        *(req->next_paddr++) = data;
+        //printf("%c", data&0xff);
+        //printf("%c", data>>8);
+      }
+      if(--req->rem_nsect == 0)
+        dequeue_and_nextreq(chan);
+    }
+  } else {
+    req->flags |= IOREQ_ERROR;
+    puts("ide error!!!");
+    dequeue_and_nextreq(chan);
+  }
+  ide_in8(chan, ATA_REG_STATUS);
+  pic_sendeoi();
 }
 
 void ide1_inthandler() {
   puts("IDE Primary Interrupt!");
-  uint8_t chan = 0;
-  if((ide_in8(ATA_PRIMARY, ATA_REG_STATUS) & ATA_SR_ERR) == 0) {
-    for(int i=0; i<512; i+=2) {
-      uint16_t data;
-      data = in16(ide_channel[0].base + ATA_REG_DATA);
-      printf("%c", data&0xff);
-      printf("%c", data>>8);
-    }
-  } else {
-    puts("error!!!!");
-  }
-  ide_in8(ATA_PRIMARY, ATA_REG_STATUS);
-  pic_sendeoi();
+  ide_inthandler_common(IDE_PRIMARY);
 }
 
 void ide2_inthandler() {
   puts("IDE Secondary Interrupt!");
-  uint8_t chan = 1;
-  if((ide_in8(ATA_PRIMARY, ATA_REG_STATUS) & ATA_SR_ERR) == 0) {
-    for(int i=0; i<512; i+=2) {
-      uint16_t data;
-      data = in16(ide_channel[1].base + ATA_REG_DATA);
-      printf("%c", data&0xff);
-      printf("%c", data>>8);
-    }
-  } else {
-    puts("error!!!!");
-  }
-  ide_in8(1, ATA_REG_STATUS);
-  pic_sendeoi();
+  ide_inthandler_common(IDE_SECONDARY);
 }

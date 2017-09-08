@@ -66,10 +66,12 @@ uint8_t pci_config_read8(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset)
 
 static void pci_printinfo_one(uint8_t bus, uint8_t dev, uint8_t func) {
   uint8_t class, subclass, progif;
+  uint32_t bar4;
   class = pci_config_read8(bus, dev, func, PCI_CLASS);
   subclass = pci_config_read8(bus, dev, func, PCI_SUBCLASS);
   progif = pci_config_read8(bus, dev, func, PCI_PROGIF);
-  printf("%x:%x.%x %x %x %x %s\n", bus, dev, func, class, subclass, progif, (class<0x12)?classstr[class]:"Unknown");
+  bar4 = pci_config_read32(bus, dev, func, PCI_BAR4);
+  printf("%x:%x.%x %x %x %x BAR4=0x%x  %s\n", bus, dev, func, class, subclass, progif, bar4, (class<0x12)?classstr[class]:"Unknown");
 }
 
 void pci_printinfo() {

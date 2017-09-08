@@ -31,16 +31,23 @@ KERNENTRY void kernel_main(void) {
   pci_printinfo();
   ide_init();
   char *page1 = page_alloc();
-  struct io_request *req = NULL;
-  req=ide_request(0, 1, 2, (void *)((uint32_t)page1-KERNSPACE_ADDR), 0);
-  ioreq_wait(req);
+  char *page2 = page_alloc();
+  struct io_request *req1 = NULL;
+  struct io_request *req2 = NULL;
+if(page1 == NULL)
+  puts("page1 error!");
+if(page2 == NULL)
+  puts("page2 error!");
+  req1 = ide_request(0, 0, 2, (void *)((uint32_t)page1-KERNSPACE_ADDR), 0);
+  req2 = ide_request(1, 0, 4, (void *)((uint32_t)page2-KERNSPACE_ADDR), 0);
+  ioreq_wait(req2);
   puts("bye");
-  if(ioreq_checkerror(req))
+  if(ioreq_checkerror(req2))
     puts("error occered");
   else
-    for(int i=0; i<1024; i++)
-      printf("%c", page1[i]);
-
+    puts("success");
+    for(int i=0; i<2048; i++)
+      printf("%c", page2[i]);
   while(1);
 }
 

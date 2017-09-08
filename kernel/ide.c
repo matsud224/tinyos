@@ -148,8 +148,8 @@ struct io_request {
   uint8_t nsect;
   uint8_t rem_nsect;
   uint64_t blockno;
-  uint16_t *paddr;
-  uint16_t *next_paddr;
+  uint16_t *addr;
+  uint16_t *next_addr;
   uint32_t flags;
   struct io_request *next;
 };
@@ -379,30 +379,31 @@ static void ioreq_access(uint8_t chan);
 
 struct io_request *ide_request(uint8_t drvno, uint64_t blockno, uint16_t nsect, void *paddr, uint32_t flags) {
   uint8_t chan = (drvno>>1)&1;
-  struct io_request *req = malloc(sizeof(struct io_request*));
+  struct io_request *req = malloc(sizeof(struct io_request));
   req->drvno = drvno;
   req->wait = 1;
   req->blockno = blockno;
   req->nsect = req->rem_nsect = nsect;
-  req->paddr = req->next_paddr = (uint16_t *)((uint32_t)paddr+KERNSPACE_ADDR);
+  req->addr = req->next_addr = (uint32_t *)((uint32_t)paddr+KERNSPACE_ADDR);
   req->flags = flags;
   req->next = NULL;
 
+  cli();
   if(ide_channel[chan].queue_tail == NULL) {
     ide_channel[chan].queue_head = req;
     ide_channel[chan].queue_tail = req;
+  	ioreq_access(chan);
   } else {
     ide_channel[chan].queue_tail->next = req;
     ide_channel[chan].queue_tail = req;
   }
+  sti();
 
-	if(ide_channel[chan].queue_head->next == NULL)
-  	ioreq_access(chan);
-  
   return req;
 }
 
 static void ioreq_access(uint8_t chan) {
+  // already cli() called
   struct io_request *req = ide_channel[chan].queue_head;
   if(req == NULL)
     return;
@@ -410,7 +411,8 @@ static void ioreq_access(uint8_t chan) {
   ide_ata_access(req->flags&IOREQ_RW, req->drvno, req->blockno, req->nsect);
 }
 
-static void dequeue_and_nextreq(uint8_t chan) {
+static void dequeue_and_access(uint8_t chan) {
+  cli();
   struct io_request *headreq = ide_channel[chan].queue_head;
   if(headreq) {
     headreq->wait = 0;
@@ -419,8 +421,8 @@ static void dequeue_and_nextreq(uint8_t chan) {
     if(ide_channel[chan].queue_head == NULL)
       ide_channel[chan].queue_tail = NULL;
   }
-  
   ioreq_access(chan);
+  sti();
 }
 
 static void ide_inthandler_common(uint8_t chan) {
@@ -430,17 +432,17 @@ static void ide_inthandler_common(uint8_t chan) {
       for(int i=0; i<512; i+=2) {
         uint16_t data;
         data = in16(ide_channel[chan].base + ATA_REG_DATA);
-        *(req->next_paddr++) = data;
+        *(req->next_addr++) = data;
         //printf("%c", data&0xff);
         //printf("%c", data>>8);
       }
       if(--req->rem_nsect == 0)
-        dequeue_and_nextreq(chan);
+        dequeue_and_access(chan);
     }
   } else {
     req->flags |= IOREQ_ERROR;
     puts("ide error!!!");
-    dequeue_and_nextreq(chan);
+    dequeue_and_access(chan);
   }
   ide_in8(chan, ATA_REG_STATUS);
   pic_sendeoi();

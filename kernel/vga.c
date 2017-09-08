@@ -30,6 +30,15 @@ void vga_setcolor(uint8_t color) {
 static void vga_putentryat(char c, uint8_t color, size_t x, size_t y) {
 	vga.buffer[y*VGA_WIDTH+x] = VGAENTRY(c, color);
 }
+
+static void scroll(int lines) {
+  for(size_t y=0; y<VGA_HEIGHT-lines; y++)
+     for(size_t x=0; x<VGA_WIDTH; x++)
+       vga.buffer[y*VGA_WIDTH+x] = vga.buffer[(y+lines)*VGA_WIDTH+x];
+  for(size_t y=VGA_HEIGHT-lines; y<VGA_HEIGHT; y++)
+     for(size_t x=0; x<VGA_WIDTH; x++)
+       vga.buffer[y*VGA_WIDTH+x] = VGAENTRY(' ', vga.color);
+}
  
 int putchar(int c) {
   switch(c) {
@@ -50,8 +59,10 @@ int putchar(int c) {
 	  vga.column = 0;
     vga.row++;
   }
-  if (vga.row == VGA_HEIGHT)
-    vga.row = 0;
+  if (vga.row >= VGA_HEIGHT) {
+    scroll(vga.row-VGA_HEIGHT+1);
+    vga.row = VGA_HEIGHT-1;
+  }
 
   return c;
 }

@@ -12,8 +12,11 @@
 #include "kernasm.h"
 #include "pagetbl.h"
 #include "vmem.h"
+#include "blkdev.h"
 #include "ide.h"
 #include "params.h"
+#include "fs.h"
+#include "v6fs.h"
 
 KERNENTRY void kernel_main(void) {
 	vga_init();
@@ -29,25 +32,25 @@ KERNENTRY void kernel_main(void) {
   //pit_init();
   sti();
   pci_printinfo();
+  blkdev_init();
   ide_init();
-  char *page1 = page_alloc();
-  char *page2 = page_alloc();
-  struct io_request *req1 = NULL;
-  struct io_request *req2 = NULL;
-if(page1 == NULL)
-  puts("page1 error!");
-if(page2 == NULL)
-  puts("page2 error!");
-  req1 = ide_request(0, 0, 2, (void *)((uint32_t)page1-KERNSPACE_ADDR), 0);
-  req2 = ide_request(1, 0, 4, (void *)((uint32_t)page2-KERNSPACE_ADDR), 0);
-  ioreq_wait(req2);
-  puts("bye");
-  if(ioreq_checkerror(req2))
-    puts("error occered");
-  else
-    puts("success");
-    for(int i=0; i<2048; i++)
-      printf("%c", page2[i]);
+  v6fs_init();
+  if(fs_mountroot("v6fs", (void *)0) < 0) {
+    puts("mountroot failed.");
+    while(1);
+  }
+  puts("mountroot ok.");
+  struct inode *ino = fs_nametoi("/etc/help/fc");
+  if(ino == NULL) {
+    puts("nametoi failed.");
+    while(1);
+  }
+  printf("size = %d\n", ino->size);
+  uint8_t *page = page_alloc();
+  int cnt = fs_read(ino, page, 0, PAGESIZE);
+  printf("read %d bytes\n", cnt);
+  for(int i=0; i<cnt; i++)
+    printf("%c", page[i]);
   while(1);
 }
 

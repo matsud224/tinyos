@@ -29,19 +29,6 @@ uint32_t *current_pdt;
 static uint32_t *kernspace_pdt; //over 0xc0000000
 
 
-static void bzero(void *s, size_t n) {
-  uint8_t *ptr = s;
-  while(n--)
-    *ptr++ = 0;
-}
-
-static void *get_zeropage() {
-  void *p = page_alloc();
-  if(p)
-    bzero(p, PAGESIZE);
-  return p;
-}
-
 static uint32_t *new_procpdt() {
   uint32_t *pdt = get_zeropage();
   //fill kernel space page diectory entry

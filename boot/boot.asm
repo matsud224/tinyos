@@ -1,20 +1,18 @@
 [bits 16]
 
-mapbase equ 		0x500
-pdtbase equ 0x1000
-kernbase equ 		0x7e00
-virtkernbase equ 0xc0007e00
-kernsectors equ 30
-codeseg equ		 	0x8
-dataseg equ 		0x10
+mapbase					equ 0x500
+kernbufbase				equ	0x1000
+pdtbase					equ 0x2000
+kernbase				equ	0x7e00
+virtkernbase		equ 0xc0007e00
+kernsectors			equ 30
+codeseg					equ	0x8
+dataseg					equ	0x10
 
-kerntail:				dw 0x0000
-secpertrk:			dw 0x0012
-nheads:					dw 0x0002
+secpertrk:			dw 0x0000
+nheads:					dw 0x0000
 
 org 0x7c00
-jmp boot
-
 boot:
   cli
   ; initialize segment registers
@@ -26,7 +24,7 @@ boot:
 
   ;prepare stack
   mov ss, ax
-  mov sp, 0xffff
+  mov sp, 0x7bff
 
   mov si, hellomsg
   call putstr
@@ -47,54 +45,75 @@ boot:
   add di, 20
   jmp .nextent
 .maperror:
-  mov si, maperrmsg
-  call putstr
   hlt
 .mapfin:
   mov dword [di], 0
   mov dword [di+8], 0
  
   ;reset floppy
-  mov ah, 0x00
-  mov dl, 0x00
+  xor ah, ah
+  xor dl, dl
   int 0x13
   jc floppyerr
 
+  ;get drive parameter
+  mov ah, 0x08
+  xor dl, dl
+  int 0x13
+  jc floppyerr
+  mov [nheads], dh
+  mov al, cl
+  and al, 0x3f
+  mov [secpertrk], al
+
 .readkern:
   ;read kernel to kernbase
-  mov si, 0x1
-  mov ax, kernbase
-  mov [kerntail], ax
+  mov bp, 0x1
+  mov ax, kernbase/0x10
+  mov es, ax
 .readloop:
-  mov ax, si
+  mov ax, bp
   call lba2chs
+  push es
+  mov ax, 0
+  mov es, ax
   mov ah, 0x02
   mov al, 0x01
   mov ch, byte [ptrack]
   mov cl, byte [psector]
   mov dh, byte [phead]
-  mov dl, 0x00
-  mov bx, [kerntail]
+  xor dl, dl
+  mov bx, kernbufbase
   int 0x13
   jc floppyerr
-  mov ax, [kerntail]
-  add ax, 512
-  mov [kerntail], ax
-  cmp si, kernsectors
+  pop es
+  call copy
+  mov ax, es
+  add ax, 0x20
+  mov es, ax
+  cmp bp, kernsectors
   jz setuppdt
-  inc si
+  inc bp
   jmp .readloop
 floppyerr:
-  mov si, floppyerrmsg
-  call putstr
   hlt
 
+copy:
+  cld
+  mov si, kernbufbase
+  xor di, di
+  mov cx, 0x200
+  rep movsb
+  ret
+
 setuppdt:
+  xor ax, ax
+  mov es, ax
   ;create 4MB page directory table
   ;clear
   cld
   mov di, pdtbase
-  mov ax, 0
+  xor ax, ax
   mov cx, 1024*4/2
   rep stosw
   ; add mapping
@@ -151,17 +170,9 @@ setuppdt:
 .flush:
   ;jump to 32bit segment
   jmp codeseg:kernstart
-  hlt
 
 hellomsg:
-db "Loading...", 0x0a, 0x0d, 0x00
-
-floppyerrmsg:
-db "floppy err", 0x0a, 0x0d, 0x00
-
-maperrmsg:
-db "map err", 0x0a, 0x0d, 0x00
-
+db "...", 0x0a, 0x0d, 0x00
 
 gdtptr:
   dw 8*3-1
@@ -206,7 +217,7 @@ waitkbdout:
   jz waitkbdout
   ret
 
-psector:	dd 0x00
+psector:	db 0x00
 phead:		db 0x00
 ptrack:		db 0x00
 

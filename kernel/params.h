@@ -11,3 +11,7 @@
 #define DATASEG 0x10
 
 #define PAGESIZE 4096
+
+#define MAX_BLKDEV 256
+#define MAX_FSINFO 32
+#define MAX_MOUNT 32

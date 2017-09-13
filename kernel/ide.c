@@ -7,6 +7,8 @@
 #include "malloc.h"
 #include "kernasm.h"
 #include "params.h"
+#include "common.h"
+#include "blkdev.h"
 #include <stdint.h>
 #include <stddef.h>
 
@@ -122,12 +124,11 @@ struct {
   uint8_t intvec;
   struct prd *prdt;
   void (*isr)(void);
-  struct io_request *queue_head;
-  struct io_request *queue_tail;
+  struct request *queue_head;
+  struct request *queue_tail;
 } ide_channel[2];
 
-
-struct {
+struct ide_dev{
   uint8_t exist;
   uint8_t channel;
   uint8_t drive;
@@ -137,21 +138,25 @@ struct {
   uint32_t cmdsets;
   uint32_t size;
   char model[41];
-} ide_devs[4];
+  struct blkdev blkdev_info;
+} ide_dev[4];
 
-#define IOREQ_RW 0x1
-#define IOREQ_ERROR 0x2
+static void ide_open(void);
+static void ide_close(void);
+static void ide_sync(struct blkdev_buf *);
+struct blkdev_ops ide_blkdev_ops = {
+  .open = ide_open,
+  .close = ide_close,
+  .sync = ide_sync
+};
 
-struct io_request {
-  uint8_t drvno;
-  volatile uint8_t wait;
+struct request {
+  struct blkdev_buf *buf;
+  uint8_t dir;
   uint8_t nsect;
   uint8_t rem_nsect;
-  uint64_t blockno;
-  uint16_t *addr;
-  uint16_t *next_addr;
-  uint32_t flags;
-  struct io_request *next;
+  uint8_t *next_addr;
+  struct request *next;
 };
 
 static uint8_t ide_buf[2048];
@@ -233,13 +238,12 @@ static void ide_channel_init(uint8_t chan) {
 
 void ide_init() {
   int drvno = -1;
-
   for(int chan = IDE_PRIMARY; chan <= IDE_SECONDARY; chan++) {
     ide_channel_init(chan);
 
     for(int drv = 0; drv < 2; drv++) {
       drvno++;
-      ide_devs[drvno].exist = 0;
+      ide_dev[drvno].exist = 0;
       // select drive
       ide_drivesel(chan, drv);
       // send identify command
@@ -264,30 +268,33 @@ void ide_init() {
         continue; //ATAPI is not supported
       ide_in_idspace(chan, ide_buf, 512);
 
-      ide_devs[drvno].exist = 1;
-      ide_devs[drvno].channel = chan;
-      ide_devs[drvno].drive = drv;
-      ide_devs[drvno].signature = *(uint16_t *)(ide_buf + ATA_IDENT_DEVICETYPE);
-      ide_devs[drvno].capabilities = *(uint16_t *)(ide_buf + ATA_IDENT_CAPABILITIES);
-      ide_devs[drvno].cmdsets = *(uint32_t *)(ide_buf + ATA_IDENT_COMMANDSETS);
+      ide_dev[drvno].exist = 1;
+      ide_dev[drvno].channel = chan;
+      ide_dev[drvno].drive = drv;
+      ide_dev[drvno].signature = *(uint16_t *)(ide_buf + ATA_IDENT_DEVICETYPE);
+      ide_dev[drvno].capabilities = *(uint16_t *)(ide_buf + ATA_IDENT_CAPABILITIES);
+      ide_dev[drvno].cmdsets = *(uint32_t *)(ide_buf + ATA_IDENT_COMMANDSETS);
+      ide_dev[drvno].blkdev_info.ops = &ide_blkdev_ops;
+      ide_dev[drvno].blkdev_info.buf_list = NULL;
      
-      if(ide_devs[drvno].cmdsets & (1<<26))
-        ide_devs[drvno].size = *(uint32_t *)(ide_buf + ATA_IDENT_MAX_LBA_EXT);
+      if(ide_dev[drvno].cmdsets & (1<<26))
+        ide_dev[drvno].size = *(uint32_t *)(ide_buf + ATA_IDENT_MAX_LBA_EXT);
       else
-        ide_devs[drvno].size = *(uint32_t *)(ide_buf + ATA_IDENT_MAX_LBA);
+        ide_dev[drvno].size = *(uint32_t *)(ide_buf + ATA_IDENT_MAX_LBA);
 
       int k;
       for(k = 0; k < 40; k += 2) {
-        ide_devs[drvno].model[k] = ide_buf[ATA_IDENT_MODEL + k + 1];
-        ide_devs[drvno].model[k+1] = ide_buf[ATA_IDENT_MODEL + k];
+        ide_dev[drvno].model[k] = ide_buf[ATA_IDENT_MODEL + k + 1];
+        ide_dev[drvno].model[k+1] = ide_buf[ATA_IDENT_MODEL + k];
       }
-      ide_devs[drvno].model[k] = 0;
+      ide_dev[drvno].model[k] = 0;
     }
   }
 
   for(int i = 0; i < 4; i++) {
-    if(ide_devs[i].exist) {
-      printf("ide drive #%d %dKB %s\n", i, ide_devs[i].size*512, ide_devs[i].model);
+    if(ide_dev[i].exist) {
+      printf("ide drive #%d %dKB %s\n", i, ide_dev[i].size*512, ide_dev[i].model);
+      blkdev_add(&ide_dev[i].blkdev_info);
     } else {
       printf("ide drive #%d not found\n", i);
     }
@@ -301,11 +308,11 @@ void ide_init() {
 
 static int ide_ata_access(uint8_t dir, uint8_t drv, uint32_t lba, uint8_t nsect) {
   uint8_t lba_mode, lba_io[6], chan = drv>>1, slave = drv&1;
-  uint8_t head, cmd;
+  uint8_t head, cmd = 0;
 
-  if(!ide_devs[drv].exist)
+  if(!ide_dev[drv].exist)
     return -1;
-  if((ide_devs[drv].capabilities & 0x100) == 0)
+  if((ide_dev[drv].capabilities & 0x100) == 0)
     puts("DMA is not supported!");
 
   ide_clrnien(chan);
@@ -319,7 +326,7 @@ static int ide_ata_access(uint8_t dir, uint8_t drv, uint32_t lba, uint8_t nsect)
     lba_io[4] = 0; // LBA28 is integer, so 32-bits are enough to access 2TB.
     lba_io[5] = 0; // LBA28 is integer, so 32-bits are enough to access 2TB.
     head      = 0; // Lower 4-bits of HDDEVSEL are not used here.
-  } else if(1/*ide_devs[drv].capabilities & 0x200*/) {
+  } else if(1/*ide_dev[drv].capabilities & 0x200*/) {
     // LBA28
     lba_mode  = 1;
     lba_io[0] = (lba & 0x00000FF) >> 0;
@@ -367,32 +374,15 @@ static int ide_ata_access(uint8_t dir, uint8_t drv, uint32_t lba, uint8_t nsect)
   return 0;
 }
 
-void ioreq_wait(struct io_request *req) {
-  while(req->wait);
-}
+static void ide_procnext(uint8_t chan);
 
-int ioreq_checkerror(struct io_request *req) {
-  return (req->flags&IOREQ_ERROR)!=0;
-}
-
-static void ioreq_access(uint8_t chan);
-
-struct io_request *ide_request(uint8_t drvno, uint64_t blockno, uint16_t nsect, void *paddr, uint32_t flags) {
-  uint8_t chan = (drvno>>1)&1;
-  struct io_request *req = malloc(sizeof(struct io_request));
-  req->drvno = drvno;
-  req->wait = 1;
-  req->blockno = blockno;
-  req->nsect = req->rem_nsect = nsect;
-  req->addr = req->next_addr = (uint32_t *)((uint32_t)paddr+KERNSPACE_ADDR);
-  req->flags = flags;
-  req->next = NULL;
-
+void *ide_request(struct request *req) {
+  uint8_t chan = container_of(req->buf->dev, struct ide_dev, blkdev_info)->channel;
   cli();
   if(ide_channel[chan].queue_tail == NULL) {
     ide_channel[chan].queue_head = req;
     ide_channel[chan].queue_tail = req;
-  	ioreq_access(chan);
+  	ide_procnext(chan);
   } else {
     ide_channel[chan].queue_tail->next = req;
     ide_channel[chan].queue_tail = req;
@@ -402,58 +392,88 @@ struct io_request *ide_request(uint8_t drvno, uint64_t blockno, uint16_t nsect, 
   return req;
 }
 
-static void ioreq_access(uint8_t chan) {
+static void ide_procnext(uint8_t chan) {
   // already cli() called
-  struct io_request *req = ide_channel[chan].queue_head;
+  struct request *req = ide_channel[chan].queue_head;
   if(req == NULL)
     return;
 
-  ide_ata_access(req->flags&IOREQ_RW, req->drvno, req->blockno, req->nsect);
+  struct ide_dev *dev = container_of(req->buf->dev, struct ide_dev, blkdev_info);
+  ide_ata_access(req->dir, (dev->channel<<1)|dev->drive, req->buf->blockno, req->nsect);
 }
 
-static void dequeue_and_access(uint8_t chan) {
+static void dequeue_and_next(uint8_t chan) {
   cli();
-  struct io_request *headreq = ide_channel[chan].queue_head;
+  struct request *headreq = ide_channel[chan].queue_head;
   if(headreq) {
-    headreq->wait = 0;
+    headreq->buf->wait = 0;
     ide_channel[chan].queue_head = headreq->next;
     headreq->next = NULL;
     if(ide_channel[chan].queue_head == NULL)
       ide_channel[chan].queue_tail = NULL;
   }
-  ioreq_access(chan);
+  ide_procnext(chan);
   sti();
 }
 
 static void ide_inthandler_common(uint8_t chan) {
-  struct io_request *req = ide_channel[chan].queue_head;
+  struct request *req = ide_channel[chan].queue_head;
   if((ide_in8(chan, ATA_REG_STATUS) & ATA_SR_ERR) == 0) {
     if(req != NULL) {
       for(int i=0; i<512; i+=2) {
         uint16_t data;
         data = in16(ide_channel[chan].base + ATA_REG_DATA);
-        *(req->next_addr++) = data;
-        //printf("%c", data&0xff);
-        //printf("%c", data>>8);
+        *(req->next_addr++) = data&0xff;
+        *(req->next_addr++) = data>>8;
       }
       if(--req->rem_nsect == 0)
-        dequeue_and_access(chan);
+        dequeue_and_next(chan);
     }
   } else {
-    req->flags |= IOREQ_ERROR;
+    req->buf->flags |= BDBUF_ERROR;
     puts("ide error!!!");
-    dequeue_and_access(chan);
+    dequeue_and_next(chan);
   }
   ide_in8(chan, ATA_REG_STATUS);
   pic_sendeoi();
 }
 
 void ide1_inthandler() {
-  puts("IDE Primary Interrupt!");
+  //puts("IDE Primary Interrupt!");
   ide_inthandler_common(IDE_PRIMARY);
 }
 
 void ide2_inthandler() {
-  puts("IDE Secondary Interrupt!");
+  //puts("IDE Secondary Interrupt!");
   ide_inthandler_common(IDE_SECONDARY);
 }
+
+static void ide_open() {
+  return;
+}
+
+static void ide_close() {
+  return;
+}
+
+static void ide_sync(struct blkdev_buf *buf) {
+  int dir;
+  if(buf->flags & BDBUF_EMPTY)
+    dir = ATA_READ;
+  else if(buf->flags & BDBUF_DIRTY)
+    dir = ATA_WRITE;
+  else
+    return;
+
+  buf->wait = 1;
+  struct request *req = malloc(sizeof(struct request));
+  req->buf = buf;
+  req->nsect = req->rem_nsect = 1;
+  req->next_addr = buf->addr;
+  req->dir = dir;
+  req->next = NULL;
+  
+  ide_request(req);
+}
+
+

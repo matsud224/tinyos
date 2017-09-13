@@ -31,8 +31,8 @@ static void vga_putentryat(char c, uint8_t color, size_t x, size_t y) {
 	vga.buffer[y*VGA_WIDTH+x] = VGAENTRY(c, color);
 }
 
-static void scroll(int lines) {
-  for(size_t y=0; y<VGA_HEIGHT-lines; y++)
+static void scroll(size_t lines) {
+  for(size_t y=0; y < VGA_HEIGHT-lines; y++)
      for(size_t x=0; x<VGA_WIDTH; x++)
        vga.buffer[y*VGA_WIDTH+x] = vga.buffer[(y+lines)*VGA_WIDTH+x];
   for(size_t y=VGA_HEIGHT-lines; y<VGA_HEIGHT; y++)

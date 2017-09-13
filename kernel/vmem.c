@@ -11,10 +11,16 @@ struct anon_mapper {
   size_t size;
 };
 
+struct blkdev_mapper {
+  uint64_t blockno;
+  size_t offset;
+  size_t size;
+};
+
 struct vm_map *current_vmmap = NULL;
 
 uint32_t anon_mapper_request(void *info, uint32_t offset) {
-  return (uint32_t)page_alloc();
+
 }
 
 static const struct mapper_ops anon_mapper_ops = {
@@ -34,6 +40,30 @@ static struct mapper *anon_mapper_new(uint32_t size) {
   anon->size = size;
   m->ops = &anon_mapper_ops;
   m->info = anon;
+  return m;
+}
+
+uint32_t blkdev_mapper_request(void *info, uint32_t offset) {
+  return (uint32_t)page_alloc();
+}
+
+static const struct mapper_ops blkdev_mapper_ops = {
+  .request = blkdev_mapper_request
+};
+
+static struct mapper *blkdev_mapper_new(uint32_t size) {
+  struct mapper *m;
+  struct blkdev_mapper *bm;
+  if((m = malloc(sizeof(struct mapper))) == NULL)
+    return NULL;
+  if((bm = malloc(sizeof(struct blkdev_mapper))) == NULL) {
+    free(m);
+    return NULL;
+  }
+
+  bm->size = size;
+  m->ops = &blkdev_mapper_ops;
+  m->info = bm;
   return m;
 }
 

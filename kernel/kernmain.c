@@ -18,6 +18,8 @@
 #include "fs.h"
 #include "v6fs.h"
 
+#define HALT while(1)
+
 KERNENTRY void kernel_main(void) {
 	vga_init();
 	puts("hello, world!");
@@ -37,21 +39,19 @@ KERNENTRY void kernel_main(void) {
   v6fs_init();
   if(fs_mountroot("v6fs", (void *)0) < 0) {
     puts("mountroot failed.");
-    while(1);
+    HALT;
   }
   puts("mountroot ok.");
   struct inode *ino = fs_nametoi("/etc/help/fc");
   if(ino == NULL) {
     puts("nametoi failed.");
-    while(1);
+    HALT;
   }
-  printf("size = %d\n", ino->size);
-  uint8_t *page = page_alloc();
-  int cnt = fs_read(ino, page, 0, PAGESIZE);
-  printf("read %d bytes\n", cnt);
-  for(int i=0; i<cnt; i++)
-    printf("%c", page[i]);
-  while(1);
+  vm_add_area(current_vmmap, 0x20000, PAGESIZE, inode_mapper_new(ino, 7), 0);
+  for(uint32_t addr=0x20100; addr<0x20300; addr++) {
+    printf("%c", *(char*)addr);
+  }
+  HALT;
 }
 
 

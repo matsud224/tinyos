@@ -1,7 +1,9 @@
 #include "vmem.h"
+#include "common.h"
 #include "params.h"
 #include "page.h"
 #include "malloc.h"
+#include "fs.h"
 #include <stdint.h>
 #include <stddef.h>
 
@@ -9,62 +11,55 @@
 
 struct anon_mapper {
   size_t size;
+  struct mapper mapper;
 };
 
-struct blkdev_mapper {
-  uint64_t blockno;
+struct inode_mapper {
+  struct inode *inode;
   size_t offset;
-  size_t size;
+  struct mapper mapper;
 };
 
 struct vm_map *current_vmmap = NULL;
 
-uint32_t anon_mapper_request(void *info, uint32_t offset) {
-
+uint32_t anon_mapper_request(struct mapper *m, uint32_t offset) {
+  return (uint32_t)page_alloc();
 }
 
 static const struct mapper_ops anon_mapper_ops = {
   .request = anon_mapper_request
 };
 
-static struct mapper *anon_mapper_new(uint32_t size) {
-  struct mapper *m;
-  struct anon_mapper *anon;
-  if((m = malloc(sizeof(struct mapper))) == NULL)
+struct mapper *anon_mapper_new(uint32_t size) {
+  struct anon_mapper *m;
+  if((m = malloc(sizeof(struct anon_mapper))) == NULL)
     return NULL;
-  if((anon = malloc(sizeof(struct anon_mapper))) == NULL) {
-    free(m);
-    return NULL;
-  }
 
-  anon->size = size;
-  m->ops = &anon_mapper_ops;
-  m->info = anon;
-  return m;
+  m->size = size;
+  m->mapper.ops = &anon_mapper_ops;
+  return &(m->mapper);
 }
 
-uint32_t blkdev_mapper_request(void *info, uint32_t offset) {
-  return (uint32_t)page_alloc();
+uint32_t inode_mapper_request(struct mapper *m, uint32_t offset) {
+  uint8_t *p = page_alloc();
+  struct inode_mapper *im = container_of(m, struct inode_mapper, mapper);
+  fs_read(im->inode, p, im->offset + (offset & ~(PAGESIZE-1)), PAGESIZE);
+  return (uint32_t)p;
 }
 
-static const struct mapper_ops blkdev_mapper_ops = {
-  .request = blkdev_mapper_request
+static const struct mapper_ops inode_mapper_ops = {
+  .request = inode_mapper_request
 };
 
-static struct mapper *blkdev_mapper_new(uint32_t size) {
-  struct mapper *m;
-  struct blkdev_mapper *bm;
-  if((m = malloc(sizeof(struct mapper))) == NULL)
+struct mapper *inode_mapper_new(struct inode *inode, uint32_t offset) {
+  struct inode_mapper *m;
+  if((m = malloc(sizeof(struct inode_mapper))) == NULL)
     return NULL;
-  if((bm = malloc(sizeof(struct blkdev_mapper))) == NULL) {
-    free(m);
-    return NULL;
-  }
 
-  bm->size = size;
-  m->ops = &blkdev_mapper_ops;
-  m->info = bm;
-  return m;
+  m->inode = inode;
+  m->offset = offset;
+  m->mapper.ops = &inode_mapper_ops;
+  return &(m->mapper);
 }
 
 

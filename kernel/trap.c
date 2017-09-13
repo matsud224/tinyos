@@ -17,7 +17,7 @@ void pf_inthandler(uint32_t errcode, uint32_t addr) {
     puts("Segmentation fault!\n");
     while(1);
   } else {
-    uint32_t paddr = varea->mapper->ops->request(varea->mapper->info, addr);
+    uint32_t paddr = varea->mapper->ops->request(varea->mapper, addr - varea->start);
     pagetbl_add_mapping(current_pdt, addr, paddr);
     flushtlb();
   }

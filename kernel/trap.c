@@ -11,7 +11,7 @@ void gpe_inthandler() {
 }
 
 void pf_inthandler(uint32_t errcode, uint32_t addr) {
-  printf("Page fault! errcode = 0x%x, addr = 0x%x\n", errcode, addr);
+  printf("\nPage fault! errcode = 0x%x, addr = 0x%x\n", errcode, addr);
   struct vm_area *varea = vm_findarea(current_vmmap, addr);
   if(varea == NULL) {
     puts("Segmentation fault!\n");

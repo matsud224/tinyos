@@ -15,3 +15,6 @@ void sti(void);
 void cli(void);
 uint32_t getcr2(void);
 void flushtlb(void);
+void a20_enable(void);
+void saveregs(void);
+void taskswitch(void); 

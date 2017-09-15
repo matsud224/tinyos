@@ -3,6 +3,7 @@
 #include "malloc.h"
 #include "blkdev.h"
 #include "common.h"
+#include "vga.h"
 #include <stdint.h>
 #include <stddef.h>
 
@@ -127,10 +128,8 @@ static struct inode *v6fs_getinode(struct fs *fs, uint32_t ino_no) {
   struct v6fs_phyinode *pinode = (struct v6fs_phyinode *)(buf->addr);
   pinode += inooff;
   struct v6fs_inode *v6ino = malloc(sizeof(struct v6fs_inode));
-  printf("number: %d\n", ino_no);
   for(int i=0; i<8; i++) {
     v6ino->blkno[i] = pinode->blkno[i];
-    printf("blkno[%d] = %d\n", i, v6ino->blkno[i]);
   }
   v6ino->inode.fs = fs;
   v6ino->inode.ops = &v6fs_inode_ops;
@@ -143,11 +142,29 @@ static struct inode *v6fs_getinode(struct fs *fs, uint32_t ino_no) {
 
 // 論理ブロック番号を物理ブロック番号へ変換
 static uint32_t blkno_vtop(struct v6fs_inode *v6ino, uint32_t vno) {
+  struct v6fs_fs *f = container_of(v6ino->inode.fs, struct v6fs_fs, fs);
+  uint16_t devno = f->devno;
   if((v6ino->inode.mode & I_LARGE) == 0) {
     return v6ino->blkno[vno];
   } else {
-    // not implemented
-    puts("v6fs: warning: large file is not supported.");
+    int indir_index = vno/256;
+    if(indir_index <= 6) {
+      struct blkdev_buf *buf = blkdev_getbuf(devno, v6ino->blkno[indir_index]);
+      blkdev_buf_sync(buf);
+      uint32_t pno = ((uint16_t *)(buf->addr))[vno%256];
+      blkdev_releasebuf(buf);
+      return pno;
+    } else {
+      struct blkdev_buf *buf = blkdev_getbuf(devno, v6ino->blkno[7]);
+      blkdev_buf_sync(buf);
+      uint32_t indir2_no = ((uint16_t *)(buf->addr))[(indir_index-7)/256];
+      blkdev_releasebuf(buf); 
+      struct blkdev_buf *buf2 = blkdev_getbuf(devno, indir2_no);
+      blkdev_buf_sync(buf2);
+      uint32_t pno = ((uint16_t *)(buf2->addr))[(indir_index-7)%256];
+      blkdev_releasebuf(buf2); 
+      return pno;
+    }
   }
   return 0;
 }
@@ -166,7 +183,6 @@ static int v6fs_inode_read(struct inode *inode, uint8_t *base, uint32_t offset, 
       if(buf != NULL)
         blkdev_releasebuf(buf);
       buf = blkdev_getbuf(devno, blkno_vtop(v6ino, i/BLOCKSIZE));
-      printf("read %d\n", blkno_vtop(v6ino, i/BLOCKSIZE));
       blkdev_buf_sync(buf);
     }
     *base++ = buf->addr[i%BLOCKSIZE];
@@ -197,7 +213,6 @@ static struct inode *v6fs_inode_opdent(struct inode *inode, const char *name, in
     goto exit;
   if((inode->mode & I_DIR) == 0)
     goto exit;
-printf("size... %d\n", inode->size);
   for(uint32_t i=0; i<inode->size; i+=16) {
     if(i%BLOCKSIZE == 0) {
       if(buf != NULL)
@@ -206,10 +221,9 @@ printf("size... %d\n", inode->size);
       blkdev_buf_sync(buf);
     }
 
-    struct v6fs_dent *dent = (struct v6fs_dent*)(buf->addr+i);
+    struct v6fs_dent *dent = (struct v6fs_dent*)((uint8_t *)(buf->addr)+(i%512));
     if(dent->inode_no == 0)
       continue;
-    printf("dent: %d %s\n", dent->inode_no, dent->name);
     switch(op) {
     case DENTOP_GET:
       if(strcmp_dent(name, dent->name) == 0) {

@@ -112,3 +112,95 @@ flushtlb:
 .flush:
   ret
 
+global a20_enable
+a20_enable:
+  call .waitkbdin
+  mov al, 0xad
+  out 0x64, al
+  call .waitkbdin
+  mov al, 0xd0
+  out 0x64, al
+  call .waitkbdout
+  in al, 0x60
+  or al, 0x2
+  push ax
+  call .waitkbdin
+  mov al, 0xd1
+  out 0x64, al
+  call .waitkbdin
+  pop ax
+  out 0x60, al
+  call .waitkbdin
+  mov al, 0xae
+  out 0x64, al
+  call .waitkbdin
+  ret
+ 
+.waitkbdin:
+  in al, 0x64
+  test al, 0x2
+  jnz .waitkbdin
+  ret
+
+.waitkbdout:
+  in al, 0x64
+  test al, 0x1
+  jz .waitkbdout
+  ret
+
+extern current_task
+global saveregs
+saveregs:
+  ; スタックには旧eip,cs,esp,ssが積まれている
+  mov [current_task], eax
+  mov [current_task+4], ecx
+  mov [current_task+8], edx
+  mov [current_task+12], ebx
+  mov [current_task+16], ebp
+  mov [current_task+20], esi
+  mov [current_task+24], edi
+  mov [current_task+28], es
+  mov [current_task+40], ds
+  mov [current_task+44], fs
+  mov [current_task+48], gs
+  pushfd
+  mov eax, [esp]
+  mov [current_task+52], eax
+  mov eax, [esp+4]
+  mov [current_task+56], eax
+  mov eax, [esp+8]
+  mov [current_task+60], eax
+  mov eax, [esp+12]
+  mov [current_task+64], eax
+  mov eax, [esp+16]
+  mov [current_task+68], eax
+  ; 復帰時に積み直すのでpop
+  add esp, 20
+  ret
+  
+global taskswitch
+taskswitch:
+  mov eax, [current_task]
+  mov ecx, [current_task+4]
+  mov edx, [current_task+8]
+  mov ebx, [current_task+12]
+  mov ebp, [current_task+16]
+  mov esi, [current_task+20]
+  mov edi, [current_task+24]
+  mov es, [current_task+28]
+  mov ds, [current_task+40]
+  mov fs, [current_task+44]
+  mov gs, [current_task+48]
+  mov ax, [current_task+68]
+  push ax
+  mov eax, [current_task+64]
+  push eax
+  mov ax, [current_task+60]
+  push ax
+  mov eax, [current_task+56]
+  push eax
+  mov eax, [current_task+52]
+  push eax
+  popfd
+  iretd
+

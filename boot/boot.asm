@@ -6,8 +6,11 @@ pdtbase					equ 0x2000
 kernbase				equ	0x7e00
 virtkernbase		equ 0xc0007e00
 kernsectors			equ 30
-codeseg					equ	0x8
-dataseg					equ	0x10
+codeseg_r0					equ	0x8
+dataseg_r0					equ	0x10
+codeseg_r3					equ	0x18
+dataseg_r3					equ	0x20
+tss0								equ	0x28
 
 secpertrk:			dw 0x0000
 nheads:					dw 0x0000
@@ -26,9 +29,6 @@ boot:
   mov ss, ax
   mov sp, 0x7bff
 
-  mov si, hellomsg
-  call putstr
-
   ;get memory map
   mov di, mapbase
   xor ebx, ebx
@@ -37,14 +37,14 @@ boot:
   mov ecx, 20
   mov edx, 'PAMS'
   int 0x15
-  jc .maperror
+  jc .memerr
   cmp eax, 'PAMS'
-  jne .maperror
+  jne .memerr
   cmp ebx, 0
   jz .mapfin
   add di, 20
   jmp .nextent
-.maperror:
+.memerr:
   hlt
 .mapfin:
   mov dword [di], 0
@@ -54,13 +54,13 @@ boot:
   xor ah, ah
   xor dl, dl
   int 0x13
-  jc floppyerr
+  jc .floppyerr
 
   ;get drive parameter
   mov ah, 0x08
   xor dl, dl
   int 0x13
-  jc floppyerr
+  jc .floppyerr
   mov [nheads], dh
   mov al, cl
   and al, 0x3f
@@ -85,7 +85,7 @@ boot:
   xor dl, dl
   mov bx, kernbufbase
   int 0x13
-  jc floppyerr
+  jc .floppyerr
   pop es
   call copy
   mov ax, es
@@ -95,7 +95,7 @@ boot:
   jz setuppdt
   inc bp
   jmp .readloop
-floppyerr:
+.floppyerr:
   hlt
 
 copy:
@@ -140,28 +140,6 @@ setuppdt:
   ;setup gdt
   lgdt [gdtptr]
   
-  ;enable a20
-  call waitkbdin
-  mov al, 0xad
-  out 0x64, al
-  call waitkbdin
-  mov al, 0xd0
-  out 0x64, al
-  call waitkbdout
-  in al, 0x60
-  or al, 0x2
-  push ax
-  call waitkbdin
-  mov al, 0xd1
-  out 0x64, al
-  call waitkbdin
-  pop ax
-  out 0x60, al
-  call waitkbdin
-  mov al, 0xae
-  out 0x64, al
-  call waitkbdin
-
   ;to protect mode
   mov eax, cr0
   or eax, 1
@@ -169,24 +147,24 @@ setuppdt:
   jmp .flush
 .flush:
   ;jump to 32bit segment
-  jmp codeseg:kernstart
+  jmp codeseg_r0:kernstart
 
-hellomsg:
-db "...", 0x0a, 0x0d, 0x00
 
 gdtptr:
-  dw 8*3-1
+  dw 8*5-1
   dd gdt
 
 gdtptr_virtaddr:
-  dw 8*3-1
+  dw 8*5-1
   dd gdt+0xc0000000
 
 gdt:
   db 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 					;null
-  db 0xff, 0xff, 0x00, 0x00, 0x00, 10011010b, 11001111b, 0x00 ;code segment
-  db 0xff, 0xff, 0x00, 0x00, 0x00, 10010010b, 11001111b, 0x00 ;data segment
-
+  db 0xff, 0xff, 0x00, 0x00, 0x00, 10011010b, 11001111b, 0x00 ;code segment(ring 0)
+  db 0xff, 0xff, 0x00, 0x00, 0x00, 10010010b, 11001111b, 0x00 ;data segment(ring 0)
+  db 0xff, 0xff, 0x00, 0x00, 0x00, 11111010b, 11001111b, 0x00 ;code segment(ring 3)
+  db 0xff, 0xff, 0x00, 0x00, 0x00, 11110010b, 11001111b, 0x00 ;data segment(ring 3)
+  db 0xff, 0xff, 0x00, 0x00, 0x00, 00001001b, 11001111b, 0x00 ;tss0
 
 putstr:
   push ax
@@ -205,17 +183,6 @@ putstr:
   pop ax
   ret
 
-waitkbdin:
-  in al, 0x64
-  test al, 0x2
-  jnz waitkbdin
-  ret
-
-waitkbdout:
-  in al, 0x64
-  test al, 0x1
-  jz waitkbdout
-  ret
 
 psector:	db 0x00
 phead:		db 0x00
@@ -236,7 +203,7 @@ lba2chs:
 kernstart:
   ;init segment registers
   cli
-  mov ax, dataseg
+  mov ax, dataseg_r0
   mov ss, ax
   mov es, ax
   mov fs, ax

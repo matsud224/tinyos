@@ -123,7 +123,7 @@ struct {
   uint8_t irq;
   uint8_t intvec;
   struct prd *prdt;
-  void (*isr)(void);
+  void (*inthandler)(void);
   struct request *queue_head;
   struct request *queue_tail;
 } ide_channel[2];
@@ -229,7 +229,7 @@ static void ide_channel_init(uint8_t chan) {
   ide_channel[chan].base = chan==IDE_PRIMARY ? IDE_PRIMARY_BASE : IDE_SECONDARY_BASE;
   ide_channel[chan].nien = 1;
   ide_channel[chan].intvec = chan==IDE_PRIMARY ? IDE_PRIMARY_INTVEC : IDE_SECONDARY_INTVEC;
-  ide_channel[chan].isr = chan==IDE_PRIMARY ? ide1_isr : ide2_isr;
+  ide_channel[chan].inthandler = chan==IDE_PRIMARY ? ide1_inthandler : ide2_inthandler;
   ide_channel[chan].irq = chan==IDE_PRIMARY ? IDE_PRIMARY_IRQ : IDE_SECONDARY_IRQ;
   ide_channel[chan].queue_head = NULL;
   ide_channel[chan].queue_tail = NULL;
@@ -301,7 +301,7 @@ void ide_init() {
   }
 
   for(int chan = IDE_PRIMARY; chan<=IDE_SECONDARY; chan++) {
-    idt_register(ide_channel[chan].intvec, IDT_INTGATE, ide_channel[chan].isr);
+    idt_register(ide_channel[chan].intvec, IDT_INTGATE, ide_channel[chan].inthandler);
     pic_clearmask(ide_channel[chan].irq);
   }
 }
@@ -367,7 +367,6 @@ static int ide_ata_access(uint8_t dir, uint8_t drv, uint32_t lba, uint8_t nsect)
   else if (lba_mode == 2 && dir == 0) cmd = ATA_CMD_READ_PIO_EXT;
   else if (lba_mode == 1 && dir == 1) cmd = ATA_CMD_WRITE_PIO;
   else if (lba_mode == 2 && dir == 1) cmd = ATA_CMD_WRITE_PIO_EXT;
-
   ide_wait(chan, ATA_SR_BSY, 0);
   ide_wait(chan, ATA_SR_DRDY, 1);
   ide_sendcmd(chan, cmd);
@@ -416,7 +415,7 @@ static void dequeue_and_next(uint8_t chan) {
   sti();
 }
 
-static void ide_inthandler_common(uint8_t chan) {
+static void ide_isr_common(uint8_t chan) {
   struct request *req = ide_channel[chan].queue_head;
   if((ide_in8(chan, ATA_REG_STATUS) & ATA_SR_ERR) == 0) {
     if(req != NULL) {
@@ -438,14 +437,14 @@ static void ide_inthandler_common(uint8_t chan) {
   pic_sendeoi();
 }
 
-void ide1_inthandler() {
+void ide1_isr() {
   //puts("IDE Primary Interrupt!");
-  ide_inthandler_common(IDE_PRIMARY);
+  ide_isr_common(IDE_PRIMARY);
 }
 
-void ide2_inthandler() {
+void ide2_isr() {
   //puts("IDE Secondary Interrupt!");
-  ide_inthandler_common(IDE_SECONDARY);
+  ide_isr_common(IDE_SECONDARY);
 }
 
 static void ide_open() {
@@ -472,7 +471,6 @@ static void ide_sync(struct blkdev_buf *buf) {
   req->next_addr = buf->addr;
   req->dir = dir;
   req->next = NULL;
-  
   ide_request(req);
 }
 

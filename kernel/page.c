@@ -86,12 +86,6 @@ void page_init() {
   return;
 }
 
-void bzero(void *s, size_t n) {
-  uint8_t *ptr = s;
-  while(n--)
-    *ptr++ = 0;
-}
-
 void *get_zeropage() {
   void *p = page_alloc();
   if(p)

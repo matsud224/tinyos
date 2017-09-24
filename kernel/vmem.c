@@ -20,8 +20,6 @@ struct inode_mapper {
   struct mapper mapper;
 };
 
-struct vm_map *current_vmmap = NULL;
-
 uint32_t anon_mapper_request(struct mapper *m, uint32_t offset) {
   return (uint32_t)page_alloc();
 }
@@ -133,8 +131,4 @@ struct vm_area *vm_findarea(struct vm_map *map, uint32_t addr) {
 }
 
 void vmem_init() {
-  current_vmmap = vm_map_new();
-
-  vm_add_area(current_vmmap, 0x6000, PAGESIZE*3, anon_mapper_new(PAGESIZE*3), 0);
-  vm_add_area(current_vmmap, 0x2000, PAGESIZE*1, anon_mapper_new(PAGESIZE*3), 0);
 }

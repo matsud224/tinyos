@@ -17,6 +17,9 @@
 #include "params.h"
 #include "fs.h"
 #include "v6fs.h"
+#include "gdt.h"
+#include "task.h"
+#include "fat32.h"
 
 #define HALT while(1)
 
@@ -28,26 +31,20 @@ KERNENTRY void kernel_main(void) {
   printf("%d MB free\n", (page_getnfree()*4)/1024);
   idt_init();
   pic_init();
-  idt_register(13, IDT_INTGATE, gpe_isr);
-  idt_register(14, IDT_INTGATE, pf_isr);
+  idt_register(13, IDT_INTGATE, gpe_inthandler);
+  idt_register(14, IDT_INTGATE, pf_inthandler);
+  idt_register(0x80, IDT_INTGATE, syscall_inthandler);
   pagetbl_init();
   vmem_init();
   //pit_init();
-  sti();
   pci_printinfo();
   blkdev_init();
   ide_init();
   v6fs_init();
-  if(fs_mountroot("v6fs", (void *)0) < 0) {
-    puts("mountroot failed.");
-    HALT;
-  }
-  struct inode *ino = fs_nametoi("/etc/oldhelp/fs");
-  if(ino == NULL) {
-    puts("nametoi failed.");
-    HALT;
-  }
-  vm_add_area(current_vmmap, 0x20000, PAGESIZE*2, inode_mapper_new(ino, 0), 0);
+  fat32_init();
+  task_init();
+ HALT;
+  //vm_add_area(current_vmmap, 0x20000, PAGESIZE*2, inode_mapper_new(ino, 0), 0);
   for(uint32_t addr=0x20f00; addr<0x21100; addr++) {
     printf("%c", *(char*)addr);
   }

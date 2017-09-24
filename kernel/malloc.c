@@ -7,7 +7,7 @@
 #include "vga.h"
 
 #define SIZE_BASE 8 
-#define MAX_BIN 96
+#define MAX_BIN 256
 
 // chunk = 1page
 // chunk consists of objects

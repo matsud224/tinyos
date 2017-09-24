@@ -1,9 +1,6 @@
-#include "params.h"
-#include "common.h"
 #include "idt.h"
+#include "params.h"
 #include "kernasm.h"
-#include "vga.h"
-#include <stdint.h>
 
 #define IDT_PRESENT 0x80
 #define IDT_GATE32 0x8
@@ -26,7 +23,7 @@ static struct idtr {
 
 void idt_register(uint8_t vecnum, uint8_t gatetype, void (*base)(void)) {
   struct gatedesc *desc = &idt[vecnum];
-  desc->selector = CODESEG;
+  desc->selector = GDT_SEL_CODESEG_0;
   desc->baselo = (uint32_t)base & 0xffff;
   desc->basehi = (uint32_t)base >> 16;
   desc->reserved = 0;

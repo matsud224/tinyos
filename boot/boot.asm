@@ -5,7 +5,7 @@ kernbufbase				equ	0x1000
 pdtbase					equ 0x2000
 kernbase				equ	0x7e00
 virtkernbase		equ 0xc0007e00
-kernsectors			equ 30
+kernsectors			equ 50
 codeseg_r0					equ	0x8
 dataseg_r0					equ	0x10
 codeseg_r3					equ	0x18
@@ -61,6 +61,7 @@ boot:
   xor dl, dl
   int 0x13
   jc .floppyerr
+  inc dh
   mov [nheads], dh
   mov al, cl
   and al, 0x3f
@@ -149,22 +150,21 @@ setuppdt:
   ;jump to 32bit segment
   jmp codeseg_r0:kernstart
 
+tsssel:
+  dw tss0
 
 gdtptr:
-  dw 8*5-1
+  dw 8*3-1
   dd gdt
 
 gdtptr_virtaddr:
-  dw 8*5-1
+  dw 8*3-1
   dd gdt+0xc0000000
 
 gdt:
   db 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 					;null
   db 0xff, 0xff, 0x00, 0x00, 0x00, 10011010b, 11001111b, 0x00 ;code segment(ring 0)
   db 0xff, 0xff, 0x00, 0x00, 0x00, 10010010b, 11001111b, 0x00 ;data segment(ring 0)
-  db 0xff, 0xff, 0x00, 0x00, 0x00, 11111010b, 11001111b, 0x00 ;code segment(ring 3)
-  db 0xff, 0xff, 0x00, 0x00, 0x00, 11110010b, 11001111b, 0x00 ;data segment(ring 3)
-  db 0xff, 0xff, 0x00, 0x00, 0x00, 00001001b, 11001111b, 0x00 ;tss0
 
 putstr:
   push ax

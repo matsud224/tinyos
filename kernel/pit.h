@@ -2,5 +2,5 @@
 
 #include <stdint.h>
 
-void pit_isr(void);
+void pit_inthandler(void);
 void pit_init(void);

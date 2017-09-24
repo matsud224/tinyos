@@ -1,9 +1,11 @@
 #pragma once
 
+#include "vmem.h"
+#include "list.h"
 #include <stdint.h>
 #include <stddef.h>
 
-extern struct task current_task;
+extern struct task *current;
 
 struct tss {
   uint16_t backlink;	uint16_t f1;
@@ -54,7 +56,28 @@ struct task_state {
   uint32_t cr3;
 };
 
+#define TASK_STATE_RUNNING	0
+#define TASK_STATE_WAITING	1
+
 struct task {
-  struct task_state state;
+  struct task_state regs;
+  struct list_head link;
+  void *kernstack;
+  uint32_t kernstacksize;
+  struct vm_map *vmmap;
+  uint8_t state;
+  uint32_t flags;
   uint32_t pid;
+  struct task *next;
+  void *waitcause;
 };
+
+
+void task_init(void);
+void kernstack_setaddr(void);
+struct task *kernel_task_new(void *eip);
+void task_run(struct task *t);
+void task_sched(void);
+
+
+

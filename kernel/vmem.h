@@ -30,8 +30,6 @@ struct mapper {
   const struct mapper_ops *ops;
 };
 
-extern struct vm_map *current_vmmap;
-
 struct vm_map *vm_map_new(void);
 int vm_add_area(struct vm_map *map, uint32_t start, size_t size, struct mapper *mapper, uint32_t flags);
 struct vm_area *vm_findarea(struct vm_map *map, uint32_t addr);

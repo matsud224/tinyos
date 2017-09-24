@@ -27,15 +27,15 @@ int strcmp(const char *s1, const char *s2) {
 
 int fs_mountroot(const char *name, void *source) {
   int i;
-  for(i = 0; i<MAX_FSINFO; i++) {
+  for(i = 0; i<fsinfotbl_used; i++) {
+    puts(fsinfo_tbl[i]->name);
     if(strcmp(fsinfo_tbl[i]->name, name) == 0) {
       break;
     }
   }
 
-  if(i == MAX_FSINFO)
+  if(i == fsinfotbl_used)
     return -1;
-
   struct fs *fs = fsinfo_tbl[i]->ops->mount(source);
   if(fs == NULL)
     return -1;

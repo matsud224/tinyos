@@ -7,11 +7,17 @@
 #define PROTMEM_ADDR 0x100000u
 #define KERN_STRAIGHT_MAP_SIZE 0x38000000u //896MB
 
-#define CODESEG 0x8
-#define DATASEG 0x10
-
 #define PAGESIZE 4096
 
 #define MAX_BLKDEV 256
 #define MAX_FSINFO 32
 #define MAX_MOUNT 32
+
+#define GDT_SEL_NULL			0*8
+#define GDT_SEL_CODESEG_0	1*8
+#define GDT_SEL_DATASEG_0	2*8
+#define GDT_SEL_CODESEG_3	3*8
+#define GDT_SEL_DATASEG_3	4*8
+#define GDT_SEL_TSS				5*8
+
+

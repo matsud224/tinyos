@@ -87,6 +87,23 @@ lidt:
   pop ebp
   ret
 
+global lgdt
+lgdt:
+  push ebp
+  mov ebp, esp
+  mov eax, [ebp+8]
+  lgdt [eax]
+  pop ebp
+  ret
+
+global ltr
+ltr:
+  push ebp
+  mov ebp, esp
+  ltr word [ebp+8]
+  pop ebp
+  ret
+
 global sti
 sti:
   sti
@@ -148,59 +165,111 @@ a20_enable:
   jz .waitkbdout
   ret
 
-extern current_task
+extern current
+
 global saveregs
 saveregs:
-  ; スタックには旧eip,cs,esp,ssが積まれている
-  mov [current_task], eax
-  mov [current_task+4], ecx
-  mov [current_task+8], edx
-  mov [current_task+12], ebx
-  mov [current_task+16], ebp
-  mov [current_task+20], esi
-  mov [current_task+24], edi
-  mov [current_task+28], es
-  mov [current_task+40], ds
-  mov [current_task+44], fs
-  mov [current_task+48], gs
+  push eax
+  mov eax, [current]
+  mov [eax+4], ecx
+  mov [eax+8], edx
+  mov [eax+12], ebx
+  mov [eax+16], ebp
+  mov [eax+20], esi
+  mov [eax+24], edi
+  mov [eax+28], es
+  mov [eax+32], ds
+  mov [eax+36], fs
+  mov [eax+40], gs
+  mov ecx, eax
+  pop eax
+  mov [ecx], eax 
   pushfd
-  mov eax, [esp]
-  mov [current_task+52], eax
+  pop eax
+  mov [ecx+44], eax 
+  ret
+ 
+global saveregs_intr
+saveregs_intr:
+  push eax
+  mov eax, [current]
+  mov [eax+4], ecx
+  mov [eax+8], edx
+  mov [eax+12], ebx
+  mov [eax+16], ebp
+  mov [eax+20], esi
+  mov [eax+24], edi
+  mov [eax+28], es
+  mov [eax+32], ds
+  mov [eax+36], fs
+  mov [eax+40], gs
+  mov ecx, eax
+  pop eax
+  mov [ecx], eax 
+  pushfd
+  pop eax
+  or eax, 0x200 ;set IF
+  mov [ecx+44], eax 
   mov eax, [esp+4]
-  mov [current_task+56], eax
+  mov [ecx+48], eax
   mov eax, [esp+8]
-  mov [current_task+60], eax
+  mov [ecx+52], eax
+  and eax, 0x3 
+  cmp eax, 0x3 ;check privilege level
+  jne .kernmode
   mov eax, [esp+12]
-  mov [current_task+64], eax
+  mov [ecx+56], eax
   mov eax, [esp+16]
-  mov [current_task+68], eax
-  ; 復帰時に積み直すのでpop
-  add esp, 20
+  mov [ecx+60], eax
+  jmp .fin
+.kernmode:
+  mov eax, esp
+  add eax, 16
+  mov [ecx+56], eax
+  mov [ecx+60], ss
+.fin:
   ret
   
-global taskswitch
-taskswitch:
-  mov eax, [current_task]
-  mov ecx, [current_task+4]
-  mov edx, [current_task+8]
-  mov ebx, [current_task+12]
-  mov ebp, [current_task+16]
-  mov esi, [current_task+20]
-  mov edi, [current_task+24]
-  mov es, [current_task+28]
-  mov ds, [current_task+40]
-  mov fs, [current_task+44]
-  mov gs, [current_task+48]
-  mov ax, [current_task+68]
-  push ax
-  mov eax, [current_task+64]
-  push eax
-  mov ax, [current_task+60]
-  push ax
-  mov eax, [current_task+56]
-  push eax
-  mov eax, [current_task+52]
-  push eax
-  popfd
+global rettotask
+rettotask:
+  mov eax, [current]
+  mov ecx, [eax+4]
+  mov edx, [eax+8]
+  mov ebx, [eax+12]
+  mov ebp, [eax+16]
+  mov esi, [eax+20]
+  mov edi, [eax+24]
+  mov es, [eax+28]
+  mov ds, [eax+32]
+  mov fs, [eax+36]
+  mov gs, [eax+40]
+  mov ss, [eax+60]
+  mov esp, [eax+56]
+  push dword [eax+44]
+  push dword [eax+52]
+  push dword [eax+48]
+  mov eax, [eax+0]
   iretd
 
+
+extern task_sched
+extern kernstack_setaddr
+
+global task_yield
+task_yield:
+  call saveregs
+  mov eax, [current]
+  mov dword [eax+48], .resume
+  mov [eax+52], cs
+  mov [eax+56], esp
+  mov [eax+60], ss
+  call task_sched
+  call kernstack_setaddr
+  jmp rettotask
+.resume:
+  ret
+
+global cpu_halt
+cpu_halt:
+  hlt
+  ret

@@ -149,8 +149,11 @@ static struct fs *fat32_mount(void *source) {
   uint16_t devno = (uint16_t)source;
   struct fat32_fs *fat32 = malloc(sizeof(struct fat32_fs));
   fat32->devno = devno;
+puts("boot get");
   struct blkdev_buf *buf = blkdev_getbuf(devno, FAT32_BOOT);
+puts("boot sync");
   blkdev_buf_sync(buf);
+puts("boot read");
   fat32->boot = *(struct fat32_boot *)(buf->addr);
   struct fat32_boot *boot = &(fat32->boot);
   blkdev_releasebuf(buf);
@@ -194,32 +197,43 @@ static uint32_t fat32_fat_at(struct fat32_fs *f, uint32_t index) {
   return entry;
 }
 
+static uint32_t cluster_to_sector(struct fat32_fs *f, uint32_t cluster);
+
 static int fat32_inode_read(struct inode *inode, uint8_t *base, uint32_t offset, uint32_t count) {
-/*
   uint32_t tail = count + offset;
   tail = (tail > inode->size) ? inode->size : tail;
 
   struct fat32_fs *f = container_of(inode->fs, struct fat32_fs, fs);
-  uint16_t devno = f->devno;
-  struct fat32_inode *v6ino = container_of(inode, struct fat32_inode, inode);
+  devno_t devno = f->devno;
+  struct fat32_inode *fatino = container_of(inode, struct fat32_inode, inode);
   struct blkdev_buf *buf = NULL;
+  uint32_t current_cluster = fatino->cluster;
+  
+  if(inode->mode & INODE_DIR)
+    return 0;
 
   for(uint32_t i=offset; i<tail; i++) {
-    if(buf == NULL || i%BLOCKSIZE==0) {
+    if(buf == NULL || i%BLOCKSIZE == 0) {
       if(buf != NULL)
         blkdev_releasebuf(buf);
-      buf = blkdev_getbuf(devno, blkno_vtop(v6ino, i/BLOCKSIZE));
+      if(current_cluster == 0)
+        break;
+      if(current_cluster >= 0x0ffffff8
+           && current_cluster <= 0x0fffffff)
+        break;
+      printf("sector: %d\n", cluster_to_sector(f, current_cluster) + i/BLOCKSIZE);
+      buf = blkdev_getbuf(devno, cluster_to_sector(f, current_cluster) + i/BLOCKSIZE);
       blkdev_buf_sync(buf);
+      if(i/BLOCKSIZE == f->boot.BPB_SecPerClus-1)
+        current_cluster = fat32_fat_at(f, current_cluster);
     }
+
     *base++ = buf->addr[i%BLOCKSIZE];
   }
-
+puts("file read finished.");
   if(buf != NULL)
     blkdev_releasebuf(buf);
-
   return tail-offset;
-*/
-  return 0;
 }
 
 static int strcmp_dent(const char *path, const char *name) {
@@ -244,21 +258,49 @@ static uint8_t create_sum(struct fat32_dent *entry) {
   return sum;
 }
 
+static char *get_sfn(struct fat32_dent *sfnent) {
+  static char name[13];
+  char *ptr = name;
+  for(int i=0; i<=7; i++, ptr++) {
+    *ptr = sfnent->DIR_Name[i];
+    if(*ptr == 0x05)
+      *ptr = 0xe5;
+    if(*ptr == ' ')
+      break;
+  }
+  if(sfnent->DIR_Name[8] != ' ') {
+    *ptr++ = '.';
+    for(int i=8; i<=10; i++, ptr++) {
+      *ptr = sfnent->DIR_Name[i];
+      if(*ptr == 0x05)
+        *ptr = 0xe5;
+      if(*ptr == ' ')
+        break;
+    }
+  }
+  *ptr = NULL;
+  return name;
+}
+ 
 static char *get_lfn(struct fat32_dent *sfnent) {
   struct fat32_lfnent *lfnent = (struct fat32_lfnent *)sfnent - 1;
   uint8_t sum = create_sum(sfnent);
   static char name[256];
   char *ptr = name;
   int seq = 1;
+
   while(1) {
-    if(lfnent->LDIR_Attr!=ATTR_LONG_NAME
+    if((lfnent->LDIR_Attr&ATTR_LONG_NAME)!=ATTR_LONG_NAME
           || lfnent->LDIR_Chksum!=sum
-          || lfnent->LDIR_Ord!=seq++) {
+          || (lfnent->LDIR_Ord&0x1f)!=seq++) {
       return NULL;
     }
-    memcpy(ptr, lfnent->LDIR_Name1, 10);
-    memcpy(ptr, lfnent->LDIR_Name2, 12);
-    memcpy(ptr, lfnent->LDIR_Name3, 4);
+    for(int i=0; i<10; i+=2)
+      *ptr++ = lfnent->LDIR_Name1[i]; //UTF16-LE
+    for(int i=0; i<12; i+=2)
+      *ptr++ = lfnent->LDIR_Name2[i]; //UTF16-LE
+    for(int i=0; i<4; i+=2)
+      *ptr++ = lfnent->LDIR_Name3[i]; //UTF16-LE
     if(lfnent->LDIR_Ord & 0x40)
       break;
     lfnent--;
@@ -276,7 +318,6 @@ static struct inode *fat32_inode_opdent(struct inode *inode, const char *name, i
   struct fat32_dent found_dent;
   if((inode->mode & INODE_DIR) == 0)
     goto exit;
-
   for(uint32_t i=0; ; i+=sizeof(struct fat32_dent)) {
     if(i%BLOCKSIZE == 0) {
       if(buf != NULL)
@@ -286,6 +327,7 @@ static struct inode *fat32_inode_opdent(struct inode *inode, const char *name, i
       if(current_cluster >= 0x0ffffff8
            && current_cluster <= 0x0fffffff)
         break;
+      printf("sector: %d\n", cluster_to_sector(f, current_cluster) + i/BLOCKSIZE);
       buf = blkdev_getbuf(devno, cluster_to_sector(f, current_cluster) + i/BLOCKSIZE);
       blkdev_buf_sync(buf);
       if(i/BLOCKSIZE == f->boot.BPB_SecPerClus-1)
@@ -293,13 +335,22 @@ static struct inode *fat32_inode_opdent(struct inode *inode, const char *name, i
     }
 
     struct fat32_dent *dent = (struct fat32_dent*)((uint8_t *)(buf->addr)+(i%512));
+    if(dent->DIR_Name[0] == 0x00)
+      break;
+    if(dent->DIR_Name[0] == 0xe5)
+      continue;
     if(dent->DIR_Attr & ATTR_VOLUME_ID)
       continue;
     if(dent->DIR_Attr & ATTR_LONG_NAME)
       continue;
+    char *dent_name = NULL;
+    if(i%BLOCKSIZE != 0)
+      dent_name = get_lfn(dent);
+    if(dent_name == NULL)
+      dent_name = get_sfn(dent);
     switch(op) {
     case DENTOP_GET:
-      if(strcmp_dent(name, get_lfn(dent)) == 0) {
+      if(strcmp_dent(name, dent_name) == 0) {
         found = 1;
         found_dent = *dent;
         goto exit;
@@ -322,6 +373,10 @@ exit:
     else {
       struct fat32_inode *ino = malloc(sizeof(struct fat32_inode));
       ino->cluster = (found_dent.DIR_FstClusHI<<16) | found_dent.DIR_FstClusLO;
+      if(ino->cluster == 0) {
+        // root directory
+        ino->cluster = f->boot.BPB_RootClus;
+      }
       ino->inode.fs = &(f->fs);
       ino->inode.ops = &(fat32_inode_ops);
       ino->inode.inode_no = ino->cluster;

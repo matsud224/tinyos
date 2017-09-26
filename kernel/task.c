@@ -23,26 +23,32 @@ void task_a() {
   pit_init();
   sti();
   while(1) {
-    puts("hello");
-    puts("world");
   }
 }
 
 void task_b() {
-  /*if(fs_mountroot("fat32", (void *)0) < 0) {
+  if(fs_mountroot("fat32", (void *)0) < 0) {
     puts("mountroot failed.");
     while(1);
+  } else {
+    puts("mount ok");
   }
-  struct inode *ino = fs_nametoi("/foo");
+  struct inode *ino = fs_nametoi("/verilog/../verilog/counter/counter.v");
   if(ino == NULL) {
     puts("nametoi failed.");
     while(1);
   }
-  puts("file found");
- */ 
+  printf("file found inode=%x\n", ino);
+  vm_add_area(current->vmmap, 0x20000, PAGESIZE*2, inode_mapper_new(ino, 0), 0);
+
+  for(uint32_t addr=0x20000; addr<0x20030; addr++) {
+    printf("%c", *(char*)addr);
+    if(*(char*)addr == '\0')
+      break;
+  }
+puts("ok.");
+
   while(1) {
-    puts("abcd");
-    puts("efgh");
   }
 }
 
@@ -66,15 +72,15 @@ void task_init() {
   struct task *ta, *tb, *tc;
   ta = kernel_task_new(task_a);
   tb = kernel_task_new(task_b);
-  tc = kernel_task_new(task_b);
-  current = ta;
-  task_run(tb);
+  tc = kernel_task_new(task_idle);
+  current = tb;
+  task_run(ta);
   task_run(tc);
   rettotask();
 }
 
 void kernstack_setaddr() {
-  tss.esp0 = (uint32_t)current->kernstack;
+  tss.esp0 = (uint32_t)((uint8_t *)(current->kernstack) + current->kernstacksize);
 }
 
 struct task *kernel_task_new(void *eip) {
@@ -88,6 +94,7 @@ struct task *kernel_task_new(void *eip) {
   t->regs.cs = GDT_SEL_CODESEG_0;
   t->regs.eip = (uint32_t)eip;
   t->regs.eflags = 0x200;
+  t->regs.cr3 = new_procpdt();
   //prepare kernel stack
   t->kernstack = page_alloc();
   t->kernstacksize = PAGESIZE;
@@ -109,6 +116,7 @@ void task_sched() {
     list_pushback(&(current->link), &run_queue);
     break;
   case TASK_STATE_WAITING:
+      printf("sleep task %x\n", current->waitcause);
     list_pushback(&(current->link), &wait_queue);
     break;
   }
@@ -116,24 +124,30 @@ void task_sched() {
   if(next == NULL)
     puts("no task!");
   current = container_of(next, struct task, link);
-  //printf("sched: nextpid=%d, eip=%x, esp=%x\n", current->pid, current->regs.eip, current->regs.esp);
+  //printf("sched: nextpid=%d, eip=%x, esp=%x, efl=%x\n", current->pid, current->regs.eip, current->regs.esp, current->regs.eflags);
 }
 
 void task_sleep(void *cause) {
+      printf("task_sleep %x\n", cause);
   current->state = TASK_STATE_WAITING;
   current->waitcause = cause;
   task_yield();
 }
 
 void task_wakeup(void *cause) {
+  int wake = 0;
+      printf("task_wakeup %x\n", cause);
   struct list_head *h, *tmp;
   list_foreach_safe(h, tmp, &wait_queue) {
     struct task *t = container_of(h, struct task, link); 
     if(t->waitcause == cause) {
+      wake = 1;
+      printf("wakeup task %x\n", cause);
       list_remove(h);
       list_pushfront(h, &run_queue);
     }
   }
-  task_yield();
+  if(wake)
+    task_yield();
 }
 

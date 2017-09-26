@@ -11,16 +11,23 @@ void gpe_isr() {
   while(1);
 }
 
-void pf_isr(uint32_t errcode, uint32_t addr) {
-  printf("\nPage fault! errcode = 0x%x, addr = 0x%x\n", errcode, addr);
+void pf_isr(uint32_t addr) {
+  printf("\nPage fault! addr = 0x%x\n", addr);
+  printf("eip=%x, esp=%x\n", current->regs.eip, current->regs.esp);
   struct vm_area *varea = vm_findarea(current->vmmap, addr);
   if(varea == NULL) {
     puts("Segmentation fault!\n");
     while(1);
   } else {
     uint32_t paddr = varea->mapper->ops->request(varea->mapper, addr - varea->start);
-    pagetbl_add_mapping(current_pdt, addr, paddr);
-    flushtlb();
+    uint8_t *page = page_alloc();
+    page[0] = 'h';
+    page[1] = 'e';
+    page[2] = 'l';
+    page[3] = 'l';
+    page[4] = 'o';
+    page[5] = '\0';
+    pagetbl_add_mapping(current->regs.cr3, addr, page);
   }
 }
 

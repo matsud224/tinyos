@@ -1,4 +1,5 @@
 #include "v6fs.h"
+#include "v6fs.h"
 #include "fs.h"
 #include "malloc.h"
 #include "blkdev.h"
@@ -252,4 +253,3 @@ exit:
 
   return NULL;
 }
-

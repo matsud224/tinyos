@@ -91,7 +91,10 @@ void blkdev_releasebuf(struct blkdev_buf *buf) {
 }
 
 static void waitbuf(struct blkdev_buf *buf) {
-  while(buf->wait);
+printf("bufwaiting %x\n", buf);
+  while(buf->wait)
+    task_sleep(buf);
+printf("buf ready %x\n", buf);
 }
 
 void blkdev_buf_sync_nowait(struct blkdev_buf *buf) {

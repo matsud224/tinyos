@@ -43,11 +43,6 @@ KERNENTRY void kernel_main(void) {
   v6fs_init();
   fat32_init();
   task_init();
- HALT;
-  //vm_add_area(current_vmmap, 0x20000, PAGESIZE*2, inode_mapper_new(ino, 0), 0);
-  for(uint32_t addr=0x20f00; addr<0x21100; addr++) {
-    printf("%c", *(char*)addr);
-  }
   HALT;
 }
 

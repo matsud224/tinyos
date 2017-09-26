@@ -28,7 +28,6 @@ int strcmp(const char *s1, const char *s2) {
 int fs_mountroot(const char *name, void *source) {
   int i;
   for(i = 0; i<fsinfotbl_used; i++) {
-    puts(fsinfo_tbl[i]->name);
     if(strcmp(fsinfo_tbl[i]->name, name) == 0) {
       break;
     }
@@ -56,12 +55,14 @@ struct inode *fs_nametoi(const char *path) {
   // 現在は絶対パスのみ許可
   if(path == NULL) return NULL;
   if(*ptr != '/') return NULL;
-  
+
   while(1) {
     while(*ptr == '/') ptr++;
     if(*ptr == '\0')
       return NULL;
     curino = curino->ops->opdent(curino, ptr, DENTOP_GET);
+    if(curino == NULL)
+      return NULL;
     while(*ptr && *ptr!='/') ptr++;
     if(*ptr == '\0')
       return curino;
@@ -69,5 +70,6 @@ struct inode *fs_nametoi(const char *path) {
 }
 
 int fs_read(struct inode *inode, uint8_t *base, uint32_t offset, uint32_t count) {
+printf("fs_read: inode=%x, base=%x, offset=%x, count=%x\n", inode, base, offset, count);
   return inode->ops->read(inode, base, offset, count);
 }

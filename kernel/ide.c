@@ -9,6 +9,9 @@
 #include "params.h"
 #include "common.h"
 #include "blkdev.h"
+#include "list.h"
+#include "lock.h"
+#include "task.h"
 #include <stdint.h>
 #include <stddef.h>
 
@@ -124,8 +127,8 @@ struct {
   uint8_t intvec;
   struct prd *prdt;
   void (*inthandler)(void);
-  struct request *queue_head;
-  struct request *queue_tail;
+  struct list_head req_queue;
+  mutex queue_mtx;
 } ide_channel[2];
 
 struct ide_dev{
@@ -156,7 +159,7 @@ struct request {
   uint8_t nsect;
   uint8_t rem_nsect;
   uint8_t *next_addr;
-  struct request *next;
+  struct list_head link;
 };
 
 static uint8_t ide_buf[2048];
@@ -231,8 +234,8 @@ static void ide_channel_init(uint8_t chan) {
   ide_channel[chan].intvec = chan==IDE_PRIMARY ? IDE_PRIMARY_INTVEC : IDE_SECONDARY_INTVEC;
   ide_channel[chan].inthandler = chan==IDE_PRIMARY ? ide1_inthandler : ide2_inthandler;
   ide_channel[chan].irq = chan==IDE_PRIMARY ? IDE_PRIMARY_IRQ : IDE_SECONDARY_IRQ;
-  ide_channel[chan].queue_head = NULL;
-  ide_channel[chan].queue_tail = NULL;
+  list_init(&ide_channel[chan].req_queue);
+  mutex_init(&ide_channel[chan].queue_mtx);
   ide_setnien(chan);
 }
 
@@ -377,46 +380,43 @@ static void ide_procnext(uint8_t chan);
 
 void *ide_request(struct request *req) {
   uint8_t chan = container_of(req->buf->dev, struct ide_dev, blkdev_info)->channel;
-  cli();
-  if(ide_channel[chan].queue_tail == NULL) {
-    ide_channel[chan].queue_head = req;
-    ide_channel[chan].queue_tail = req;
+  mutex_lock(&ide_channel[chan].queue_mtx);
+  if(list_is_empty(&ide_channel[chan].req_queue)) {
+    list_pushback(&req->link, &ide_channel[chan].req_queue);
   	ide_procnext(chan);
   } else {
-    ide_channel[chan].queue_tail->next = req;
-    ide_channel[chan].queue_tail = req;
+    list_pushback(&req->link, &ide_channel[chan].req_queue);
   }
-  sti();
+  mutex_unlock(&ide_channel[chan].queue_mtx);
 
   return req;
 }
 
 static void ide_procnext(uint8_t chan) {
-  // already cli() called
-  struct request *req = ide_channel[chan].queue_head;
-  if(req == NULL)
+  // already locked
+  if(list_is_empty(&ide_channel[chan].req_queue))
     return;
+  struct request *req = container_of(ide_channel[chan].req_queue.next, struct request, link);
 
   struct ide_dev *dev = container_of(req->buf->dev, struct ide_dev, blkdev_info);
   ide_ata_access(req->dir, (dev->channel<<1)|dev->drive, req->buf->blockno, req->nsect);
 }
 
 static void dequeue_and_next(uint8_t chan) {
-  cli();
-  struct request *headreq = ide_channel[chan].queue_head;
-  if(headreq) {
-    headreq->buf->wait = 0;
-    ide_channel[chan].queue_head = headreq->next;
-    headreq->next = NULL;
-    if(ide_channel[chan].queue_head == NULL)
-      ide_channel[chan].queue_tail = NULL;
+  mutex_lock(&ide_channel[chan].queue_mtx);
+  struct list_head *head = list_pop(&ide_channel[chan].req_queue);
+  if(head) {
+    struct blkdev_buf *buf = container_of(head, struct request, link)->buf;
+    buf->wait = 0;
+    puts("wakeup!");
+    task_wakeup(buf);
   }
   ide_procnext(chan);
-  sti();
+  mutex_unlock(&ide_channel[chan].queue_mtx);
 }
 
 static void ide_isr_common(uint8_t chan) {
-  struct request *req = ide_channel[chan].queue_head;
+  struct request *req = container_of(ide_channel[chan].req_queue.next, struct request, link);
   if((ide_in8(chan, ATA_REG_STATUS) & ATA_SR_ERR) == 0) {
     if(req != NULL) {
       for(int i=0; i<512; i+=2) {
@@ -438,7 +438,7 @@ static void ide_isr_common(uint8_t chan) {
 }
 
 void ide1_isr() {
-  //puts("IDE Primary Interrupt!");
+  puts("IDE Primary Interrupt!");
   ide_isr_common(IDE_PRIMARY);
 }
 
@@ -466,11 +466,12 @@ static void ide_sync(struct blkdev_buf *buf) {
 
   buf->wait = 1;
   struct request *req = malloc(sizeof(struct request));
+  if(req == NULL)
+    puts("malloc failed.");
   req->buf = buf;
   req->nsect = req->rem_nsect = 1;
   req->next_addr = buf->addr;
   req->dir = dir;
-  req->next = NULL;
   ide_request(req);
 }
 

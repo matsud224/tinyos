@@ -42,6 +42,7 @@ ide2_inthandler:
 extern gpe_isr
 global gpe_inthandler
 gpe_inthandler:
+  add esp, 4 ; pop error code
   handler_enter
   call gpe_isr
   handler_leave
@@ -49,14 +50,12 @@ gpe_inthandler:
 extern pf_isr
 global pf_inthandler
 pf_inthandler:
+  add esp, 4 ; pop error code
   handler_enter
-  mov ecx, dword [esp+32]
   mov eax, cr2
   push eax
-  push ecx
   call pf_isr
-  add esp, 8
-  add esp, 4 ; pop error code
+  add esp, 4
   handler_leave
 
 extern syscall_isr

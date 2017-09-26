@@ -25,11 +25,9 @@
 #define PTE_GLOBAL				0x100
 
 
-uint32_t *current_pdt;
 static uint32_t *kernspace_pdt; //over 0xc0000000
 
-
-static uint32_t *new_procpdt() {
+uint32_t *new_procpdt() {
   uint32_t *pdt = get_zeropage();
   //fill kernel space page diectory entry
   for(int i = 0; i < 1024; i++)
@@ -53,10 +51,8 @@ void pagetbl_init() {
     uint32_t *pt = get_zeropage();
     kernspace_pdt[i] = ((uint32_t)pt-KERNSPACE_ADDR) | PDE_PRESENT | PDE_RW;
   }
-  //for process 0
-  current_pdt = new_procpdt();
 
-  flushtlb();
+  flushtlb(kernspace_pdt);
 }
 
 void pagetbl_add_mapping(uint32_t *pdt, uint32_t vaddr, uint32_t paddr) {

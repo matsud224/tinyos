@@ -119,10 +119,10 @@ getcr2:
   mov eax, cr2
   ret
 
-extern current_pdt
+extern current
 global flushtlb
 flushtlb:
-  mov eax, [current_pdt]
+  mov eax, [esp+4]
   sub eax, 0xc0000000
   mov cr3, eax
   jmp .flush
@@ -206,10 +206,8 @@ saveregs_intr:
   mov ecx, eax
   pop eax
   mov [ecx], eax 
-  pushfd
-  pop eax
-  or eax, 0x200 ;set IF
-  mov [ecx+44], eax 
+  mov eax, [esp+12]
+  mov [ecx+44], eax
   mov eax, [esp+4]
   mov [ecx+48], eax
   mov eax, [esp+8]
@@ -217,9 +215,9 @@ saveregs_intr:
   and eax, 0x3 
   cmp eax, 0x3 ;check privilege level
   jne .kernmode
-  mov eax, [esp+12]
-  mov [ecx+56], eax
   mov eax, [esp+16]
+  mov [ecx+56], eax
+  mov eax, [esp+20]
   mov [ecx+60], eax
   jmp .fin
 .kernmode:
@@ -233,6 +231,9 @@ saveregs_intr:
 global rettotask
 rettotask:
   mov eax, [current]
+  mov ecx, [eax+64]
+  sub ecx, 0xc0000000
+  mov cr3, ecx
   mov ecx, [eax+4]
   mov edx, [eax+8]
   mov ebx, [eax+12]
@@ -248,7 +249,7 @@ rettotask:
   push dword [eax+44]
   push dword [eax+52]
   push dword [eax+48]
-  mov eax, [eax+0]
+  mov eax, [eax]
   iretd
 
 
@@ -273,3 +274,11 @@ global cpu_halt
 cpu_halt:
   hlt
   ret
+
+global xchg
+xchg:
+  mov eax, [esp+4]
+  mov ecx, [esp+8]
+  xchg eax, [ecx]
+  ret
+

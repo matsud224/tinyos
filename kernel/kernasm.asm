@@ -167,107 +167,44 @@ a20_enable:
 
 extern current
 
-global saveregs
-saveregs:
-  push eax
+global saveesp
+saveesp:
   mov eax, [current]
-  mov [eax+4], ecx
-  mov [eax+8], edx
-  mov [eax+12], ebx
-  mov [eax+16], ebp
-  mov [eax+20], esi
-  mov [eax+24], edi
-  mov [eax+28], es
-  mov [eax+32], ds
-  mov [eax+36], fs
-  mov [eax+40], gs
-  mov ecx, eax
-  pop eax
-  mov [ecx], eax 
-  pushfd
-  pop eax
-  mov [ecx+44], eax 
+  mov ecx, esp
+  sub ecx, 20
+  mov [eax], ecx
   ret
- 
-global saveregs_intr
-saveregs_intr:
-  push eax
-  mov eax, [current]
-  mov [eax+4], ecx
-  mov [eax+8], edx
-  mov [eax+12], ebx
-  mov [eax+16], ebp
-  mov [eax+20], esi
-  mov [eax+24], edi
-  mov [eax+28], es
-  mov [eax+32], ds
-  mov [eax+36], fs
-  mov [eax+40], gs
-  mov ecx, eax
-  pop eax
-  mov [ecx], eax 
-  mov eax, [esp+12]
-  mov [ecx+44], eax
-  mov eax, [esp+4]
-  mov [ecx+48], eax
-  mov eax, [esp+8]
-  mov [ecx+52], eax
-  and eax, 0x3 
-  cmp eax, 0x3 ;check privilege level
-  jne .kernmode
-  mov eax, [esp+16]
-  mov [ecx+56], eax
-  mov eax, [esp+20]
-  mov [ecx+60], eax
-  jmp .fin
-.kernmode:
-  mov eax, esp
-  add eax, 16
-  mov [ecx+56], eax
-  mov [ecx+60], ss
-.fin:
-  ret
-  
-global rettotask
-rettotask:
-  mov eax, [current]
-  mov ecx, [eax+64]
-  sub ecx, 0xc0000000
-  mov cr3, ecx
-  mov ecx, [eax+4]
-  mov edx, [eax+8]
-  mov ebx, [eax+12]
-  mov ebp, [eax+16]
-  mov esi, [eax+20]
-  mov edi, [eax+24]
-  mov es, [eax+28]
-  mov ds, [eax+32]
-  mov fs, [eax+36]
-  mov gs, [eax+40]
-  mov ss, [eax+60]
-  mov esp, [eax+56]
-  push dword [eax+44]
-  push dword [eax+52]
-  push dword [eax+48]
-  mov eax, [eax]
-  iretd
-
 
 extern task_sched
 extern kernstack_setaddr
 
 global task_yield
 task_yield:
-  call saveregs
+;save esp
   mov eax, [current]
-  mov dword [eax+48], .resume
-  mov [eax+52], cs
-  mov [eax+56], esp
-  mov [eax+60], ss
+  mov ecx, esp
+  sub ecx, 20
+  mov [eax], ecx
+;call scheduler
   call task_sched
   call kernstack_setaddr
-  jmp rettotask
-.resume:
+;save registers
+  push ebp
+  push ebx
+  push esi
+  push edi
+  pushfd
+;switch stack
+  mov eax, [current]
+  mov esp, [eax] ;new esp
+  mov ecx, [eax+4] ;new cr3
+  sub ecx, 0xc0000000
+  mov cr3, ecx
+  popfd
+  pop edi
+  pop esi
+  pop ebx
+  pop ebp
   ret
 
 global cpu_halt
@@ -280,5 +217,19 @@ xchg:
   mov eax, [esp+4]
   mov ecx, [esp+8]
   xchg eax, [ecx]
+  ret
+
+global jmpto_current
+jmpto_current:
+  mov eax, [current]
+  mov esp, [eax]
+  mov ecx, [eax+4]
+  sub ecx, 0xc0000000
+  mov cr3, ecx
+  popfd
+  pop edi
+  pop esi
+  pop ebx
+  pop ebp
   ret
 

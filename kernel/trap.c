@@ -13,7 +13,7 @@ void gpe_isr() {
 
 void pf_isr(uint32_t addr) {
   printf("\nPage fault! addr = 0x%x\n", addr);
-  printf("eip=%x, esp=%x\n", current->regs.eip, current->regs.esp);
+  //printf("eip=%x, esp=%x\n", current->regs.eip, current->regs.esp);
   struct vm_area *varea = vm_findarea(current->vmmap, addr);
   if(varea == NULL) {
     puts("Segmentation fault!\n");

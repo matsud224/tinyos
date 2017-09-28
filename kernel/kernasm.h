@@ -23,4 +23,5 @@ void saveregs_intr(void);
 void rettotask(void); 
 void task_yield(void);
 void cpu_halt(void);
+void task_switch(void *newsp, void *newcr3);
 uint32_t xchg(uint32_t value, void *mem);

@@ -24,6 +24,7 @@
 
 void pit_isr() {
   pic_sendeoi();
+  task_yield();
 }
 
 void pit_init() {

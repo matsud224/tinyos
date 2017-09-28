@@ -73,15 +73,16 @@ void task_init() {
   ta = kernel_task_new(task_a);
   tb = kernel_task_new(task_b);
   tc = kernel_task_new(task_idle);
-  current = tb;
-  task_run(ta);
+  current = ta;
+  task_run(tb);
   task_run(tc);
-  rettotask();
+  jmpto_current();
 }
 
 void kernstack_setaddr() {
   tss.esp0 = (uint32_t)((uint8_t *)(current->kernstack) + current->kernstacksize);
 }
+
 
 struct task *kernel_task_new(void *eip) {
   struct task *t = malloc(sizeof(struct task));
@@ -89,16 +90,15 @@ struct task *kernel_task_new(void *eip) {
   t->vmmap = vm_map_new();
   t->state = TASK_STATE_RUNNING;
   t->pid = pid_next++;
-  t->regs.ds = t->regs.es = t->regs.fs
-   = t->regs.gs = t->regs.ss = GDT_SEL_DATASEG_0;
-  t->regs.cs = GDT_SEL_CODESEG_0;
-  t->regs.eip = (uint32_t)eip;
-  t->regs.eflags = 0x200;
   t->regs.cr3 = new_procpdt();
   //prepare kernel stack
   t->kernstack = page_alloc();
+  bzero(t->kernstack, PAGESIZE);
   t->kernstacksize = PAGESIZE;
-  t->regs.esp = (uint32_t)((uint8_t *)(t->kernstack) + t->kernstacksize);
+  t->regs.esp = (uint32_t)((uint8_t *)(t->kernstack) + t->kernstacksize - 4);
+  *(uint32_t *)t->regs.esp = eip;
+  t->regs.esp -= 4*5;
+  *(uint32_t *)t->regs.esp = 0x200; //initial eflags(IF=1)
   t->next = NULL;
   return t;
 }
@@ -110,13 +110,13 @@ void task_run(struct task *t) {
 }
 
 void task_sched() {
-  //printf("sched: pid=%d\n", current->pid);
+  //printf("sched: pid=%d esp=%x\n", current->pid, current->regs.esp);
   switch(current->state) {
   case TASK_STATE_RUNNING:
     list_pushback(&(current->link), &run_queue);
     break;
   case TASK_STATE_WAITING:
-      printf("sleep task %x\n", current->waitcause);
+      printf("sleep task %d %x\n", current->pid, current->waitcause);
     list_pushback(&(current->link), &wait_queue);
     break;
   }

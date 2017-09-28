@@ -380,20 +380,19 @@ static void ide_procnext(uint8_t chan);
 
 void *ide_request(struct request *req) {
   uint8_t chan = container_of(req->buf->dev, struct ide_dev, blkdev_info)->channel;
+  int is_empty;
   mutex_lock(&ide_channel[chan].queue_mtx);
-  if(list_is_empty(&ide_channel[chan].req_queue)) {
-    list_pushback(&req->link, &ide_channel[chan].req_queue);
-  	ide_procnext(chan);
-  } else {
-    list_pushback(&req->link, &ide_channel[chan].req_queue);
-  }
+  is_empty = list_is_empty(&ide_channel[chan].req_queue);
+  list_pushback(&req->link, &ide_channel[chan].req_queue);
   mutex_unlock(&ide_channel[chan].queue_mtx);
+
+  if(is_empty)
+    ide_procnext(chan);
 
   return req;
 }
 
 static void ide_procnext(uint8_t chan) {
-  // already locked
   if(list_is_empty(&ide_channel[chan].req_queue))
     return;
   struct request *req = container_of(ide_channel[chan].req_queue.next, struct request, link);
@@ -403,7 +402,6 @@ static void ide_procnext(uint8_t chan) {
 }
 
 static void dequeue_and_next(uint8_t chan) {
-  mutex_lock(&ide_channel[chan].queue_mtx);
   struct list_head *head = list_pop(&ide_channel[chan].req_queue);
   if(head) {
     struct blkdev_buf *buf = container_of(head, struct request, link)->buf;
@@ -412,7 +410,6 @@ static void dequeue_and_next(uint8_t chan) {
     task_wakeup(buf);
   }
   ide_procnext(chan);
-  mutex_unlock(&ide_channel[chan].queue_mtx);
 }
 
 static void ide_isr_common(uint8_t chan) {

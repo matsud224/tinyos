@@ -2,19 +2,20 @@
 
 section .text
 
-extern saveregs_intr
-extern rettotask
 extern kernstack_setaddr
 extern task_sched
 
 %macro handler_enter 0
-  call saveregs_intr
+  push eax
+  push ecx
+  push edx
 %endmacro
 
 %macro handler_leave 0
-  call task_sched
-  call kernstack_setaddr
-  jmp rettotask
+  pop edx
+  pop ecx
+  pop eax
+  iretd
 %endmacro
 
 extern pit_isr

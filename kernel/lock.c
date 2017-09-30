@@ -9,10 +9,10 @@ void mutex_init(mutex *mtx) {
 }
 
 void mutex_lock(mutex *mtx) {
-printf("task%d waiting... %x\n", current->pid, mtx);
+  cli();
   while(xchg(1, mtx))
     task_sleep(mtx);
-printf("task%d locked... %x\n", current->pid, mtx);
+  sti();
 }
 
 int mutex_trylock(mutex *mtx) {
@@ -23,7 +23,6 @@ int mutex_trylock(mutex *mtx) {
 }
 
 void mutex_unlock(mutex *mtx) {
-printf("task%d unlocked! %x\n", current->pid, mtx);
   xchg(0, mtx);
   task_wakeup(mtx);
 }

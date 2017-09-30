@@ -177,23 +177,22 @@ saveesp:
 
 extern task_sched
 extern kernstack_setaddr
+extern print_stack
 
 global task_yield
 task_yield:
-;save esp
-  mov eax, [current]
-  mov ecx, esp
-  sub ecx, 20
-  mov [eax], ecx
-;call scheduler
-  call task_sched
-  call kernstack_setaddr
 ;save registers
   push ebp
   push ebx
   push esi
   push edi
   pushfd
+;save esp
+  mov eax, [current]
+  mov [eax], esp
+;call scheduler
+  call task_sched
+  call kernstack_setaddr
 ;switch stack
   mov eax, [current]
   mov esp, [eax] ;new esp

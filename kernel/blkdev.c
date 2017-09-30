@@ -74,7 +74,6 @@ struct blkdev_buf *blkdev_getbuf(uint16_t devno, uint64_t blockno) {
   }
 
   struct blkdev_buf *newbuf = malloc(sizeof(struct blkdev_buf));
-  newbuf->wait = 0;
   newbuf->ref = 1;
   newbuf->dev = dev;
   newbuf->blockno = blockno;
@@ -91,10 +90,11 @@ void blkdev_releasebuf(struct blkdev_buf *buf) {
 }
 
 static void waitbuf(struct blkdev_buf *buf) {
-printf("bufwaiting %x\n", buf);
-  while(buf->wait)
+  cli();
+  while((buf->flags & BDBUF_READY) == 0) {
     task_sleep(buf);
-printf("buf ready %x\n", buf);
+  }
+  sti();
 }
 
 void blkdev_buf_sync_nowait(struct blkdev_buf *buf) {
@@ -103,6 +103,8 @@ void blkdev_buf_sync_nowait(struct blkdev_buf *buf) {
 }
 
 void blkdev_buf_sync(struct blkdev_buf *buf) {
+  if(buf->flags & BDBUF_READY)
+    return;
   blkdev_buf_sync_nowait(buf);
   waitbuf(buf);
 }

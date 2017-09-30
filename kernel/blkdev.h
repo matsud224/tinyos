@@ -10,18 +10,17 @@
 #define BDBUF_DIRTY 0x2
 #define BDBUF_PENDING 0x4
 #define BDBUF_ERROR 0x8
-
+#define BDBUF_READY 0x10
 
 typedef uint32_t blkno_t;
 typedef uint16_t devno_t;
 
 struct blkdev_buf {
-  volatile uint8_t wait;
   uint16_t ref;
   struct blkdev *dev;
   uint32_t blockno;
   uint8_t *addr;
-  uint32_t flags;
+  volatile uint32_t flags;
   struct blkdev_buf *next;
   struct blkdev_buf *prev;
 };

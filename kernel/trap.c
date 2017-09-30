@@ -20,14 +20,7 @@ void pf_isr(uint32_t addr) {
     while(1);
   } else {
     uint32_t paddr = varea->mapper->ops->request(varea->mapper, addr - varea->start);
-    uint8_t *page = page_alloc();
-    page[0] = 'h';
-    page[1] = 'e';
-    page[2] = 'l';
-    page[3] = 'l';
-    page[4] = 'o';
-    page[5] = '\0';
-    pagetbl_add_mapping(current->regs.cr3, addr, page);
+    pagetbl_add_mapping(current->regs.cr3, addr, paddr);
   }
 }
 

@@ -46,7 +46,6 @@ void task_b() {
     if(*(char*)addr == '\0')
       break;
   }
-puts("ok.");
 
   while(1) {
   }
@@ -110,13 +109,12 @@ void task_run(struct task *t) {
 }
 
 void task_sched() {
-  //printf("sched: pid=%d esp=%x\n", current->pid, current->regs.esp);
+  //printf("sched: nextpid=%d esp=%x\n", current->pid, current->regs.esp);
   switch(current->state) {
   case TASK_STATE_RUNNING:
     list_pushback(&(current->link), &run_queue);
     break;
   case TASK_STATE_WAITING:
-      printf("sleep task %d %x\n", current->pid, current->waitcause);
     list_pushback(&(current->link), &wait_queue);
     break;
   }
@@ -124,11 +122,9 @@ void task_sched() {
   if(next == NULL)
     puts("no task!");
   current = container_of(next, struct task, link);
-  //printf("sched: nextpid=%d, eip=%x, esp=%x, efl=%x\n", current->pid, current->regs.eip, current->regs.esp, current->regs.eflags);
 }
 
 void task_sleep(void *cause) {
-      printf("task_sleep %x\n", cause);
   current->state = TASK_STATE_WAITING;
   current->waitcause = cause;
   task_yield();
@@ -136,18 +132,15 @@ void task_sleep(void *cause) {
 
 void task_wakeup(void *cause) {
   int wake = 0;
-      printf("task_wakeup %x\n", cause);
   struct list_head *h, *tmp;
   list_foreach_safe(h, tmp, &wait_queue) {
     struct task *t = container_of(h, struct task, link); 
     if(t->waitcause == cause) {
       wake = 1;
-      printf("wakeup task %x\n", cause);
+      t->state = TASK_STATE_RUNNING;
       list_remove(h);
       list_pushfront(h, &run_queue);
     }
   }
-  if(wake)
-    task_yield();
 }
 

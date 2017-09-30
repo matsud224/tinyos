@@ -19,9 +19,9 @@
 #define ATA_SR_DRDY    0x40    // Drive ready
 #define ATA_SR_DF      0x20    // Drive write fault
 #define ATA_SR_DSC     0x10    // Drive seek complete
-#define ATA_SR_DRQ     0x08    // Dide request ready
+#define ATA_SR_DRQ     0x08    // Drive request ready
 #define ATA_SR_CORR    0x04    // Corrected dide
-#define ATA_SR_IDX     0x02    // Inlex
+#define ATA_SR_IDX     0x02    // Index
 #define ATA_SR_ERR     0x01    // Error
 
 #define ATA_ER_BBK      0x80    // Bad sector
@@ -380,14 +380,10 @@ static void ide_procnext(uint8_t chan);
 
 void *ide_request(struct request *req) {
   uint8_t chan = container_of(req->buf->dev, struct ide_dev, blkdev_info)->channel;
-  int is_empty;
-  mutex_lock(&ide_channel[chan].queue_mtx);
-  is_empty = list_is_empty(&ide_channel[chan].req_queue);
+  cli();
   list_pushback(&req->link, &ide_channel[chan].req_queue);
-  mutex_unlock(&ide_channel[chan].queue_mtx);
-
-  if(is_empty)
-    ide_procnext(chan);
+  ide_procnext(chan);
+  sti();
 
   return req;
 }
@@ -405,8 +401,8 @@ static void dequeue_and_next(uint8_t chan) {
   struct list_head *head = list_pop(&ide_channel[chan].req_queue);
   if(head) {
     struct blkdev_buf *buf = container_of(head, struct request, link)->buf;
-    buf->wait = 0;
-    puts("wakeup!");
+    buf->flags &= ~(BDBUF_EMPTY|BDBUF_PENDING);
+    buf->flags |= BDBUF_READY;
     task_wakeup(buf);
   }
   ide_procnext(chan);
@@ -432,15 +428,14 @@ static void ide_isr_common(uint8_t chan) {
   }
   ide_in8(chan, ATA_REG_STATUS);
   pic_sendeoi();
+  task_yield();
 }
 
 void ide1_isr() {
-  puts("IDE Primary Interrupt!");
   ide_isr_common(IDE_PRIMARY);
 }
 
 void ide2_isr() {
-  //puts("IDE Secondary Interrupt!");
   ide_isr_common(IDE_SECONDARY);
 }
 
@@ -461,7 +456,6 @@ static void ide_sync(struct blkdev_buf *buf) {
   else
     return;
 
-  buf->wait = 1;
   struct request *req = malloc(sizeof(struct request));
   if(req == NULL)
     puts("malloc failed.");

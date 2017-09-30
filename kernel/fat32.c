@@ -149,11 +149,8 @@ static struct fs *fat32_mount(void *source) {
   uint16_t devno = (uint16_t)source;
   struct fat32_fs *fat32 = malloc(sizeof(struct fat32_fs));
   fat32->devno = devno;
-puts("boot get");
   struct blkdev_buf *buf = blkdev_getbuf(devno, FAT32_BOOT);
-puts("boot sync");
   blkdev_buf_sync(buf);
-puts("boot read");
   fat32->boot = *(struct fat32_boot *)(buf->addr);
   struct fat32_boot *boot = &(fat32->boot);
   blkdev_releasebuf(buf);
@@ -230,7 +227,6 @@ static int fat32_inode_read(struct inode *inode, uint8_t *base, uint32_t offset,
 
     *base++ = buf->addr[i%BLOCKSIZE];
   }
-puts("file read finished.");
   if(buf != NULL)
     blkdev_releasebuf(buf);
   return tail-offset;

@@ -24,7 +24,7 @@ void pf_isr(uint32_t addr) {
   }
 }
 
-void syscall_isr() {
-  puts("syscall");
-  while(1);
+void syscall_isr(uint32_t eax, uint32_t ebx, uint32_t ecx, uint32_t edx, uint32_t esi, uint32_t edi) {
+  printf("syscall: %x,%x,%x,%x,%x,%x\n", eax, ebx, ecx, edx, esi, edi);
+  task_yield();
 }

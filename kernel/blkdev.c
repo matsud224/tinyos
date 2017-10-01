@@ -1,4 +1,5 @@
 #include "page.h"
+#include "kernasm.h"
 #include "malloc.h"
 #include "blkdev.h"
 #include <stdint.h>

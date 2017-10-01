@@ -39,6 +39,19 @@ ide2_inthandler:
   call ide2_isr
   handler_leave
 
+extern com1_isr
+global com1_inthandler
+com1_inthandler:
+  handler_enter
+  call com1_isr
+  handler_leave
+
+extern com2_isr
+global com2_inthandler
+com2_inthandler:
+  handler_enter
+  call com2_isr
+  handler_leave
 
 extern gpe_isr
 global gpe_inthandler
@@ -63,6 +76,13 @@ extern syscall_isr
 global syscall_inthandler
 syscall_inthandler:
   handler_enter
+  push edi
+  push esi
+  push edx
+  push ecx
+  push ebx
+  push eax
   call syscall_isr
+  add esp, 24
   handler_leave
   

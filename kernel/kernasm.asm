@@ -232,3 +232,9 @@ jmpto_current:
   pop ebp
   ret
 
+global int80
+int80:
+  mov eax, 3
+  int 0x80
+  ret
+

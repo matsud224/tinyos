@@ -1,5 +1,3 @@
-#pragma once
-
 #include "list.h"
 #include "common.h"
 #include <stddef.h>

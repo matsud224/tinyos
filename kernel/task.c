@@ -23,6 +23,7 @@ void task_a() {
   pit_init();
   sti();
   while(1) {
+   //int80(); 
   }
 }
 
@@ -41,7 +42,7 @@ void task_b() {
   printf("file found inode=%x\n", ino);
   vm_add_area(current->vmmap, 0x20000, PAGESIZE*2, inode_mapper_new(ino, 0), 0);
 
-  for(uint32_t addr=0x20000; addr<0x20030; addr++) {
+  for(uint32_t addr=0x20000; addr<0x20200; addr++) {
     printf("%c", *(char*)addr);
     if(*(char*)addr == '\0')
       break;

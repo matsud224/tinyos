@@ -95,10 +95,8 @@ int vm_add_area(struct vm_map *map, uint32_t start, size_t size, struct mapper *
   new->offset = 0;
   new->flags = 0;
   new->mapper = mapper;
-printf("mapper = %x\n", mapper);
   new->next = map->area_list;
   map->area_list = new;
-printf("area_list=%x\n", &(map->area_list));
   return 0;
 }
 

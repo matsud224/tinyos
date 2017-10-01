@@ -36,6 +36,7 @@ KERNENTRY void kernel_main(void) {
   idt_register(0x80, IDT_INTGATE, syscall_inthandler);
   pagetbl_init();
   vmem_init();
+  serial_init();
   //pit_init();
   pci_printinfo();
   blkdev_init();

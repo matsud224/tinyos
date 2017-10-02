@@ -41,6 +41,8 @@ KERNENTRY void kernel_main(void) {
   pci_printinfo();
   blkdev_init();
   ide_init();
+  chardev_init();
+  serial_init();
   v6fs_init();
   fat32_init();
   task_init();

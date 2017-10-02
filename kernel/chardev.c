@@ -45,7 +45,7 @@ uint32_t chardevbuf_write(struct chardev_buf *buf, uint8_t *src, uint32_t count)
   uint32_t write_count = 0;
   uint32_t limit = (buf->tail+(buf->size-1))%buf->size;
   while((write_count < count) && (buf->head != limit)) {
-    buf->addr[buf->head++] == *src++;
+    buf->addr[buf->head++] = *src++;
     if(buf->head == buf->size)
       buf->head = 0;
     write_count++;
@@ -58,11 +58,13 @@ uint32_t chardev_read(uint16_t devno, uint8_t *dest, uint32_t count) {
   struct chardev *dev = chardev_tbl[devno];
   uint32_t remain = count;
   while(remain > 0) {
+    cli();
     uint32_t n = dev->ops->read(dev, dest, remain);
     remain -= n;
     dest += n;
     if(remain > 0)
       task_sleep(dev);
+    sti();
   }
   return count;
 }
@@ -71,11 +73,13 @@ uint32_t chardev_write(uint16_t devno, uint8_t *src, uint32_t count) {
   struct chardev *dev = chardev_tbl[devno];
   uint32_t remain = count;
   while(remain > 0) {
+    cli();
     uint32_t n = dev->ops->write(dev, src, count);
     remain -= n;
     src += n;
     if(remain > 0)
       task_sleep(dev);
+    sti();
   }
   return count;
 }

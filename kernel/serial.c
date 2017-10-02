@@ -40,6 +40,7 @@ static struct chardev_ops serial_chardev_ops = {
 };
 
 static struct comport{
+  uint8_t port;
   uint16_t base;
   uint8_t irq;
   uint8_t intvec;
@@ -48,8 +49,8 @@ static struct comport{
   struct chardev_buf *txbuf;
   struct chardev chardev_info;
 } comport[COMPORT_NUM] = {
-  {.base = 0x3f8, .irq = 4, .intvec = 0x24, .inthandler = com1_inthandler, .chardev_info.ops = &serial_chardev_ops},
-  {.base = 0x2f8, .irq = 3, .intvec = 0x23, .inthandler = com2_inthandler, .chardev_info.ops = &serial_chardev_ops}
+  {.port = 0, .base = 0x3f8, .irq = 4, .intvec = 0x24, .inthandler = com1_inthandler, .chardev_info.ops = &serial_chardev_ops},
+  {.port = 1, .base = 0x2f8, .irq = 3, .intvec = 0x23, .inthandler = com2_inthandler, .chardev_info.ops = &serial_chardev_ops}
 };
 
 
@@ -71,12 +72,15 @@ void serial_init() {
     comport[i].txbuf = chardevbuf_create(malloc(SERIAL_BUFSIZE), SERIAL_BUFSIZE);
 
     pic_clearmask(comport[i].irq);
+    chardev_add(&comport[i].chardev_info);
   }
 }
 
 static void serial_send(int port) {
   uint16_t base = comport[port].base;
   uint8_t data;
+  if(CHARDEVBUF_IS_FULL(comport[port].txbuf))
+    task_wakeup(&comport[port].chardev_info);
   if(chardevbuf_read(comport[port].txbuf, &data, 1) == 1)
     out8(base+COM_DATA, data);
 }
@@ -88,6 +92,7 @@ void serial_isr_common(int port) {
   if((reason & 0x1) == 0) {
     switch((reason & 0x6)>>1) {
     case 1:
+      //送信準備完了
       if(CHARDEVBUF_IS_EMPTY(comport[port].txbuf))
         in8(base+COM_INT_FIFO_CTRL);
       else
@@ -95,8 +100,12 @@ void serial_isr_common(int port) {
       break;
     case 2:
     case 6:
+      //受信
       data = in8(base+COM_DATA);
-      chardevbuf_write(comport[port].rxbuf, &data, 1);
+      if(CHARDEVBUF_IS_EMPTY(comport[port].rxbuf))
+        task_wakeup(&comport[port].chardev_info);
+      if(!CHARDEVBUF_IS_FULL(comport[port].rxbuf))
+        chardevbuf_write(comport[port].rxbuf, &data, 1);
       break;
     case 3:
       in8(base+COM_LINESTAT);
@@ -127,11 +136,14 @@ static void serial_close(struct chardev *dev) {
 
 static uint32_t serial_read(struct chardev *dev, uint8_t *dest, uint32_t count) {
   struct comport *com = container_of(dev, struct comport, chardev_info);
-  return chardevbuf_read(com->rxbuf, dest, count);
+  uint32_t n = chardevbuf_read(com->rxbuf, dest, count);
+  return n;
 }
 
 static uint32_t serial_write(struct chardev *dev, uint8_t *src, uint32_t count) {
   struct comport *com = container_of(dev, struct comport, chardev_info);
-  return chardevbuf_write(com->txbuf, src, count);
+  uint32_t n = chardevbuf_write(com->txbuf, src, count);
+  serial_send(com->port);
+  return n;
 }
 

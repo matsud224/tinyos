@@ -20,7 +20,7 @@ struct chardev_buf {
   uint32_t free;
   uint32_t head; //次の書き込み位置
   uint32_t tail; //次の読み出し位置
-  uint8_t *addr;
+  volatile uint8_t *addr;
 };
 
 struct chardev;

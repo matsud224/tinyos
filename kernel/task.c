@@ -7,6 +7,7 @@
 #include "kernasm.h"
 #include "vmem.h"
 #include "kernlib.h"
+#include "chardev.h"
 #include <stdint.h>
 #include <stddef.h>
 
@@ -23,7 +24,7 @@ void task_a() {
   pit_init();
   sti();
   while(1) {
-   //int80(); 
+    //int80(); 
   }
 }
 
@@ -47,8 +48,11 @@ void task_b() {
     if(*(char*)addr == '\0')
       break;
   }
-
+ 
+  uint8_t data;
   while(1) {
+    if(chardev_read(0, &data, 1) == 1)
+      chardev_write(0, &data, 1);
   }
 }
 
@@ -138,6 +142,7 @@ void task_wakeup(void *cause) {
     struct task *t = container_of(h, struct task, link); 
     if(t->waitcause == cause) {
       wake = 1;
+puts("wakeup");
       t->state = TASK_STATE_RUNNING;
       list_remove(h);
       list_pushfront(h, &run_queue);

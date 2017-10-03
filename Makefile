@@ -4,7 +4,7 @@ CFLAGS		= -std=gnu99 -O2 -Wall -Wextra -g
 OBJCOPY		= i686-elf-objcopy
 #QEMU			= qemu-system-i386
 QEMU			= ~/qemu-2.10.0/i386-softmmu/qemu-system-i386 
-QEMUFLAGS			= -m 512 -hda fat32disk -hdb sample -boot a -serial stdio 
+QEMUFLAGS			= -m 512 -hda fat32disk -hdb sample -boot a -serial stdio -net nic,model=rtl8139
 
 RM						= rm -f
 

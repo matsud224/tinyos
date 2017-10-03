@@ -218,7 +218,6 @@ static int fat32_inode_read(struct inode *inode, uint8_t *base, uint32_t offset,
       if(current_cluster >= 0x0ffffff8
            && current_cluster <= 0x0fffffff)
         break;
-      printf("sector: %d\n", cluster_to_sector(f, current_cluster) + i/BLOCKSIZE);
       buf = blkdev_getbuf(devno, cluster_to_sector(f, current_cluster) + i/BLOCKSIZE);
       blkdev_buf_sync(buf);
       if(i/BLOCKSIZE == f->boot.BPB_SecPerClus-1)
@@ -323,7 +322,6 @@ static struct inode *fat32_inode_opdent(struct inode *inode, const char *name, i
       if(current_cluster >= 0x0ffffff8
            && current_cluster <= 0x0fffffff)
         break;
-      printf("sector: %d\n", cluster_to_sector(f, current_cluster) + i/BLOCKSIZE);
       buf = blkdev_getbuf(devno, cluster_to_sector(f, current_cluster) + i/BLOCKSIZE);
       blkdev_buf_sync(buf);
       if(i/BLOCKSIZE == f->boot.BPB_SecPerClus-1)

@@ -38,13 +38,14 @@ KERNENTRY void kernel_main(void) {
   vmem_init();
   serial_init();
   //pit_init();
-  pci_printinfo();
+  pci_init();
   blkdev_init();
   ide_init();
   chardev_init();
   serial_init();
   v6fs_init();
   fat32_init();
+  rtl8139_probe();
   task_init();
   HALT;
 }

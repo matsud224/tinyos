@@ -43,11 +43,11 @@ void task_b() {
   printf("file found inode=%x\n", ino);
   vm_add_area(current->vmmap, 0x20000, PAGESIZE*2, inode_mapper_new(ino, 0), 0);
 
-  for(uint32_t addr=0x20000; addr<0x20200; addr++) {
+  /*for(uint32_t addr=0x20000; addr<0x20200; addr++) {
     printf("%c", *(char*)addr);
     if(*(char*)addr == '\0')
       break;
-  }
+  }*/
  
   uint8_t data;
   while(1) {
@@ -142,7 +142,6 @@ void task_wakeup(void *cause) {
     struct task *t = container_of(h, struct task, link); 
     if(t->waitcause == cause) {
       wake = 1;
-puts("wakeup");
       t->state = TASK_STATE_RUNNING;
       list_remove(h);
       list_pushfront(h, &run_queue);

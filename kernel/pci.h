@@ -62,6 +62,9 @@ static const char *PCI_CLASS_STR[0x12] = {
 uint32_t pci_config_read32(struct pci_dev *pcidev, uint8_t offset);
 uint16_t pci_config_read16(struct pci_dev *pcidev, uint8_t offset);
 uint8_t pci_config_read8(struct pci_dev *pcidev, uint8_t offset);
+void pci_config_write32(struct pci_dev *pcidev, uint8_t offset, uint32_t data);
+uint16_t pci_config_write16(struct pci_dev *pcidev, uint8_t offset, uint16_t data);
+uint8_t pci_config_write8(struct pci_dev *pcidev, uint8_t offset, uint8_t data);
 struct pci_dev *pci_search_device(uint16_t vendorid, uint16_t deviceid);
 void pci_init(void);
  

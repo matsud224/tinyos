@@ -53,6 +53,13 @@ com2_inthandler:
   call com2_isr
   handler_leave
 
+extern rtl8139_isr
+global rtl8139_inthandler
+rtl8139_inthandler:
+  handler_enter
+  call rtl8139_isr
+  handler_leave
+
 extern gpe_isr
 global gpe_inthandler
 gpe_inthandler:

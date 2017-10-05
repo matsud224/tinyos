@@ -38,6 +38,38 @@ uint8_t pci_config_read8(struct pci_dev *pcidev, uint8_t offset) {
   return _pci_config_read8(pcidev->bus, pcidev->dev, pcidev->func, offset);
 }
 
+static void _pci_config_write32(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset, uint32_t data) {
+  uint32_t addr = (bus<<16) | (dev<<11) | (func<<8) | (offset&0xfc) | 0x80000000u;
+  out32(PCI_CONFIG_ADDR, addr);
+  out32(PCI_CONFIG_DATA, data);
+}
+
+void pci_config_write32(struct pci_dev *pcidev, uint8_t offset, uint32_t data) {
+  return _pci_config_write32(pcidev->bus, pcidev->dev, pcidev->func, offset, data);
+}
+
+static uint16_t _pci_config_write16(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset, uint16_t data) {
+  uint32_t result = _pci_config_read32(bus, dev, func, offset);
+  result &= (~0xffff << ((offset&2)*8));
+  result &= (data << ((offset&2)*8));
+  _pci_config_write32(bus, dev, func, offset, result);
+}
+
+uint16_t pci_config_write16(struct pci_dev *pcidev, uint8_t offset, uint16_t data) {
+  return _pci_config_write16(pcidev->bus, pcidev->dev, pcidev->func, offset, data);
+}
+
+static uint8_t _pci_config_write8(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset, uint8_t data) {
+  uint32_t result = _pci_config_read32(bus, dev, func, offset);
+  result &= (~0xff << ((offset&3)*8));
+  result &= (data << ((offset&3)*8));
+  _pci_config_write32(bus, dev, func, offset, result);
+}
+
+uint8_t pci_config_write8(struct pci_dev *pcidev, uint8_t offset, uint8_t data) {
+  return _pci_config_write8(pcidev->bus, pcidev->dev, pcidev->func, offset, data);
+}
+
 struct pci_dev *pci_search_device(uint16_t vendorid, uint16_t deviceid) {
   struct list_head *ptr;
   list_foreach(ptr, &pci_dev_list) {

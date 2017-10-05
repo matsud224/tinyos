@@ -14,7 +14,7 @@ static struct {
 void vga_init() {
 	vga.row = 0;
 	vga.column = 0;
-	vga.color = VGAENTRY_COLOR(VGA_COLOR_WHITE, VGA_COLOR_BLACK);
+	vga.color = VGAENTRY_COLOR(VGA_COLOR_WHITE, VGA_COLOR_BLUE);
 	vga.buffer = (uint16_t*)(KERNSPACE_ADDR + VRAM_COLOR); 
 	for (size_t y = 0; y < VGA_HEIGHT; y++) {
 		for (size_t x = 0; x < VGA_WIDTH; x++) {

@@ -51,8 +51,10 @@ void task_b() {
  
   uint8_t data;
   while(1) {
-    if(chardev_read(0, &data, 1) == 1)
+    if(chardev_read(0, &data, 1) == 1) {
+      rtl8139_tx();
       chardev_write(0, &data, 1);
+    }
   }
 }
 

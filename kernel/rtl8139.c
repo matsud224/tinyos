@@ -50,6 +50,26 @@
 #define PKTHDR_PAM	0x4000
 #define PKTHDR_MAR	0x8000
 
+#define ISR_ROK			0x1
+#define ISR_RER			0x2
+#define ISR_TOK			0x4
+#define ISR_TER			0x8
+#define ISR_RXOVW		0x10
+#define ISR_PUN			0x20
+#define ISR_FOVW		0x40
+#define ISR_LENCHG	0x2000
+#define ISR_TIMEOUT	0x4000
+#define ISR_SERR		0x8000
+
+#define TSD_OWN			0x2000
+#define TSD_TUN			0x4000
+#define TSD_TOK			0x8000
+#define TSD_CDH			0x10000000
+#define TSD_OWC			0x20000000
+#define TSD_TABT		0x40000000
+#define TSD_CRS			0x80000000
+
+
 #define RXBUF_SIZE			8192
 #define RXBUF_PAD				16
 #define RXBUF_WRAP_PAD	2048
@@ -63,7 +83,17 @@ static struct {
   uint8_t rxbuf[RXBUF_TOTAL];
   uint16_t rxbuf_index;
   uint32_t rxbuf_size;
+  uint8_t cur_txreg;
 } rtldev;
+
+static const uint16_t TX_TSD[4] = {
+  RTL8139_TSD, RTL8139_TSD+4, RTL8139_TSD+8, RTL8139_TSD+12
+};
+
+static const uint16_t TX_TSAD[4] = {
+  RTL8139_TSAD, RTL8139_TSAD+4, RTL8139_TSAD+8, RTL8139_TSAD+12
+};
+
 
 void rtl8139_init(struct pci_dev *thisdev) {
   rtldev.pci = thisdev;
@@ -71,6 +101,7 @@ void rtl8139_init(struct pci_dev *thisdev) {
   rtldev.iobase &= 0xfffc;
   rtldev.irq = pci_config_read8(thisdev, PCI_INTLINE);
   rtldev.rxbuf_index = 0;
+  rtldev.cur_txreg = 0;
   for(int i=0; i<6; i++)
     rtldev.macaddr[i] = in8(rtldev.iobase+RTL8139_IDR+i);
   printf("iobase=%x\nirq=%x\nmacaddr=%x:%x:%x:%x:%x:%x\n",
@@ -100,11 +131,11 @@ void rtl8139_init(struct pci_dev *thisdev) {
   //set rx buffer address
   out32(rtldev.iobase+RTL8139_RBSTART, rtldev.rxbuf-KERNSPACE_ADDR);
   //set IMR
-  out16(rtldev.iobase+RTL8139_IMR, 0x5);
+  out16(rtldev.iobase+RTL8139_IMR, 0x55);
   //receive configuration
   out32(rtldev.iobase+RTL8139_RCR, RCR_ALL_ACCEPT | RCR_WRAP);
-  //enable rx
-  out8(rtldev.iobase+RTL8139_CR, CR_RE);
+  //enable rx&tx
+  out8(rtldev.iobase+RTL8139_CR, CR_RE|CR_TE);
   //setup interrupt
   idt_register(rtldev.irq+0x20, IDT_INTGATE, rtl8139_inthandler); 
   pic_clearmask(rtldev.irq);
@@ -133,12 +164,35 @@ void packet_analyze(uint8_t *buf) {
   free(buf);
 }
 
+struct ether_hdr{
+  uint8_t ether_dhost[ETHER_ADDR_LEN];
+  uint8_t ether_shost[ETHER_ADDR_LEN];
+  uint16_t ether_type;
+  uint8_t payload[128];
+} epkt = {
+  .ether_dhost = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+  .ether_shost = {0xde, 0xad, 0xbe, 0xef, 0x00, 0x00},
+  .ether_type = 0x0000,
+  .payload = "This is a test packet."
+};
+
+int rtl8139_tx() {
+  void *buf = &epkt;
+  uint32_t size = sizeof(epkt);
+  cli();
+  out32(rtldev.iobase+TX_TSAD[rtldev.cur_txreg], buf-KERNSPACE_ADDR);
+  out32(rtldev.iobase+TX_TSD[rtldev.cur_txreg], sizeof(epkt));
+  rtldev.cur_txreg = (rtldev.cur_txreg+1)%4;
+  printf("sent size=%d\n", sizeof(epkt));
+  sti();
+}
+
 int rtl8139_rx() {
   uint32_t offset = rtldev.rxbuf_index % RXBUF_SIZE;
   uint32_t pkt_hdr = *((uint32_t *)(rtldev.rxbuf+offset));
   uint16_t rx_status = pkt_hdr&0xffff;
   uint16_t rx_size = pkt_hdr>>16;
-  printf("%x hdr=%x\n", rtldev.rxbuf+offset, pkt_hdr);
+  //printf("%x hdr=%x\n", rtldev.rxbuf+offset, pkt_hdr);
   if(rx_status & PKTHDR_RUNT ||
      rx_status & PKTHDR_LONG ||
      rx_status & PKTHDR_CRC ||
@@ -148,7 +202,7 @@ int rtl8139_rx() {
     goto out;
   }
 
-  printf("packet size=%d\n", rx_size-4);
+  //printf("packet size=%d\n", rx_size-4);
   uint8_t *pktbuf = malloc(rx_size-4);
   memcpy(pktbuf, rtldev.rxbuf+offset+4, rx_size-4);
   packet_analyze(pktbuf);
@@ -159,8 +213,16 @@ out:
 }
 
 void rtl8139_isr() {
+  uint16_t isr = in16(rtldev.iobase+RTL8139_ISR);
+  printf("tsd[0]=%x\n", in32(rtldev.iobase+TX_TSD[0]));
+  //if((in32(rtldev.iobase+TX_TSD[0])&(TSD_OWN|TSD_TOK)) == (TSD_OWN|TSD_TOK)) {
+  if(isr & ISR_TOK) {
+    out16(rtldev.iobase+RTL8139_ISR, ISR_TOK);
+    puts("send ok");
+  }
+  if(isr & (ISR_FOVW|ISR_RXOVW|ISR_ROK))
+    out16(rtldev.iobase+RTL8139_ISR, ISR_FOVW|ISR_RXOVW|ISR_ROK);
   while((in8(rtldev.iobase+RTL8139_CR) & CR_BUFE) == 0)
     rtl8139_rx();
-  out16(rtldev.iobase+RTL8139_ISR, 0x1);
   pic_sendeoi();
 }

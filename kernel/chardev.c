@@ -19,7 +19,7 @@ void chardev_add(struct chardev *dev) {
   nchardev++;
 }
 
-struct chardev_buf *chardevbuf_create(uint8_t *mem, uint32_t size) {
+struct chardev_buf *cdbuf_create(uint8_t *mem, uint32_t size) {
   struct chardev_buf *buf = malloc(sizeof(struct chardev_buf));
   buf->size = size;
   buf->free = size;
@@ -29,7 +29,7 @@ struct chardev_buf *chardevbuf_create(uint8_t *mem, uint32_t size) {
   return buf;
 }
 
-uint32_t chardevbuf_read(struct chardev_buf *buf, uint8_t *dest, uint32_t count) {
+uint32_t cdbuf_read(struct chardev_buf *buf, uint8_t *dest, uint32_t count) {
   uint32_t read_count = 0;
   while((read_count < count) && (buf->head != buf->tail)) {
     *dest++ = buf->addr[buf->tail++];
@@ -41,7 +41,7 @@ uint32_t chardevbuf_read(struct chardev_buf *buf, uint8_t *dest, uint32_t count)
   return read_count;
 }
 
-uint32_t chardevbuf_write(struct chardev_buf *buf, uint8_t *src, uint32_t count) {
+uint32_t cdbuf_write(struct chardev_buf *buf, uint8_t *src, uint32_t count) {
   uint32_t write_count = 0;
   uint32_t limit = (buf->tail+(buf->size-1))%buf->size;
   while((write_count < count) && (buf->head != limit)) {

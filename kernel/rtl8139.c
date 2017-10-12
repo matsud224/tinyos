@@ -75,6 +75,9 @@
 #define RXBUF_WRAP_PAD	2048
 #define RXBUF_TOTAL			(RXBUF_SIZE+RXBUF_PAD+RXBUF_WRAP_PAD)
 
+#define RXQUEUE_SIZE		64
+#define TXQUEUE_SIZE		64
+
 static struct {
   struct pci_dev *pci;
   uint16_t iobase;
@@ -84,6 +87,9 @@ static struct {
   uint16_t rxbuf_index;
   uint32_t rxbuf_size;
   uint8_t cur_txreg;
+	struct netdev_queue *rxqueue;
+	struct netdev_queue *txqueue;
+  struct netdev netdev_info;
 } rtldev;
 
 static const uint16_t TX_TSD[4] = {
@@ -94,14 +100,23 @@ static const uint16_t TX_TSAD[4] = {
   RTL8139_TSAD, RTL8139_TSAD+4, RTL8139_TSAD+8, RTL8139_TSAD+12
 };
 
+static const struct netdev_ops rtl8139_ops = {
+  .open = rtl8139_open,
+  .close = rtl8139_close,
+  .tx = rtl8139_tx,
+  .rx = rtl8139_rx
+};
 
 void rtl8139_init(struct pci_dev *thisdev) {
+  rtldev.netdev_info.ops = &rtl8139_ops;
   rtldev.pci = thisdev;
   rtldev.iobase = pci_config_read32(thisdev, PCI_BAR0);
   rtldev.iobase &= 0xfffc;
   rtldev.irq = pci_config_read8(thisdev, PCI_INTLINE);
   rtldev.rxbuf_index = 0;
   rtldev.cur_txreg = 0;
+	rtldev.rxqueue = ndqueue_create(malloc(RXQUEUE_SIZE*4), RXQUEUE_SIZE*4);
+	rtldev.txqueue = ndqueue_create(malloc(TXQUEUE_SIZE*4), TXQUEUE_SIZE*4);
   for(int i=0; i<6; i++)
     rtldev.macaddr[i] = in8(rtldev.iobase+RTL8139_IDR+i);
   printf("iobase=%x\nirq=%x\nmacaddr=%x:%x:%x:%x:%x:%x\n",
@@ -143,7 +158,8 @@ void rtl8139_init(struct pci_dev *thisdev) {
 
 int rtl8139_probe() {
   struct pci_dev *thisdev = pci_search_device(RTL8139_VENDORID, RTL8139_DEVICEID);
-  rtl8139_init(thisdev);
+  if(thisdev!=NULL)
+    rtl8139_init(thisdev);
   return (thisdev != NULL);
 }
 
@@ -176,23 +192,23 @@ struct ether_hdr{
   .payload = "This is a test packet."
 };
 
-int rtl8139_tx() {
-  void *buf = &epkt;
-  uint32_t size = sizeof(epkt);
+int rtl8139_tx(void *buf, size_t size) {
+  while((in32(rtldev.iobase+TX_TSD[rtldev.cur_txreg]) & TSD_OWN) == 0)
+    return -1; 
   cli();
   out32(rtldev.iobase+TX_TSAD[rtldev.cur_txreg], buf-KERNSPACE_ADDR);
-  out32(rtldev.iobase+TX_TSD[rtldev.cur_txreg], sizeof(epkt));
+  out32(rtldev.iobase+TX_TSD[rtldev.cur_txreg],size); 
   rtldev.cur_txreg = (rtldev.cur_txreg+1)%4;
   printf("sent size=%d\n", sizeof(epkt));
   sti();
+  return 1;
 }
 
-int rtl8139_rx() {
+int rtl8139_rx_one() {
   uint32_t offset = rtldev.rxbuf_index % RXBUF_SIZE;
   uint32_t pkt_hdr = *((uint32_t *)(rtldev.rxbuf+offset));
   uint16_t rx_status = pkt_hdr&0xffff;
   uint16_t rx_size = pkt_hdr>>16;
-  //printf("%x hdr=%x\n", rtldev.rxbuf+offset, pkt_hdr);
   if(rx_status & PKTHDR_RUNT ||
      rx_status & PKTHDR_LONG ||
      rx_status & PKTHDR_CRC ||
@@ -202,10 +218,11 @@ int rtl8139_rx() {
     goto out;
   }
 
-  //printf("packet size=%d\n", rx_size-4);
-  uint8_t *pktbuf = malloc(rx_size-4);
-  memcpy(pktbuf, rtldev.rxbuf+offset+4, rx_size-4);
-  packet_analyze(pktbuf);
+	if(!NDQUEUE_IS_FULL(rtldev.rxqueue)) {
+    uint8_t *pktbuf = malloc(rx_size-4);
+    memcpy(pktbuf, rtldev.rxbuf+offset+4, rx_size-4);
+    ndqueue_enqueue(pktbuf);
+	}
   
 out:
   rtldev.rxbuf_index = (offset + rx_size + 4 + 3) & ~3;
@@ -223,6 +240,25 @@ void rtl8139_isr() {
   if(isr & (ISR_FOVW|ISR_RXOVW|ISR_ROK))
     out16(rtldev.iobase+RTL8139_ISR, ISR_FOVW|ISR_RXOVW|ISR_ROK);
   while((in8(rtldev.iobase+RTL8139_CR) & CR_BUFE) == 0)
-    rtl8139_rx();
+    rtl8139_rx_one();
   pic_sendeoi();
 }
+
+
+void rtl8139_open(struct netdev *dev) {
+  return;
+}
+
+void rtl8139_close(struct netdev *dev) {
+  return;
+}
+
+uint32_t rtl8139_tx(struct netdev *dev, uint8_t *buf, uint32_t size) {
+  
+}
+
+uint32_t rtl8139_rx(struct netdev *dev, uint8_t *buf, uint32_t size) {
+
+}
+
+

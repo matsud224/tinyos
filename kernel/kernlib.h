@@ -6,6 +6,9 @@
 #include "common.h"
 #include "list.h"
 
+#define MAX(a,b) ((a)>(b)?(a):(b))
+#define MIN(a,b) ((a)<(b)?(a):(b))
+
 int abs(int n);
 char *strncpy(char *dest, const char *src, size_t n);
 size_t strnlen(const char *s, size_t n);

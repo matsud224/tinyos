@@ -4,7 +4,9 @@ CFLAGS		= -std=gnu99 -O2 -Wall -Wextra -g
 OBJCOPY		= i686-elf-objcopy
 #QEMU			= qemu-system-i386
 QEMU			= ~/qemu-2.10.0/i386-softmmu/qemu-system-i386 
-QEMUFLAGS			= -m 512 -hda disk/fat32disk -hdb disk/sample -boot a -serial stdio -net nic,vlan=0,model=rtl8139 -net tap,vlan=0,ifname=tap0
+SUDO			= sudo
+QEMUFLAGS			= -m 512 -hda disk/fat32disk -hdb disk/sample -boot a -serial stdio
+QEMUNETFLAGS	= -net nic,vlan=0,model=rtl8139 -net tap,vlan=0,ifname=tap0
 
 RM						= rm -f
 
@@ -50,4 +52,9 @@ clean:
 .PHONY: run
 run: $(BINDIR)/kernel
 	$(QEMU) -fda $^ -s $(QEMUFLAGS) 
+
+.PHONY: run-with-network
+run-with-network: $(BINDIR)/kernel
+	$(SUDO) $(QEMU) -fda $^ -s $(QEMUFLAGS) $(QEMUNETFLAGS)
+
 

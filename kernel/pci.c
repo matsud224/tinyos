@@ -45,29 +45,29 @@ static void _pci_config_write32(u8 bus, u8 dev, u8 func, u8 offset, u32 data) {
 }
 
 void pci_config_write32(struct pci_dev *pcidev, u8 offset, u32 data) {
-  return _pci_config_write32(pcidev->bus, pcidev->dev, pcidev->func, offset, data);
+  _pci_config_write32(pcidev->bus, pcidev->dev, pcidev->func, offset, data);
 }
 
-static u16 _pci_config_write16(u8 bus, u8 dev, u8 func, u8 offset, u16 data) {
+static void _pci_config_write16(u8 bus, u8 dev, u8 func, u8 offset, u16 data) {
   u32 result = _pci_config_read32(bus, dev, func, offset);
   result &= (~0xffff << ((offset&2)*8));
   result &= (data << ((offset&2)*8));
   _pci_config_write32(bus, dev, func, offset, result);
 }
 
-u16 pci_config_write16(struct pci_dev *pcidev, u8 offset, u16 data) {
-  return _pci_config_write16(pcidev->bus, pcidev->dev, pcidev->func, offset, data);
+void pci_config_write16(struct pci_dev *pcidev, u8 offset, u16 data) {
+  _pci_config_write16(pcidev->bus, pcidev->dev, pcidev->func, offset, data);
 }
 
-static u8 _pci_config_write8(u8 bus, u8 dev, u8 func, u8 offset, u8 data) {
+static void _pci_config_write8(u8 bus, u8 dev, u8 func, u8 offset, u8 data) {
   u32 result = _pci_config_read32(bus, dev, func, offset);
   result &= (~0xff << ((offset&3)*8));
   result &= (data << ((offset&3)*8));
   _pci_config_write32(bus, dev, func, offset, result);
 }
 
-u8 pci_config_write8(struct pci_dev *pcidev, u8 offset, u8 data) {
-  return _pci_config_write8(pcidev->bus, pcidev->dev, pcidev->func, offset, data);
+void pci_config_write8(struct pci_dev *pcidev, u8 offset, u8 data) {
+  _pci_config_write8(pcidev->bus, pcidev->dev, pcidev->func, offset, data);
 }
 
 struct pci_dev *pci_search_device(u16 vendorid, u16 deviceid) {

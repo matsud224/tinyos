@@ -61,8 +61,8 @@ u32 pci_config_read32(struct pci_dev *pcidev, u8 offset);
 u16 pci_config_read16(struct pci_dev *pcidev, u8 offset);
 u8 pci_config_read8(struct pci_dev *pcidev, u8 offset);
 void pci_config_write32(struct pci_dev *pcidev, u8 offset, u32 data);
-u16 pci_config_write16(struct pci_dev *pcidev, u8 offset, u16 data);
-u8 pci_config_write8(struct pci_dev *pcidev, u8 offset, u8 data);
+void pci_config_write16(struct pci_dev *pcidev, u8 offset, u16 data);
+void pci_config_write8(struct pci_dev *pcidev, u8 offset, u8 data);
 struct pci_dev *pci_search_device(u16 vendorid, u16 deviceid);
 void pci_init(void);
  

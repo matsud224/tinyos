@@ -134,11 +134,11 @@ void com2_isr() {
 }
 
 
-static void serial_open(struct chardev *dev) {
+static void serial_open(struct chardev *dev UNUSED) {
   return;
 }
 
-static void serial_close(struct chardev *dev) {
+static void serial_close(struct chardev *dev UNUSED) {
   return;
 }
 

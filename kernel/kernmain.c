@@ -17,6 +17,9 @@
 #include "gdt.h"
 #include "task.h"
 #include "fat32.h"
+#include "serial.h"
+#include "chardev.h"
+#include "rtl8139.h"
 
 #define HALT while(1)
 

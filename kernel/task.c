@@ -1,15 +1,12 @@
 #include "task.h"
 #include "pit.h"
 #include "page.h"
-#include "malloc.h"
+#include "pagetbl.h"
 #include "gdt.h"
-#include "params.h"
 #include "kernasm.h"
 #include "vmem.h"
 #include "kernlib.h"
 #include "chardev.h"
-#include <stdint.h>
-#include <stddef.h>
 
 static struct tss tss;
 
@@ -52,7 +49,6 @@ void task_b() {
   u8 data;
   while(1) {
     if(chardev_read(0, &data, 1) == 1) {
-      rtl8139_tx();
       chardev_write(0, &data, 1);
     }
   }

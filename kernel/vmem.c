@@ -16,7 +16,7 @@ struct inode_mapper {
   struct mapper mapper;
 };
 
-u32 anon_mapper_request(struct mapper *m, u32 offset) {
+u32 anon_mapper_request(struct mapper *m UNUSED, u32 offset UNUSED) {
   return (u32)page_alloc();
 }
 
@@ -67,7 +67,7 @@ struct vm_map *vm_map_new() {
   return m;
 }
 
-int vm_add_area(struct vm_map *map, u32 start, size_t size, struct mapper *mapper, u32 flags) {
+int vm_add_area(struct vm_map *map, u32 start, size_t size, struct mapper *mapper, u32 flags UNUSED) {
   struct vm_area *a;
 
   start = start & ~(PAGESIZE-1);

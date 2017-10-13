@@ -75,7 +75,7 @@ int pktbuf_write_fragment(struct pktbuf_head *head, u8 *buf, u32 size) {
   return 0;
 }
 
-void pktbuf_add_fragment(struct pktbuf_head *head, u8 *buf, u32 size, void (*freefunc)(u8 *)) {
+void pktbuf_add_fragment(struct pktbuf_head *head, u8 *buf UNUSED, u32 size, void (*freefunc)(u8 *)) {
   struct pktbuf_fragment *frag = malloc(sizeof(struct pktbuf_fragment));
   frag->next = NULL;
   frag->parent = head;

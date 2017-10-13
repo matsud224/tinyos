@@ -277,20 +277,20 @@ void rtl8139_isr() {
 }
 
 
-void rtl8139_open(struct netdev *dev) {
+void rtl8139_open(struct netdev *dev UNUSED) {
   return;
 }
 
-void rtl8139_close(struct netdev *dev) {
+void rtl8139_close(struct netdev *dev UNUSED) {
   return;
 }
 
-int rtl8139_tx(struct netdev *dev, struct pktbuf_head *pkt) {
+int rtl8139_tx(struct netdev *dev UNUSED, struct pktbuf_head *pkt) {
   ndqueue_enqueue(rtldev.txqueue, pkt);
   rtl8139_tx_all();
 }
 
-struct pktbuf_head *rtl8139_rx(struct netdev *dev) {
+struct pktbuf_head *rtl8139_rx(struct netdev *dev UNUSED) {
   rtl8139_rx_all();
   return ndqueue_dequeue(rtldev.rxqueue);
 }

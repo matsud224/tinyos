@@ -2,6 +2,7 @@
 #include "elf.h"
 #include "task.h"
 #include "vmem.h"
+#include "fs.h"
 
 int elf32_is_valid_exec(struct elf32_hdr *hdr) {
   if(strncmp(hdr->e_ident, ELFMAG, 4) != 0)

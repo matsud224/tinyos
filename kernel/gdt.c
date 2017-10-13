@@ -1,9 +1,7 @@
 #include "gdt.h"
-#include "params.h"
+#include "task.h"
 #include "kernasm.h"
-#include "common.h"
-#include <stdint.h>
-#include <stddef.h>
+#include "kernlib.h"
 
 #define DESC_SEGMENT 0x10
 #define DESC_DATASEG 0x0

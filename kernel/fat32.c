@@ -1,12 +1,7 @@
 #include "fat32.h"
 #include "kernlib.h"
 #include "fs.h"
-#include "malloc.h"
 #include "blkdev.h"
-#include "common.h"
-#include "vga.h"
-#include <stdint.h>
-#include <stddef.h>
 
 #define FAT32_BOOT 0
 #define FAT32_INODECACHE_SIZE 512

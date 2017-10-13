@@ -1,5 +1,5 @@
 #pragma once
-#include <stdint.h>
+#include "types.h"
 
 void divzero(void);
 void gengpe(void);

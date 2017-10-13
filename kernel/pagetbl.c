@@ -39,7 +39,7 @@ void pagetbl_init() {
   //setup kernel space
   kernspace_pdt = get_zeropage();
   //kernel space straight mapping(896MB)
-  int st_start_index = KERNSPACE_ADDR / 0x400000;
+  int st_start_index = KERN_VMEM_ADDR / 0x400000;
   int st_end_index = st_start_index + (KERN_STRAIGHT_MAP_SIZE/0x400000);
   u32 addr = 0x0; 
   for(int i = st_start_index; i < st_end_index;
@@ -49,7 +49,7 @@ void pagetbl_init() {
   //kernel space virtual area
   for(int i = st_end_index; i < 1024; i++) {
     u32 *pt = get_zeropage();
-    kernspace_pdt[i] = ((u32)pt-KERNSPACE_ADDR) | PDE_PRESENT | PDE_RW;
+    kernspace_pdt[i] = KERN_VMEM_TO_PHYS((u32)pt) | PDE_PRESENT | PDE_RW;
   }
 
   flushtlb(kernspace_pdt);
@@ -59,9 +59,9 @@ void pagetbl_add_mapping(u32 *pdt, u32 vaddr, u32 paddr) {
   int pdtindex = vaddr>>22;
   int ptindex = (vaddr>>12) & 0x3ff;
   if((pdt[pdtindex] & PDE_PRESENT) == 0) {
-    pdt[pdtindex] = ((u32)get_zeropage()-KERNSPACE_ADDR) | PDE_PRESENT | PDE_RW;
+    pdt[pdtindex] = KERN_VMEM_TO_PHYS((u32)get_zeropage()) | PDE_PRESENT | PDE_RW;
   }
 
-  u32 *pt = (u32 *)((pdt[pdtindex] & ~0xfff)+KERNSPACE_ADDR);
-  pt[ptindex] = ((paddr-KERNSPACE_ADDR) & ~0xfff) | PTE_PRESENT | PTE_RW;
+  u32 *pt = (u32 *)(PHYS_TO_KERN_VMEM(pdt[pdtindex] & ~0xfff));
+  pt[ptindex] = (KERN_VMEM_TO_PHYS(paddr) & ~0xfff) | PTE_PRESENT | PTE_RW;
 }

@@ -1,7 +1,5 @@
 #pragma once
-
-#include <stddef.h>
-#include <stdint.h>
+#include "types.h"
 
 #define VRAM_COLOR 0xb8000 
 #define VGA_HEIGHT 25 

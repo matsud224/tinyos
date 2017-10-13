@@ -62,7 +62,7 @@ static void bufallocator_free(void *addr) {
   c->freelist = addr;
 }
 
-struct blkdev_buf *blkdev_getbuf(u16 devno, u64 blockno) {
+struct blkdev_buf *blkdev_getbuf(devno_t devno, blkno_t blockno) {
   struct blkdev *dev = blkdev_tbl[devno];
   if(dev == NULL)
     return NULL;

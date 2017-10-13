@@ -1,12 +1,7 @@
 #include "v6fs.h"
-#include "v6fs.h"
+#include "kernlib.h"
 #include "fs.h"
-#include "malloc.h"
 #include "blkdev.h"
-#include "common.h"
-#include "vga.h"
-#include <stdint.h>
-#include <stddef.h>
 
 #define V6FS_BOOT 0
 #define V6FS_SUPERBLK 1

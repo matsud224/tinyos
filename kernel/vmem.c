@@ -1,11 +1,7 @@
+#include "kernlib.h"
 #include "vmem.h"
-#include "common.h"
-#include "params.h"
 #include "page.h"
-#include "malloc.h"
 #include "fs.h"
-#include <stdint.h>
-#include <stddef.h>
 
 #define VM_AREA_HAVE_SUBMAP 0x1
 

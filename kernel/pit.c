@@ -31,6 +31,6 @@ void pit_init() {
         PIT_CNTMODE_BIN | PIT_OPMODE_RATE | PIT_LOAD16 | PIT_CNT0);
   out8(PIT_CH0_DATA, CNT_100HZ >> 8);
   out8(PIT_CH0_DATA, CNT_100HZ & 0xff);
-  idt_register(IRQ_TO_INTVEC(PIT_INT_IRQ), IDT_INTGATE, pit_inthandler);
+  idt_register(IRQ_TO_INTVEC(PIT_IRQ), IDT_INTGATE, pit_inthandler);
   pic_clearmask(PIT_IRQ);
 }

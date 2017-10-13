@@ -141,6 +141,10 @@ enum flags {
   NIEN 	= 0x2,
 };
 
+void ide1_isr(void);
+void ide2_isr(void);
+void ide1_inthandler(void);
+void ide2_inthandler(void);
 
 struct {
   u16 base;
@@ -190,11 +194,6 @@ struct request {
 };
 
 static u8 ide_buf[2048];
-
-void ide1_isr(void);
-void ide2_isr(void);
-void ide1_inthandler(void);
-void ide2_inthandler(void);
 
 static void ide_out8(u8 chan, u16 reg, u8 data) {
   if(reg > 0x07 && reg < 0x0c) {

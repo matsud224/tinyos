@@ -1,5 +1,4 @@
 #include "list.h"
-#include "common.h"
 #include <stddef.h>
 
 void list_init(struct list_head *hdr) {

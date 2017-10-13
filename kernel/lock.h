@@ -1,6 +1,5 @@
 #pragma once
-#include <stdint.h>
-#include <stddef.h>
+#include "types.h"
 
 typedef u32 mutex;
 

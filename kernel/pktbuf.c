@@ -47,7 +47,7 @@ int pktbuf_reserve_header(struct pktbuf_head *head, u32 size) {
   return 0;
 }
 
-u8 *pktbuf_add_header(u32 size) {
+u8 *pktbuf_add_header(struct pktbuf_head *head, u32 size) {
   if(head->head + size > head->data) {
     return NULL;
   }
@@ -57,10 +57,10 @@ u8 *pktbuf_add_header(u32 size) {
   return head->data;
 }
 
-void pktbuf_remove_header(u32 size) {
+void pktbuf_remove_header(struct pktbuf_head *head, u32 size) {
   head->data += size;
   head->size -= size;
-  head->totalsize -= size;
+  head->total -= size;
 }
 
 int pktbuf_write_fragment(struct pktbuf_head *head, u8 *buf, u32 size) {

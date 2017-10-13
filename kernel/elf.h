@@ -1,5 +1,6 @@
 #pragma once
 #include "kernlib.h"
+#include "fs.h"
 
 #define EI_NIDENT 16
 #define	ELFMAG		"\177ELF"

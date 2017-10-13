@@ -15,7 +15,7 @@ void vga_init() {
 	vga.row = 0;
 	vga.column = 0;
 	vga.color = VGAENTRY_COLOR(VGA_COLOR_WHITE, VGA_COLOR_BLUE);
-	vga.buffer = (u16*)(KERNSPACE_ADDR + VRAM_COLOR); 
+	vga.buffer = (u16*)PHYS_TO_KERN_VMEM(VRAM_COLOR); 
 	for (size_t y = 0; y < VGA_HEIGHT; y++) {
 		for (size_t x = 0; x < VGA_WIDTH; x++) {
 			vga.buffer[y*VGA_WIDTH+x] = VGAENTRY(' ', vga.color);

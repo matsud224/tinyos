@@ -1,4 +1,5 @@
 #include "rtl8139.h"
+#include "netdev.h"
 #include "idt.h"
 #include "pic.h"
 #include "kernlib.h"
@@ -25,7 +26,7 @@ enum regs {
   RCR				= 0x44,
   TCTR			= 0x48,
   MPC				= 0x4c,
-  9346CR		= 0x50,
+  CR9346		= 0x50,
   CONFIG0		= 0x51,
   CONFIG1		= 0x52,
 };
@@ -115,6 +116,10 @@ static const u16 TX_TSAD[4] = {
   TSAD, TSAD+4, TSAD+8, TSAD+12
 };
 
+void rtl8139_open(struct netdev *dev);
+void rtl8139_close(struct netdev *dev);
+int rtl8139_tx(struct netdev *dev, struct pktbuf_head *pkt);
+struct pktbuf_head *rtl8139_rx(struct netdev *dev);
 static const struct netdev_ops rtl8139_ops = {
   .open = rtl8139_open,
   .close = rtl8139_close,
@@ -162,7 +167,7 @@ void rtl8139_init(struct pci_dev *thisdev) {
   out8(RTLREG(CR), CR_RST);
   while((in8(RTLREG(CR))&CR_RST) != 0);
   //set rx buffer address
-  out32(RTLREG(RBSTART), rtldev.rxbuf-KERNSPACE_ADDR);
+  out32(RTLREG(RBSTART), KERN_VMEM_TO_PHYS(rtldev.rxbuf));
   //set IMR
   out16(RTLREG(IMR), 0x55);
   //receive configuration
@@ -213,7 +218,7 @@ struct ether_hdr{
 int rtl8139_tx_one(void *buf, size_t size) {
   while((in32(RTLREG(TX_TSD[rtldev.cur_txreg])) & TSD_OWN) == 0)
     return -1; 
-  out32(RTLREG(TX_TSAD[rtldev.cur_txreg]), buf-KERNSPACE_ADDR);
+  out32(RTLREG(TX_TSAD[rtldev.cur_txreg]), KERN_VMEM_TO_PHYS(buf));
   out32(RTLREG(TX_TSD[rtldev.cur_txreg]),size); 
   rtldev.cur_txreg = (rtldev.cur_txreg+1)%4;
   printf("sent size=%d\n", sizeof(epkt));
@@ -239,9 +244,9 @@ int rtl8139_rx_one() {
   }
 
 	if(!NDQUEUE_IS_FULL(rtldev.rxqueue)) {
-    u8 *pktbuf = malloc(rx_size-4);
-    memcpy(pktbuf, rtldev.rxbuf+offset+4, rx_size-4);
-    ndqueue_enqueue(pktbuf);
+    u8 *buf = malloc(rx_size-4);
+    memcpy(buf, rtldev.rxbuf+offset+4, rx_size-4);
+    ndqueue_enqueue(rtldev.rxqueue, pktbuf_create(buf, rx_size-4, free));
 	}
   
 out:
@@ -280,12 +285,12 @@ void rtl8139_close(struct netdev *dev) {
   return;
 }
 
-int rtl8139_tx(struct netdev *dev, struct pktbuf *pkt) {
+int rtl8139_tx(struct netdev *dev, struct pktbuf_head *pkt) {
   ndqueue_enqueue(rtldev.txqueue, pkt);
   rtl8139_tx_all();
 }
 
-struct pktbuf *rtl8139_rx(struct netdev *dev) {
+struct pktbuf_head *rtl8139_rx(struct netdev *dev) {
   rtl8139_rx_all();
   return ndqueue_dequeue(rtldev.rxqueue);
 }

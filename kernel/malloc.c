@@ -2,9 +2,7 @@
 #include <stddef.h>
 #include "malloc.h"
 #include "page.h"
-#include "common.h"
 #include "params.h"
-#include "vga.h"
 
 #define SIZE_BASE 8 
 #define MAX_BIN 512 

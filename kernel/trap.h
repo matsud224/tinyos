@@ -1,5 +1,5 @@
 #pragma once
-#include <stdint.h>
+#include "types.h"
 
 void gpe_inthandler(void);
 void gpe_isr(void);

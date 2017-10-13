@@ -1,6 +1,4 @@
-#include <stddef.h>
-#include <stdint.h>
-#include "common.h"
+#include "kernlib.h"
 #include "vga.h"
 #include "pci.h"
 #include "trap.h"
@@ -14,7 +12,6 @@
 #include "vmem.h"
 #include "blkdev.h"
 #include "ide.h"
-#include "params.h"
 #include "fs.h"
 #include "v6fs.h"
 #include "gdt.h"

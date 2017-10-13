@@ -15,8 +15,8 @@ void netdev_add(struct netdev *dev) {
   nnetdev++;
 }
 
-struct netdev_buf *ndqueue_create(u32 *mem, size_t count) {
-  struct netdev_buf *buf = malloc(sizeof(struct netdev_buf));
+struct netdev_queue *ndqueue_create(u8 *mem, size_t count) {
+  struct netdev_queue *buf = malloc(sizeof(struct netdev_queue));
   buf->count = count;
   buf->free = count;
   buf->head = 0;
@@ -25,18 +25,18 @@ struct netdev_buf *ndqueue_create(u32 *mem, size_t count) {
   return buf;
 }
 
-struct pktbuf *ndqueue_dequeue(struct netdev_queue *q) {
-  struct pktbuf *pkt = NULL;
-  if(buf->head != buf->tail) {
-    pkt = buf->addr[buf->tail++];
-    if(buf->tail == buf->count)
-      buf->tail = 0;
-    buf->free++;
+struct pktbuf_head *ndqueue_dequeue(struct netdev_queue *q) {
+  struct pktbuf_head *pkt = NULL;
+  if(q->head != q->tail) {
+    pkt = q->addr[q->tail++];
+    if(q->tail == q->count)
+      q->tail = 0;
+    q->free++;
   }
   return pkt;
 }
 
-int ndqueue_enqueue(struct netdev_queue *q, struct pktbuf *pkt) {
+int ndqueue_enqueue(struct netdev_queue *q, struct pktbuf_head *pkt) {
   if(q->free == 0)
     return 0;
   q->addr[q->head++] = pkt;
@@ -46,7 +46,7 @@ int ndqueue_enqueue(struct netdev_queue *q, struct pktbuf *pkt) {
   return 1;
 }
 
-int netdev_tx(devno_t devno, struct pktbuf *pkt) {
+int netdev_tx(devno_t devno, struct pktbuf_head *pkt) {
   struct netdev *dev = netdev_tbl[devno];
   while(1) {
     cli();
@@ -58,7 +58,7 @@ int netdev_tx(devno_t devno, struct pktbuf *pkt) {
   return 0;
 }
 
-int netdev_tx_nowait(devno_t devno, struct pktbuf *pkt) {
+int netdev_tx_nowait(devno_t devno, struct pktbuf_head *pkt) {
   struct netdev *dev = netdev_tbl[devno];
   cli();
   int res = dev->ops->tx(dev, pkt);
@@ -66,11 +66,12 @@ int netdev_tx_nowait(devno_t devno, struct pktbuf *pkt) {
   return res;
 }
 
-struct pktbuf *netdev_rx(devno_t devno) {
+struct pktbuf_head *netdev_rx(devno_t devno) {
   struct netdev *dev = netdev_tbl[devno];
+  struct pktbuf_head *pkt = NULL;
   while(1) {
     cli();
-    struct pktbuf *pkt = dev->ops->rx(dev);
+    pkt = dev->ops->rx(dev);
     if(pkt == NULL)
       task_sleep(dev);
     sti();
@@ -78,10 +79,10 @@ struct pktbuf *netdev_rx(devno_t devno) {
   return pkt;
 }
 
-struct pktbuf *netdev_rx_nowait(devno_t devno) {
+struct pktbuf_head *netdev_rx_nowait(devno_t devno) {
   struct netdev *dev = netdev_tbl[devno];
   cli();
-  struct pktbuf *pkt = dev->ops->rx(dev);
+  struct pktbuf_head *pkt = dev->ops->rx(dev);
   sti();
   return pkt;
 }

@@ -12,16 +12,16 @@ static int fat32_inode_read(struct inode *inode, u8 *base, u32 offset, u32 count
 static struct inode *fat32_inode_opdent(struct inode *inode, const char *name, int op);
 
 
-struct fsinfo_ops fat32_fsinfo_ops = {
+static const struct fsinfo_ops fat32_fsinfo_ops = {
   .mount = fat32_mount
 };
 
-struct fsinfo fat32_info = {
+static const struct fsinfo fat32_info = {
   .name = "fat32",
   .ops = &fat32_fsinfo_ops
 };
 
-struct fs_ops fat32_fs_ops = {
+static const struct fs_ops fat32_fs_ops = {
   .getroot = fat32_getroot
 };
 
@@ -115,7 +115,7 @@ struct fat32_fs {
   u32 datasectors;
 };
 
-struct inode_ops fat32_inode_ops = {
+static const struct inode_ops fat32_inode_ops = {
   .read = fat32_inode_read,
   .write = NULL,
   .resize = NULL,

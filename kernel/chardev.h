@@ -23,7 +23,7 @@ struct chardev_ops {
 
 struct chardev {
   devno_t devno;
-  struct chardev_ops *ops;
+  const struct chardev_ops *ops;
 };
 
 extern struct chardev *chardev_tbl[MAX_CHARDEV];

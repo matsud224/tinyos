@@ -25,7 +25,7 @@ struct netdev_ops {
 
 struct netdev {
   u16 devno;
-  struct netdev_ops *ops;
+  const struct netdev_ops *ops;
 };
 
 extern struct netdev *netdev_tbl[MAX_NETDEV];

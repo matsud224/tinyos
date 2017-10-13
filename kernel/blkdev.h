@@ -29,7 +29,7 @@ struct blkdev_ops {
 
 struct blkdev {
   devno_t devno;
-  struct blkdev_ops *ops;
+  const struct blkdev_ops *ops;
   struct blkdev_buf *buf_list;
 };
 

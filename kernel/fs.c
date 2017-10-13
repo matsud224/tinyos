@@ -1,11 +1,8 @@
 #include "fs.h"
-#include "params.h"
+#include "kernlib.h"
 #include "blkdev.h"
-#include <stddef.h>
-#include <stdint.h>
 
-
-struct fsinfo *fsinfo_tbl[MAX_FSINFO];
+const struct fsinfo *fsinfo_tbl[MAX_FSINFO];
 static int fsinfotbl_used = 0;
 
 struct fs *mount_tbl[MAX_MOUNT];
@@ -14,7 +11,7 @@ static int mounttbl_used = 0;
 static struct inode *rootdir;
 
 
-void fsinfo_add(struct fsinfo *info) {
+void fsinfo_add(const struct fsinfo *info) {
   fsinfo_tbl[fsinfotbl_used++] = info;
 }
 

@@ -40,7 +40,7 @@ static void serial_close(struct chardev *dev);
 static u32 serial_read(struct chardev *dev, u8 *dest, u32 count);
 static u32 serial_write(struct chardev *dev, u8 *src, u32 count);
  
-static struct chardev_ops serial_chardev_ops = {
+static const struct chardev_ops serial_chardev_ops = {
   .open = serial_open,
   .close = serial_close,
   .read = serial_read,

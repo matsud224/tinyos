@@ -14,16 +14,16 @@ static struct inode *v6fs_inode_opdent(struct inode *inode, const char *name, in
 static struct inode *v6fs_getinode(struct fs *fs, u32 ino_no);
 
 
-struct fsinfo_ops v6fs_fsinfo_ops = {
+static const struct fsinfo_ops v6fs_fsinfo_ops = {
   .mount = v6fs_mount
 };
 
-struct fsinfo v6fs_info = {
+static const struct fsinfo v6fs_info = {
   .name = "v6fs",
   .ops = &v6fs_fsinfo_ops
 };
 
-struct fs_ops v6fs_fs_ops = {
+static const struct fs_ops v6fs_fs_ops = {
   .getroot = v6fs_getroot
 };
 
@@ -64,7 +64,7 @@ struct v6fs_phyinode {
   u16 mtime[2];
 };
 
-struct inode_ops v6fs_inode_ops = {
+static const struct inode_ops v6fs_inode_ops = {
   .read = v6fs_inode_read,
   .write = NULL,
   .resize = NULL,

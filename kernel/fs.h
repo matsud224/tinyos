@@ -3,7 +3,7 @@
 
 struct inode {
   struct fs *fs;
-  struct inode_ops *ops;
+  const struct inode_ops *ops;
   u32 inode_no;
   u32 mode;
   size_t size;
@@ -29,7 +29,7 @@ struct fs_ops {
 };
 
 struct fs {
-  struct fs_ops *ops;
+  const struct fs_ops *ops;
 };
 
 struct fsinfo_ops {
@@ -38,11 +38,11 @@ struct fsinfo_ops {
 
 struct fsinfo {
   char name[32];
-  struct fsinfo_ops *ops;
+  const struct fsinfo_ops *ops;
 };
 
 
-void fsinfo_add(struct fsinfo *info);
+void fsinfo_add(const struct fsinfo *info);
 int fs_mountroot(const char *name, void *source);
 struct inode *fs_nametoi(const char *path);
 int fs_read(struct inode *inode, u8 *base, u32 offset, size_t count);

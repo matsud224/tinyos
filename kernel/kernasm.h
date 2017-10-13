@@ -1,25 +1,24 @@
 #pragma once
-
 #include <stdint.h>
 
 void divzero(void);
 void gengpe(void);
-void out8(uint16_t port, uint8_t val);
-void out16(uint16_t port, uint16_t val);
-void out32(uint16_t port, uint32_t val);
-uint8_t in8(uint16_t port);
-uint16_t in16(uint16_t port);
-uint32_t in32(uint16_t port);
+void out8(u16 port, u8 val);
+void out16(u16 port, u16 val);
+void out32(u16 port, u32 val);
+u8 in8(u16 port);
+u16 in16(u16 port);
+u32 in32(u16 port);
 void lidt(void *p);
 void lgdt(void *p);
-void ltr(uint16_t sel);
+void ltr(u16 sel);
 void sti(void);
 void cli(void);
-uint32_t getcr2(void);
+u32 getcr2(void);
 void flushtlb(void *addr);
 void a20_enable(void);
 void saveesp(void);
 void task_yield(void);
 void cpu_halt(void);
-uint32_t xchg(uint32_t value, void *mem);
+u32 xchg(u32 value, void *mem);
 void jmpto_current(void);

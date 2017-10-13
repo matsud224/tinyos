@@ -5,14 +5,14 @@
 
 #define MIN(x,y) ((x)<(y)?(x):(y))
 
-char *macaddr2str(uint8_t ma[]){
+char *macaddr2str(u8 ma[]){
 	static char str[18];
 	sprintf(str, "%02x:%02x:%02x:%02x:%02x:%02x",
 		ma[0], ma[1], ma[2], ma[3], ma[4], ma[5]);
 	return str;
 }
 
-char *ipaddr2str(uint8_t ia[]){
+char *ipaddr2str(u8 ia[]){
 	static char str[16];
 	sprintf(str, "%d.%d.%d.%d",
 		ia[0], ia[1], ia[2], ia[3]);
@@ -20,33 +20,33 @@ char *ipaddr2str(uint8_t ia[]){
 }
 
 /*
-uint64_t macaddr2uint64(const uint8_t mac[]){
-	uint64_t val = 0;
+u64 macaddr2uint64(const u8 mac[]){
+	u64 val = 0;
 	for(int i=ETHER_ADDR_LEN-1, j=8; i>=0; i--, j*=2){
-		val |= ((uint64_t)mac[i]) << j;
+		val |= ((u64)mac[i]) << j;
 	}
 	return val;
 }
 
-uint32_t ipaddr2uint32(const uint8_t ip[]){
-	uint64_t val = 0;
+u32 ipaddr2uint32(const u8 ip[]){
+	u64 val = 0;
 	for(int i=IP_ADDR_LEN-1, j=8; i>=0; i--, j*=2){
-		val |= ((uint64_t)ip[i]) << j;
+		val |= ((u64)ip[i]) << j;
 	}
 	return val;
 }
 */
 
-uint16_t checksum(uint16_t *data, int len){
-	uint32_t sum = 0;
+u16 checksum(u16 *data, int len){
+	u32 sum = 0;
 	for(; len>1;len-=2){
 		sum+=*data++;
 		if(sum &0x80000000)
 			sum=(sum&0xffff)+(sum>>16);
 	}
 	if(len == 1){
-		uint16_t i=0;
-		*(uint8_t*)(&i)= *(uint8_t*)data;
+		u16 i=0;
+		*(u8*)(&i)= *(u8*)data;
 		sum+=i;
 	}
 	while(sum>>16)
@@ -55,15 +55,15 @@ uint16_t checksum(uint16_t *data, int len){
 	return ~sum;
 }
 
-uint16_t checksum2(uint16_t *data1, uint16_t *data2, int len1, int len2){
-	uint32_t sum = 0;
+u16 checksum2(u16 *data1, u16 *data2, int len1, int len2){
+	u32 sum = 0;
 	int len = len1 + len2;
-	uint16_t *data = data1;
+	u16 *data = data1;
 	int complen = 0;
 	for(; len>1;len-=2){
 		if(complen == len1-1){
 			//data1側がのこり1byte
-			sum+= ((uint8_t)*data) | ((*data2)<<8);
+			sum+= ((u8)*data) | ((*data2)<<8);
 			complen = len1+1;
 			data = &(data2[1]);
 		}else{
@@ -76,8 +76,8 @@ uint16_t checksum2(uint16_t *data1, uint16_t *data2, int len1, int len2){
 			data = data2;
 	}
 	if(len == 1){
-		uint16_t i=0;
-		*(uint8_t*)(&i)= *(uint8_t*)data;
+		u16 i=0;
+		*(u8*)(&i)= *(u8*)data;
 		sum+=i;
 	}
 	while(sum>>16)
@@ -87,17 +87,17 @@ uint16_t checksum2(uint16_t *data1, uint16_t *data2, int len1, int len2){
 }
 
 //もし途中に長さが奇数の部分があっても、次の領域にまたがって計算するため問題ない
-uint16_t checksum_hdrstack(hdrstack *hs){
-	uint32_t len = hdrstack_totallen(hs);
-	uint32_t sum = 0;
-	uint32_t thisstack_len = 0;
-	uint16_t *data = (uint16_t*)hs->buf;
+u16 checksum_hdrstack(hdrstack *hs){
+	u32 len = hdrstack_totallen(hs);
+	u32 sum = 0;
+	u32 thisstack_len = 0;
+	u16 *data = (u16*)hs->buf;
 	for(; len>1;len-=2){
 		if(thisstack_len == hs->size-1){
 			//のこり1byte
-			sum+= ((uint8_t)(*data)) | ((hs->next->buf[0])<<8);
+			sum+= ((u8)(*data)) | ((hs->next->buf[0])<<8);
 			hs = hs->next;
-			data = (uint16_t*)(&(hs->buf[1]));
+			data = (u16*)(&(hs->buf[1]));
 			thisstack_len = 1;
 		}else{
 			sum+=*data++;
@@ -106,15 +106,15 @@ uint16_t checksum_hdrstack(hdrstack *hs){
 
 		if(thisstack_len == hs->size){
 			hs = hs->next;
-			data = (uint16_t*)hs->buf;
+			data = (u16*)hs->buf;
 			thisstack_len = 0;
 		}
 		if(sum &0x80000000)
 			sum=(sum&0xffff)+(sum>>16);
 	}
 	if(len == 1){
-		uint16_t i=0;
-		*(uint8_t*)(&i)= *(uint8_t*)data;
+		u16 i=0;
+		*(u8*)(&i)= *(u8*)data;
 		sum+=i;
 	}
 	while(sum>>16)
@@ -123,18 +123,18 @@ uint16_t checksum_hdrstack(hdrstack *hs){
 	return ~sum;
 }
 
-void ipaddr_hostpart(uint8_t *dst, uint8_t *addr, uint8_t *mask){
+void ipaddr_hostpart(u8 *dst, u8 *addr, u8 *mask){
 	for(int i=0; i<IP_ADDR_LEN; i++)
 		dst[i] = addr[i] & ~mask[i];
 }
 
-void ipaddr_networkpart(uint8_t *dst, uint8_t *addr, uint8_t *mask){
+void ipaddr_networkpart(u8 *dst, u8 *addr, u8 *mask){
 	for(int i=0; i<IP_ADDR_LEN; i++)
 		dst[i] = addr[i] & mask[i];
 }
 
-uint32_t hdrstack_totallen(hdrstack *target){
-	uint32_t len=0;
+u32 hdrstack_totallen(hdrstack *target){
+	u32 len=0;
 	while(target!=NULL){
 		len+=target->size;
 		target=target->next;
@@ -142,8 +142,8 @@ uint32_t hdrstack_totallen(hdrstack *target){
 	return len;
 }
 
-void hdrstack_cpy(char *dst, hdrstack *src, uint32_t start, uint32_t len){
-	uint32_t remain = start+1;
+void hdrstack_cpy(char *dst, hdrstack *src, u32 start, u32 len){
+	u32 remain = start+1;
 	hdrstack *ptr = src;
 
 	while(remain > ptr->size){
@@ -152,8 +152,8 @@ void hdrstack_cpy(char *dst, hdrstack *src, uint32_t start, uint32_t len){
 	}
 	//開始位置が分かった(ptr->buf+(remain-1))
 
-	uint32_t remain_copy = len; //コピーの残りオクテット数
-	uint32_t offset = 0;
+	u32 remain_copy = len; //コピーの残りオクテット数
+	u32 offset = 0;
 	while(remain_copy > 0){
 		memcpy(dst+offset, ptr->buf+(remain-1), MIN(remain_copy, ptr->size-(remain-1)));
 		remain_copy -= MIN(remain_copy, ptr->size-(remain-1));

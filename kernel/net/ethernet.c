@@ -28,7 +28,7 @@ void etherrecv_task(intptr_t exinf) {
 		twai_sem(ETHERRECV_SEM, 10);
 		for(int i=0; i<16; i++){
 			wai_sem(ETHERIO_SEM);
-			uint32_t size = ethernet_receive();
+			u32 size = ethernet_receive();
 			if(size > sizeof(ether_hdr)){
 				char *buf = new char[size];
 				ethernet_read(buf, size);

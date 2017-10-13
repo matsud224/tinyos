@@ -28,18 +28,18 @@ int strncmp(const char *s1, const char *s2, size_t n) {
 
 void *memcpy(void *dest, const void *src, size_t n) {
   for(size_t i=0; i<n; i++)
-    *(uint8_t *)dest++ = *(uint8_t *)src++;
+    *(u8 *)dest++ = *(u8 *)src++;
   return dest;
 }
 
 void bzero(void *s, size_t n) {
-  uint8_t *ptr = s;
+  u8 *ptr = s;
   while(n--)
     *ptr++ = 0;
 }
 
 void *memset(void *s, int c, size_t n) {
   for(size_t i=0; i<n; i++)
-    *(uint8_t *)s++ = (uint8_t)c;
+    *(u8 *)s++ = (u8)c;
   return s;
 }

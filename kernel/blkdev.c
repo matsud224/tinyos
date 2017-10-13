@@ -6,7 +6,7 @@
 #include <stddef.h>
 
 struct blkdev *blkdev_tbl[MAX_BLKDEV];
-static uint16_t nblkdev;
+static u16 nblkdev;
 
 struct chunk {
   struct chunk *next_chunk;
@@ -39,7 +39,7 @@ static void *bufallocator_alloc() {
     chunklist = c;
     c->freelist = NULL;
     c->nobjs = c->nfree = PAGESIZE/BLOCKSIZE;
-    uint8_t *obj = page_alloc();
+    u8 *obj = page_alloc();
     c->addr = obj;
     for(int i=0; i<c->nobjs; i++) {
       *(void **)obj = c->freelist;
@@ -53,7 +53,7 @@ static void *bufallocator_alloc() {
 }
 
 static void bufallocator_free(void *addr) {
-  uint32_t chunk_addr = (uint32_t)addr & ~(PAGESIZE-1);
+  u32 chunk_addr = (u32)addr & ~(PAGESIZE-1);
   struct chunk *c = chunklist;
   while(c!=NULL && c->addr == (void *)chunk_addr) c = c->next_chunk;
   if(c == NULL)
@@ -62,7 +62,7 @@ static void bufallocator_free(void *addr) {
   c->freelist = addr;
 }
 
-struct blkdev_buf *blkdev_getbuf(uint16_t devno, uint64_t blockno) {
+struct blkdev_buf *blkdev_getbuf(u16 devno, u64 blockno) {
   struct blkdev *dev = blkdev_tbl[devno];
   if(dev == NULL)
     return NULL;

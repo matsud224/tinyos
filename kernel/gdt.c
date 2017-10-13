@@ -32,12 +32,12 @@
 #define GDT_TSS				5
 
 static struct descriptor {
-  uint16_t limit;
-  uint16_t baselo;
-  uint8_t basemid;
-  uint8_t flag0;
-  uint8_t flag1;
-  uint8_t basehi;
+  u16 limit;
+  u16 baselo;
+  u8 basemid;
+  u8 flag0;
+  u8 flag1;
+  u8 basehi;
 } PACKED gdt[6] = {
   //null
   {0x0000, 0x0000, 0x00, 0x00, 0x00, 0x00},
@@ -54,7 +54,7 @@ static struct descriptor {
 };
 
 static struct gdtr {
-  uint16_t limit;
+  u16 limit;
   struct descriptor *base;
 } PACKED gdtr; 
 
@@ -65,9 +65,9 @@ void gdt_init() {
 }
 
 void gdt_settssbase(void *base) {
-  gdt[GDT_TSS].baselo = (uint32_t)base & 0xffff;
-  gdt[GDT_TSS].basemid = ((uint32_t)base>>16) & 0xff;
-  gdt[GDT_TSS].basehi = (uint32_t)base >> 24;
+  gdt[GDT_TSS].baselo = (u32)base & 0xffff;
+  gdt[GDT_TSS].basemid = ((u32)base>>16) & 0xff;
+  gdt[GDT_TSS].basehi = (u32)base >> 24;
   gdt[GDT_TSS].flag0 |= DESC_PRESENT;
 }
 

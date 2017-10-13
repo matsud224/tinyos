@@ -8,14 +8,14 @@
 #define ETHER_ADDR_LEN 6
 
 struct ether_hdr{
-	uint8_t ether_dhost[ETHER_ADDR_LEN];
-	uint8_t ether_shost[ETHER_ADDR_LEN];
-	uint16_t ether_type;
+	u8 ether_dhost[ETHER_ADDR_LEN];
+	u8 ether_shost[ETHER_ADDR_LEN];
+	u16 ether_type;
 };
 
 //受信したものはEthernetフレームをそのままたらい回しにする
 struct ether_flame{
-	uint32_t size;
+	u32 size;
 	char *buf;
 
 	~ether_flame(){
@@ -30,7 +30,7 @@ struct ether_flame{
 //hdrstackという名前だが、ペイロードも統一して扱う
 struct hdrstack{
 	hdrstack *next;
-	uint32_t size;
+	u32 size;
 	char *buf;
 	bool delete_needed; //デストラクタでbufをdeleteする責任を負うか
 
@@ -57,15 +57,15 @@ struct ip_hdr{
 #ifdef LITTLE_ENDIAN
 	unsigned ip_hl:4, ip_v:4;
 #endif // LITTLE_ENDIAN
-	uint8_t ip_tos;
-	uint16_t ip_len;
-	uint16_t ip_id;
-	uint16_t ip_off;
-	uint8_t ip_ttl;
-	uint8_t ip_p;
-	uint16_t ip_sum;
-	uint8_t ip_src[IP_ADDR_LEN];
-	uint8_t ip_dst[IP_ADDR_LEN];
+	u8 ip_tos;
+	u16 ip_len;
+	u16 ip_id;
+	u16 ip_off;
+	u8 ip_ttl;
+	u8 ip_p;
+	u16 ip_sum;
+	u8 ip_src[IP_ADDR_LEN];
+	u8 ip_dst[IP_ADDR_LEN];
 };
 
 #define IP_RF 0x8000
@@ -79,11 +79,11 @@ struct ip_hdr{
 
 //ARP
 struct arp_hdr{
-	uint16_t ar_hrd;
-	uint16_t ar_pro;
-	uint8_t	ar_hln;
-	uint8_t ar_pln;
-	uint16_t ar_op;
+	u16 ar_hrd;
+	u16 ar_pro;
+	u8	ar_hln;
+	u8 ar_pln;
+	u16 ar_op;
 };
 
 #define arp_hrd ea_hdr.ar_hrd
@@ -94,10 +94,10 @@ struct arp_hdr{
 
 struct ether_arp{
 	arp_hdr ea_hdr;
-	uint8_t arp_sha[ETHER_ADDR_LEN];
-	uint8_t arp_spa[IP_ADDR_LEN];
-	uint8_t arp_tha[ETHER_ADDR_LEN];
-	uint8_t arp_tpa[IP_ADDR_LEN];
+	u8 arp_sha[ETHER_ADDR_LEN];
+	u8 arp_spa[IP_ADDR_LEN];
+	u8 arp_tha[ETHER_ADDR_LEN];
+	u8 arp_tpa[IP_ADDR_LEN];
 };
 
 #define ARPHRD_ETHER 1
@@ -109,26 +109,26 @@ struct ether_arp{
 
 //ICMP
 struct icmp{
-	uint8_t icmp_type;
-	uint8_t icmp_code;
-	uint16_t icmp_cksum;
+	u8 icmp_type;
+	u8 icmp_code;
+	u16 icmp_cksum;
 	union{
-		uint8_t ih_pptr;
-		uint8_t ih_gwaddr[IP_ADDR_LEN];
+		u8 ih_pptr;
+		u8 ih_gwaddr[IP_ADDR_LEN];
 		struct ih_idseq{
 			int16_t icd_id;
 			int16_t icd_seq;
 		} ih_idseq;
-		uint32_t ih_void;
+		u32 ih_void;
 		struct ih_pmtu{
-			uint16_t ipm_void;
-			uint16_t ipm_nextmtu;
+			u16 ipm_void;
+			u16 ipm_nextmtu;
 		} ih_pmtu;
 
 		struct ih_rtradv{
-			uint8_t irt_num_addrs;
-			uint8_t irt_wpa;
-			uint16_t irt_lifetime;
+			u8 irt_num_addrs;
+			u8 irt_wpa;
+			u16 irt_lifetime;
 		} ih_rtradv;
 	} icmp_hun;
 
@@ -145,19 +145,19 @@ struct icmp{
 
 	union{
 		struct id_ts{
-			uint32_t its_otime;
-			uint32_t its_rtime;
-			uint32_t its_ttime;
+			u32 its_otime;
+			u32 its_rtime;
+			u32 its_ttime;
 		} id_ts;
 		struct id_ip{
 			struct ip_hdr idi_ip;
 		} id_ip;
 		struct icmp_ra_addr{
-			uint32_t ira_addr;
-			uint32_t ira_preference;
+			u32 ira_addr;
+			u32 ira_preference;
 		} ip_radv;;
-		uint32_t id_mask;
-		uint8_t id_data[1];
+		u32 id_mask;
+		u8 id_data[1];
 	} icmp_dun;
 
 #define icmp_otime icmp_dun.id_ts.its_otime
@@ -194,45 +194,45 @@ struct icmp{
 
 //UDP
 struct udp_hdr{
-	uint16_t uh_sport;
-	uint16_t uh_dport;
-	uint16_t uh_ulen;
-	uint16_t sum;
+	u16 uh_sport;
+	u16 uh_dport;
+	u16 uh_ulen;
+	u16 sum;
 };
 
 struct udp_pseudo_hdr{
-	uint8_t up_src[IP_ADDR_LEN];
-	uint8_t up_dst[IP_ADDR_LEN];
-	uint8_t up_void;
-	uint8_t up_type;
-	uint16_t up_len;
+	u8 up_src[IP_ADDR_LEN];
+	u8 up_dst[IP_ADDR_LEN];
+	u8 up_void;
+	u8 up_type;
+	u16 up_len;
 };
 
 struct tcp_pseudo_hdr{
-	uint8_t tp_src[IP_ADDR_LEN];
-	uint8_t tp_dst[IP_ADDR_LEN];
-	uint8_t tp_void;
-	uint8_t tp_type;
-	uint16_t tp_len;
+	u8 tp_src[IP_ADDR_LEN];
+	u8 tp_dst[IP_ADDR_LEN];
+	u8 tp_void;
+	u8 tp_type;
+	u16 tp_len;
 };
 
 
 //TCP
 struct tcp_hdr{
-	uint16_t th_sport;
-	uint16_t th_dport;
-	uint32_t th_seq;
-	uint32_t th_ack;
+	u16 th_sport;
+	u16 th_dport;
+	u32 th_seq;
+	u32 th_ack;
 #ifdef BIG_ENDIAN
 	unsigned th_off:4,th_x2:4;
 #endif
 #ifdef LITTLE_ENDIAN
 	unsigned th_x2:4,th_off:4;
 #endif // BYTE_ORDER
-	uint8_t th_flags;
-	uint16_t th_win;
-	uint16_t th_sum;
-	uint16_t th_urp;
+	u8 th_flags;
+	u16 th_win;
+	u16 th_sum;
+	u16 th_urp;
 };
 
 #define TH_FIN 0x01

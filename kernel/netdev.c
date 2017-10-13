@@ -1,11 +1,7 @@
-#include "page.h"
-#include "malloc.h"
 #include "netdev.h"
-#include <stdint.h>
-#include <stddef.h>
 
 struct netdev *netdev_tbl[MAX_NETDEV];
-static uint16_t nnetdev;
+static u16 nnetdev;
 
 void netdev_init() {
   for(int i=0; i<MAX_BLKDEV; i++)
@@ -19,65 +15,74 @@ void netdev_add(struct netdev *dev) {
   nnetdev++;
 }
 
-struct netdev_buf *ndqueue_create(uint32_t *mem, uint32_t size) {
+struct netdev_buf *ndqueue_create(u32 *mem, size_t count) {
   struct netdev_buf *buf = malloc(sizeof(struct netdev_buf));
-  buf->size = size/4;
-  buf->free = size/4;
+  buf->count = count;
+  buf->free = count;
   buf->head = 0;
   buf->tail = 0;
   buf->addr = mem;
   return buf;
 }
 
-void *ndqueue_pop(struct netdev_queue *q) {
-  void *data = NULL;
+struct pktbuf *ndqueue_dequeue(struct netdev_queue *q) {
+  struct pktbuf *pkt = NULL;
   if(buf->head != buf->tail) {
-    data = buf->addr[buf->tail++];
-    if(buf->tail == buf->size)
+    pkt = buf->addr[buf->tail++];
+    if(buf->tail == buf->count)
       buf->tail = 0;
     buf->free++;
   }
-  return data;
+  return pkt;
 }
 
-int ndqueue_push(struct netdev_queue *q, void *data) {
+int ndqueue_enqueue(struct netdev_queue *q, struct pktbuf *pkt) {
   if(q->free == 0)
     return 0;
-  q->addr[q->head++] = data;
+  q->addr[q->head++] = pkt;
   q->free--;
-  if(q->head == q->size)
+  if(q->head == q->count)
     q->head = 0;
   return 1;
 }
 
-
-uint32_t netdev_rx(uint16_t devno, uint8_t *buf, uint32_t size) {
+int netdev_tx(devno_t devno, struct pktbuf *pkt) {
   struct netdev *dev = netdev_tbl[devno];
-  uint32_t remain = count;
-  while(remain > 0) {
+  while(1) {
     cli();
-    uint32_t n = dev->ops->rx(dev, dest, remain);
-    remain -= n;
-    dest += n;
-    if(remain > 0)
+    int res = dev->ops->tx(dev, pkt);
+    if(res < 0)
       task_sleep(dev);
     sti();
   }
-  return count;
+  return 0;
 }
 
-uint32_t netdev_tx(uint16_t devno, uint8_t *buf, uint32_t size) {
+int netdev_tx_nowait(devno_t devno, struct pktbuf *pkt) {
   struct netdev *dev = netdev_tbl[devno];
-  uint32_t remain = count;
-  while(remain > 0) {
+  cli();
+  int res = dev->ops->tx(dev, pkt);
+  sti();
+  return res;
+}
+
+struct pktbuf *netdev_rx(devno_t devno) {
+  struct netdev *dev = netdev_tbl[devno];
+  while(1) {
     cli();
-    uint32_t n = dev->ops->tx(dev, src, count);
-    remain -= n;
-    src += n;
-    if(remain > 0)
+    struct pktbuf *pkt = dev->ops->rx(dev);
+    if(pkt == NULL)
       task_sleep(dev);
     sti();
   }
-  return count;
+  return pkt;
+}
+
+struct pktbuf *netdev_rx_nowait(devno_t devno) {
+  struct netdev *dev = netdev_tbl[devno];
+  cli();
+  struct pktbuf *pkt = dev->ops->rx(dev);
+  sti();
+  return pkt;
 }
 

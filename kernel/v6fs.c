@@ -14,9 +14,9 @@
 
 static struct fs *v6fs_mount(void *source);
 static struct inode *v6fs_getroot(struct fs *fs);
-static int v6fs_inode_read(struct inode *inode, uint8_t *base, uint32_t offset, uint32_t count);
+static int v6fs_inode_read(struct inode *inode, u8 *base, u32 offset, u32 count);
 static struct inode *v6fs_inode_opdent(struct inode *inode, const char *name, int op);
-static struct inode *v6fs_getinode(struct fs *fs, uint32_t ino_no);
+static struct inode *v6fs_getinode(struct fs *fs, u32 ino_no);
 
 
 struct fsinfo_ops v6fs_fsinfo_ops = {
@@ -33,22 +33,22 @@ struct fs_ops v6fs_fs_ops = {
 };
 
 struct v6fs_super {
-  uint16_t ino_blocks;
-  uint16_t sto_blocks;
-  uint16_t sto_nfree;
-  uint16_t sto_free[100];
-  uint16_t ino_nfree;
-  uint16_t ino_free[100];
-  volatile uint8_t sto_lock;
-  volatile uint8_t ino_lock;
-  uint8_t is_mod;
-  uint8_t is_ro;
-  uint16_t time[2];
-  uint16_t pad[50];
+  u16 ino_blocks;
+  u16 sto_blocks;
+  u16 sto_nfree;
+  u16 sto_free[100];
+  u16 ino_nfree;
+  u16 ino_free[100];
+  volatile u8 sto_lock;
+  volatile u8 ino_lock;
+  u8 is_mod;
+  u8 is_ro;
+  u16 time[2];
+  u16 pad[50];
 };
 
 struct v6fs_fs {
-  uint16_t devno;
+  u16 devno;
   struct v6fs_super super;
   struct fs fs;
 };
@@ -58,15 +58,15 @@ struct v6fs_fs {
 #define I_LARGE 0x1000
 
 struct v6fs_phyinode {
-  uint16_t mode;
-  uint8_t nlink;
-  uint8_t uid;
-  uint8_t gid;
-  uint8_t size0;
-  uint16_t size1;
-  uint16_t blkno[8];
-  uint16_t atime[2];
-  uint16_t mtime[2];
+  u16 mode;
+  u8 nlink;
+  u8 uid;
+  u8 gid;
+  u8 size0;
+  u16 size1;
+  u16 blkno[8];
+  u16 atime[2];
+  u16 mtime[2];
 };
 
 struct inode_ops v6fs_inode_ops = {
@@ -77,12 +77,12 @@ struct inode_ops v6fs_inode_ops = {
 };
 
 struct v6fs_inode {
-  uint16_t blkno[8];
+  u16 blkno[8];
   struct inode inode;
 };
 
 struct v6fs_dent {
-  uint16_t inode_no;
+  u16 inode_no;
   char name[14];
 };
 
@@ -100,7 +100,7 @@ static int v6fs_is_valid_super(struct v6fs_super *super) {
 }
 
 static struct fs *v6fs_mount(void *source) {
-  uint16_t devno = (uint16_t)source;
+  u16 devno = (u16)source;
   struct v6fs_fs *v6fs = malloc(sizeof(struct v6fs_fs));
   v6fs->devno = devno;
   struct blkdev_buf *buf = blkdev_getbuf(devno, V6FS_SUPERBLK);
@@ -119,7 +119,7 @@ static struct inode *v6fs_getroot(struct fs *fs) {
   return v6fs_getinode(fs, 1);
 }
 
-static struct inode *v6fs_getinode(struct fs *fs, uint32_t ino_no) {
+static struct inode *v6fs_getinode(struct fs *fs, u32 ino_no) {
   //inode番号は1から
   struct v6fs_fs *v6fs = container_of(fs, struct v6fs_fs, fs);
   int inoblk = (ino_no+31) / 16;
@@ -142,9 +142,9 @@ static struct inode *v6fs_getinode(struct fs *fs, uint32_t ino_no) {
 }
 
 // 論理ブロック番号を物理ブロック番号へ変換
-static uint32_t blkno_vtop(struct v6fs_inode *v6ino, uint32_t vno) {
+static u32 blkno_vtop(struct v6fs_inode *v6ino, u32 vno) {
   struct v6fs_fs *f = container_of(v6ino->inode.fs, struct v6fs_fs, fs);
-  uint16_t devno = f->devno;
+  u16 devno = f->devno;
   if((v6ino->inode.mode & I_LARGE) == 0) {
     return v6ino->blkno[vno];
   } else {
@@ -152,17 +152,17 @@ static uint32_t blkno_vtop(struct v6fs_inode *v6ino, uint32_t vno) {
     if(indir_index <= 6) {
       struct blkdev_buf *buf = blkdev_getbuf(devno, v6ino->blkno[indir_index]);
       blkdev_buf_sync(buf);
-      uint32_t pno = ((uint16_t *)(buf->addr))[vno%256];
+      u32 pno = ((u16 *)(buf->addr))[vno%256];
       blkdev_releasebuf(buf);
       return pno;
     } else {
       struct blkdev_buf *buf = blkdev_getbuf(devno, v6ino->blkno[7]);
       blkdev_buf_sync(buf);
-      uint32_t indir2_no = ((uint16_t *)(buf->addr))[(indir_index-7)/256];
+      u32 indir2_no = ((u16 *)(buf->addr))[(indir_index-7)/256];
       blkdev_releasebuf(buf); 
       struct blkdev_buf *buf2 = blkdev_getbuf(devno, indir2_no);
       blkdev_buf_sync(buf2);
-      uint32_t pno = ((uint16_t *)(buf2->addr))[(indir_index-7)%256];
+      u32 pno = ((u16 *)(buf2->addr))[(indir_index-7)%256];
       blkdev_releasebuf(buf2); 
       return pno;
     }
@@ -170,16 +170,16 @@ static uint32_t blkno_vtop(struct v6fs_inode *v6ino, uint32_t vno) {
   return 0;
 }
 
-static int v6fs_inode_read(struct inode *inode, uint8_t *base, uint32_t offset, uint32_t count) {
-  uint32_t tail = count + offset;
+static int v6fs_inode_read(struct inode *inode, u8 *base, u32 offset, u32 count) {
+  u32 tail = count + offset;
   tail = (tail > inode->size) ? inode->size : tail;
 
   struct v6fs_fs *f = container_of(inode->fs, struct v6fs_fs, fs);
-  uint16_t devno = f->devno;
+  u16 devno = f->devno;
   struct v6fs_inode *v6ino = container_of(inode, struct v6fs_inode, inode);
   struct blkdev_buf *buf = NULL;
 
-  for(uint32_t i=offset; i<tail; i++) {
+  for(u32 i=offset; i<tail; i++) {
     if(buf == NULL || i%BLOCKSIZE==0) {
       if(buf != NULL)
         blkdev_releasebuf(buf);
@@ -209,12 +209,12 @@ static struct inode *v6fs_inode_opdent(struct inode *inode, const char *name, in
   devno_t devno = f->devno;
   struct v6fs_inode *v6ino = container_of(inode, struct v6fs_inode, inode);
   struct blkdev_buf *buf = NULL;
-  uint16_t found = 0;
+  u16 found = 0;
   if((inode->mode & I_ALLOC) == 0)
     goto exit;
   if((inode->mode & I_DIR) == 0)
     goto exit;
-  for(uint32_t i=0; i<inode->size; i+=16) {
+  for(u32 i=0; i<inode->size; i+=16) {
     if(i%BLOCKSIZE == 0) {
       if(buf != NULL)
         blkdev_releasebuf(buf);
@@ -222,7 +222,7 @@ static struct inode *v6fs_inode_opdent(struct inode *inode, const char *name, in
       blkdev_buf_sync(buf);
     }
 
-    struct v6fs_dent *dent = (struct v6fs_dent*)((uint8_t *)(buf->addr)+(i%512));
+    struct v6fs_dent *dent = (struct v6fs_dent*)((u8 *)(buf->addr)+(i%512));
     if(dent->inode_no == 0)
       continue;
     switch(op) {

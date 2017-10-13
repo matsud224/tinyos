@@ -8,29 +8,29 @@
 #define IDTSIZE 256
 
 static struct gatedesc {
-  uint16_t baselo;
-  uint16_t selector;
-  uint8_t reserved;
-  uint8_t flags;
-  uint16_t basehi;
+  u16 baselo;
+  u16 selector;
+  u8 reserved;
+  u8 flags;
+  u16 basehi;
 } PACKED idt[IDTSIZE];
 
 static struct idtr {
-  uint16_t limit;
+  u16 limit;
   struct gatedesc *base;
 } PACKED idtr; 
 
 
-void idt_register(uint8_t vecnum, uint8_t gatetype, void (*base)(void)) {
+void idt_register(u8 vecnum, u8 gatetype, void (*base)(void)) {
   struct gatedesc *desc = &idt[vecnum];
   desc->selector = GDT_SEL_CODESEG_0;
-  desc->baselo = (uint32_t)base & 0xffff;
-  desc->basehi = (uint32_t)base >> 16;
+  desc->baselo = (u32)base & 0xffff;
+  desc->basehi = (u32)base >> 16;
   desc->reserved = 0;
   desc->flags = gatetype | IDT_PRESENT | IDT_GATE32;
 }
 
-void idt_unregister(uint8_t vecnum) {
+void idt_unregister(u8 vecnum) {
   idt[vecnum].flags = 0;
 }
 

@@ -8,37 +8,37 @@
 extern struct task *current;
 
 struct tss {
-  uint16_t backlink;	uint16_t f1;
-  uint32_t esp0;
-  uint16_t ss0;				uint16_t f2;
-  uint32_t esp1;
-  uint16_t ss1;				uint16_t f3;
-  uint32_t esp2;
-  uint16_t ss2;				uint16_t f4;
-  uint32_t cr3;
-  uint32_t eip;
-  uint32_t eflags;
-  uint32_t eax;
-  uint32_t ecx;
-  uint32_t edx;
-  uint32_t ebx;
-  uint32_t esp;
-  uint32_t ebp;
-  uint32_t esi;
-  uint32_t edi;
-  uint16_t es;				uint16_t f5;
-  uint16_t cs;				uint16_t f6;
-  uint16_t ss;				uint16_t f7;
-  uint16_t ds;				uint16_t f8;
-  uint16_t fs;				uint16_t f9;
-  uint16_t gs;				uint16_t f10;
-  uint16_t ldt;				uint16_t f11;
-  uint16_t t;					uint16_t iobase;
+  u16 backlink;	u16 f1;
+  u32 esp0;
+  u16 ss0;				u16 f2;
+  u32 esp1;
+  u16 ss1;				u16 f3;
+  u32 esp2;
+  u16 ss2;				u16 f4;
+  u32 cr3;
+  u32 eip;
+  u32 eflags;
+  u32 eax;
+  u32 ecx;
+  u32 edx;
+  u32 ebx;
+  u32 esp;
+  u32 ebp;
+  u32 esi;
+  u32 edi;
+  u16 es;				u16 f5;
+  u16 cs;				u16 f6;
+  u16 ss;				u16 f7;
+  u16 ds;				u16 f8;
+  u16 fs;				u16 f9;
+  u16 gs;				u16 f10;
+  u16 ldt;				u16 f11;
+  u16 t;					u16 iobase;
 };
 
 struct task_state {
-  uint32_t esp;
-  uint32_t cr3;
+  u32 esp;
+  u32 cr3;
 };
 
 #define TASK_STATE_RUNNING	0
@@ -48,11 +48,11 @@ struct task {
   struct task_state regs;
   struct list_head link;
   void *kernstack;
-  uint32_t kernstacksize;
+  u32 kernstacksize;
   struct vm_map *vmmap;
-  uint8_t state;
-  uint32_t flags;
-  uint32_t pid;
+  u8 state;
+  u32 flags;
+  u32 pid;
   struct task *next;
   void *waitcause;
 };

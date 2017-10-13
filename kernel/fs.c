@@ -69,7 +69,7 @@ struct inode *fs_nametoi(const char *path) {
   }
 }
 
-int fs_read(struct inode *inode, uint8_t *base, uint32_t offset, uint32_t count) {
+int fs_read(struct inode *inode, u8 *base, u32 offset, u32 count) {
 printf("fs_read: inode=%x, base=%x, offset=%x, count=%x\n", inode, base, offset, count);
   return inode->ops->read(inode, base, offset, count);
 }

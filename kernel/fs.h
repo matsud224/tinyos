@@ -1,26 +1,26 @@
 #pragma once
-
-#include <stddef.h>
-#include <stdint.h>
+#include "kernlib.h"
 
 struct inode {
   struct fs *fs;
   struct inode_ops *ops;
-  uint32_t inode_no;
-  uint32_t mode;
-  uint32_t size;
+  u32 inode_no;
+  u32 mode;
+  size_t size;
 };
 
 #define INODE_DIR 0x4000
 
-#define DENTOP_GET 0
-#define DENTOP_CREATE 1
-#define DENTOP_REMOVE 2
+enum dent_op {
+  DENTOP_GET		= 0,
+  DENTOP_CREATE	= 1,
+  DENTOP_REMOVE	= 2,
+};
 
 struct inode_ops {
-  int (*read)(struct inode *inode, uint8_t *base, uint32_t offset, uint32_t count);
-  int (*write)(struct inode *inode, uint8_t *base, uint32_t offset, uint32_t count);
-  void (*resize)(struct inode *inode, uint32_t newsize);
+  int (*read)(struct inode *inode, u8 *base, u32 offset, size_t count);
+  int (*write)(struct inode *inode, u8 *base, u32 offset, size_t count);
+  void (*resize)(struct inode *inode, u32 newsize);
   struct inode *(*opdent)(struct inode *inode, const char *name, int op);
 };
 
@@ -45,4 +45,4 @@ struct fsinfo {
 void fsinfo_add(struct fsinfo *info);
 int fs_mountroot(const char *name, void *source);
 struct inode *fs_nametoi(const char *path);
-int fs_read(struct inode *inode, uint8_t *base, uint32_t offset, uint32_t count);
+int fs_read(struct inode *inode, u8 *base, u32 offset, size_t count);

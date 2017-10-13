@@ -1,8 +1,5 @@
 #pragma once
-
-#include <stddef.h>
-#include <stdint.h>
-
+#include "kernlib.h"
 
 #define EI_NIDENT 16
 #define	ELFMAG		"\177ELF"
@@ -19,88 +16,97 @@
 #define ELFDATA2MSB	2		/* 2's complement, big endian */
 #define ELFDATANUM	3
 
-#define ET_NONE		0		/* No file type */
-#define ET_REL		1		/* Relocatable file */
-#define ET_EXEC		2		/* Executable file */
-#define ET_DYN		3		/* Shared object file */
-#define ET_CORE		4		/* Core file */
-#define	ET_NUM		5		/* Number of defined types */
-#define ET_LOOS		0xfe00		/* OS-specific range start */
-#define ET_HIOS		0xfeff		/* OS-specific range end */
-#define ET_LOPROC	0xff00		/* Processor-specific range start */
-#define ET_HIPROC	0xffff		/* Processor-specific range end */
+enum et {
+  ET_NONE		= 0,		/* No file type */
+  ET_REL		= 1,		/* Relocatable file */
+  ET_EXEC		= 2,		/* Executable file */
+  ET_DYN		= 3,		/* Shared object file */
+  ET_CORE		= 4,		/* Core file */
+  ET_NUM		= 5,		/* Number of defined types */
+  ET_LOOS		= 0xfe00,		/* OS-specific range start */
+  ET_HIOS		= 0xfeff,		/* OS-specific range end */
+  ET_LOPROC	= 0xff00,		/* Processor-specific range start */
+  ET_HIPROC	= 0xffff,		/* Processor-specific range end */
+};
 
 #define EM_386		 3	/* Intel 80386 */
 
 struct elf32_hdr {
   char e_ident[EI_NIDENT];
-  uint16_t e_type;
-  uint16_t e_machine;
-  uint32_t e_version;
-  uint32_t e_entry;
-  uint32_t e_phoff;
-  uint32_t e_shoff;
-  uint32_t e_flags;
-  uint16_t e_ehsize;
-  uint16_t e_phentsize;
-  uint16_t e_phnum;
-  uint16_t e_shentsize;
-  uint16_t e_shnum;
-  uint16_t e_shstrndx;
+  u16 e_type;
+  u16 e_machine;
+  u32 e_version;
+  u32 e_entry;
+  u32 e_phoff;
+  u32 e_shoff;
+  u32 e_flags;
+  u16 e_ehsize;
+  u16 e_phentsize;
+  u16 e_phnum;
+  u16 e_shentsize;
+  u16 e_shnum;
+  u16 e_shstrndx;
 };
 
 
-#define SHT_NULL	  0		/* Section header table entry unused */
-#define SHT_PROGBITS	  1		/* Program data */
-#define SHT_SYMTAB	  2		/* Symbol table */
-#define SHT_STRTAB	  3		/* String table */
-#define SHT_RELA	  4		/* Relocation entries with addends */
-#define SHT_HASH	  5		/* Symbol hash table */
-#define SHT_DYNAMIC	  6		/* Dynamic linking information */
-#define SHT_NOTE	  7		/* Notes */
-#define SHT_NOBITS	  8		/* Program space with no data (bss) */
-#define SHT_REL		  9		/* Relocation entries, no addends */
+enum sht {
+  SHT_NULL		  = 0,		/* Section header table entry unused */
+  SHT_PROGBITS  = 1,		/* Program data */
+  SHT_SYMTAB	  = 2,		/* Symbol table */
+  SHT_STRTAB	  = 3,		/* String table */
+  SHT_RELA	  	= 4,		/* Relocation entries with addends */
+  SHT_HASH	  	= 5,		/* Symbol hash table */
+  SHT_DYNAMIC	  = 6,		/* Dynamic linking information */
+  SHT_NOTE	  	= 7,		/* Notes */
+  SHT_NOBITS	  = 8,		/* Program space with no data (bss) */
+  SHT_REL			  = 9,		/* Relocation entries, no addends */
+};
 
 #define SHF_WRITE	     (1 << 0)	/* Writable */
 #define SHF_ALLOC	     (1 << 1)	/* Occupies memory during execution */
 #define SHF_EXECINSTR	     (1 << 2)	/* Executable */
 
 struct elf32_shdr {
-  uint32_t sh_name;
-  uint32_t sh_type;
-  uint32_t sh_flags;
-  uint32_t sh_addr;
-  uint32_t sh_offset;
-  uint32_t sh_size;
-  uint32_t sh_link;
-  uint32_t sh_info;
-  uint32_t sh_addralign;
-  uint32_t sh_entsize;
+  u32 sh_name;
+  u32 sh_type;
+  u32 sh_flags;
+  u32 sh_addr;
+  u32 sh_offset;
+  u32 sh_size;
+  u32 sh_link;
+  u32 sh_info;
+  u32 sh_addralign;
+  u32 sh_entsize;
 };
 
-
-#define	PT_NULL		0		/* Program header table entry unused */
-#define PT_LOAD		1		/* Loadable program segment */
-#define PT_DYNAMIC	2		/* Dynamic linking information */
-#define PT_INTERP	3		/* Program interpreter */
-#define PT_NOTE		4		/* Auxiliary information */
-#define PT_SHLIB	5		/* Reserved */
-#define PT_PHDR		6		/* Entry for header table itself */
-#define PT_TLS		7		/* Thread-local storage segment */
-#define	PT_NUM		8		/* Number of defined types */
+enum pt {
+  PT_NULL			= 0,		/* Program header table entry unused */
+  PT_LOAD			= 1,		/* Loadable program segment */
+  PT_DYNAMIC	= 2,		/* Dynamic linking information */
+  PT_INTERP		= 3,		/* Program interpreter */
+  PT_NOTE			= 4,		/* Auxiliary information */
+  PT_SHLIB		= 5,		/* Reserved */
+  PT_PHDR			= 6,		/* Entry for header table itself */
+  PT_TLS			= 7,		/* Thread-local storage segment */
+  PT_NUM			= 8,		/* Number of defined types */
+};
 
 #define PF_X		(1 << 0)	/* Segment is executable */
 #define PF_W		(1 << 1)	/* Segment is writable */
 #define PF_R		(1 << 2)	/* Segment is readable */
 
 struct elf32_phdr {
-  uint32_t p_type;
-  uint32_t p_offset;
-  uint32_t p_vaddr;
-  uint32_t p_paddr;
-  uint32_t p_filesz;
-  uint32_t p_memsz;
-  uint32_t p_flags;
-  uint32_t p_align;
+  u32 p_type;
+  u32 p_offset;
+  u32 p_vaddr;
+  u32 p_paddr;
+  u32 p_filesz;
+  u32 p_memsz;
+  u32 p_flags;
+  u32 p_align;
 };
 
+
+int elf32_is_valid_exec(struct elf32_hdr *hdr);
+void elf32_load(struct inode *ino, u8 *head);
+ 

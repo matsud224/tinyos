@@ -4,18 +4,18 @@
 static struct {
   size_t column;
   size_t row;
-  uint8_t color;
-  uint16_t *buffer;
+  u8 color;
+  u16 *buffer;
 } vga;
 
 #define VGAENTRY_COLOR(fg, bg) ((fg) | (bg) << 4)
-#define VGAENTRY(uc, color) ((uint16_t)(uc) | (uint16_t)(color) << 8)
+#define VGAENTRY(uc, color) ((u16)(uc) | (u16)(color) << 8)
  
 void vga_init() {
 	vga.row = 0;
 	vga.column = 0;
 	vga.color = VGAENTRY_COLOR(VGA_COLOR_WHITE, VGA_COLOR_BLUE);
-	vga.buffer = (uint16_t*)(KERNSPACE_ADDR + VRAM_COLOR); 
+	vga.buffer = (u16*)(KERNSPACE_ADDR + VRAM_COLOR); 
 	for (size_t y = 0; y < VGA_HEIGHT; y++) {
 		for (size_t x = 0; x < VGA_WIDTH; x++) {
 			vga.buffer[y*VGA_WIDTH+x] = VGAENTRY(' ', vga.color);
@@ -23,11 +23,11 @@ void vga_init() {
 	}
 }
  
-void vga_setcolor(uint8_t color) {
+void vga_setcolor(u8 color) {
 	vga.color = color;
 }
  
-static void vga_putentryat(char c, uint8_t color, size_t x, size_t y) {
+static void vga_putentryat(char c, u8 color, size_t x, size_t y) {
 	vga.buffer[y*VGA_WIDTH+x] = VGAENTRY(c, color);
 }
 
@@ -99,7 +99,7 @@ static void print_num_signed(int32_t val, int base) {
     putchar(*ptr);
 }
 
-static void print_num_unsigned(uint32_t val, int base) {
+static void print_num_unsigned(u32 val, int base) {
   char *ptr = buf;
   *ptr++ = '\0';
   do {

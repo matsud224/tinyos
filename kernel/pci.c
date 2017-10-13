@@ -10,67 +10,67 @@
 
 static struct list_head pci_dev_list;
 
-static uint32_t _pci_config_read32(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset) {
-  uint32_t addr = (bus<<16) | (dev<<11) | (func<<8) | (offset&0xfc) | 0x80000000u;
+static u32 _pci_config_read32(u8 bus, u8 dev, u8 func, u8 offset) {
+  u32 addr = (bus<<16) | (dev<<11) | (func<<8) | (offset&0xfc) | 0x80000000u;
   out32(PCI_CONFIG_ADDR, addr);
   return in32(PCI_CONFIG_DATA);
 }
 
-uint32_t pci_config_read32(struct pci_dev *pcidev, uint8_t offset) {
+u32 pci_config_read32(struct pci_dev *pcidev, u8 offset) {
   return _pci_config_read32(pcidev->bus, pcidev->dev, pcidev->func, offset);
 }
 
-static uint16_t _pci_config_read16(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset) {
-  uint32_t result = _pci_config_read32(bus, dev, func, offset);
+static u16 _pci_config_read16(u8 bus, u8 dev, u8 func, u8 offset) {
+  u32 result = _pci_config_read32(bus, dev, func, offset);
   return (result >> ((offset&2)*8)) & 0xffff;
 }
 
-uint16_t pci_config_read16(struct pci_dev *pcidev, uint8_t offset) {
+u16 pci_config_read16(struct pci_dev *pcidev, u8 offset) {
   return _pci_config_read16(pcidev->bus, pcidev->dev, pcidev->func, offset);
 }
 
-static uint8_t _pci_config_read8(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset) {
-  uint32_t result = _pci_config_read32(bus, dev, func, offset);
+static u8 _pci_config_read8(u8 bus, u8 dev, u8 func, u8 offset) {
+  u32 result = _pci_config_read32(bus, dev, func, offset);
   return (result >> ((offset&3)*8)) & 0xff;
 }
 
-uint8_t pci_config_read8(struct pci_dev *pcidev, uint8_t offset) {
+u8 pci_config_read8(struct pci_dev *pcidev, u8 offset) {
   return _pci_config_read8(pcidev->bus, pcidev->dev, pcidev->func, offset);
 }
 
-static void _pci_config_write32(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset, uint32_t data) {
-  uint32_t addr = (bus<<16) | (dev<<11) | (func<<8) | (offset&0xfc) | 0x80000000u;
+static void _pci_config_write32(u8 bus, u8 dev, u8 func, u8 offset, u32 data) {
+  u32 addr = (bus<<16) | (dev<<11) | (func<<8) | (offset&0xfc) | 0x80000000u;
   out32(PCI_CONFIG_ADDR, addr);
   out32(PCI_CONFIG_DATA, data);
 }
 
-void pci_config_write32(struct pci_dev *pcidev, uint8_t offset, uint32_t data) {
+void pci_config_write32(struct pci_dev *pcidev, u8 offset, u32 data) {
   return _pci_config_write32(pcidev->bus, pcidev->dev, pcidev->func, offset, data);
 }
 
-static uint16_t _pci_config_write16(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset, uint16_t data) {
-  uint32_t result = _pci_config_read32(bus, dev, func, offset);
+static u16 _pci_config_write16(u8 bus, u8 dev, u8 func, u8 offset, u16 data) {
+  u32 result = _pci_config_read32(bus, dev, func, offset);
   result &= (~0xffff << ((offset&2)*8));
   result &= (data << ((offset&2)*8));
   _pci_config_write32(bus, dev, func, offset, result);
 }
 
-uint16_t pci_config_write16(struct pci_dev *pcidev, uint8_t offset, uint16_t data) {
+u16 pci_config_write16(struct pci_dev *pcidev, u8 offset, u16 data) {
   return _pci_config_write16(pcidev->bus, pcidev->dev, pcidev->func, offset, data);
 }
 
-static uint8_t _pci_config_write8(uint8_t bus, uint8_t dev, uint8_t func, uint8_t offset, uint8_t data) {
-  uint32_t result = _pci_config_read32(bus, dev, func, offset);
+static u8 _pci_config_write8(u8 bus, u8 dev, u8 func, u8 offset, u8 data) {
+  u32 result = _pci_config_read32(bus, dev, func, offset);
   result &= (~0xff << ((offset&3)*8));
   result &= (data << ((offset&3)*8));
   _pci_config_write32(bus, dev, func, offset, result);
 }
 
-uint8_t pci_config_write8(struct pci_dev *pcidev, uint8_t offset, uint8_t data) {
+u8 pci_config_write8(struct pci_dev *pcidev, u8 offset, u8 data) {
   return _pci_config_write8(pcidev->bus, pcidev->dev, pcidev->func, offset, data);
 }
 
-struct pci_dev *pci_search_device(uint16_t vendorid, uint16_t deviceid) {
+struct pci_dev *pci_search_device(u16 vendorid, u16 deviceid) {
   struct list_head *ptr;
   list_foreach(ptr, &pci_dev_list) {
     struct pci_dev *pcidev = container_of(ptr, struct pci_dev, link);
@@ -80,7 +80,7 @@ struct pci_dev *pci_search_device(uint16_t vendorid, uint16_t deviceid) {
   return NULL;
 }
 
-static void pci_dev_add(uint8_t bus, uint8_t dev, uint8_t func) {
+static void pci_dev_add(u8 bus, u8 dev, u8 func) {
   struct pci_dev *pcidev = malloc(sizeof(struct pci_dev));
   pcidev->bus = bus;
   pcidev->dev = dev;
@@ -102,7 +102,7 @@ static void pci_enumerate() {
       if(_pci_config_read16(bus, dev, 0, PCI_VENDORID) != 0xffff) {
         pci_dev_add(bus, dev, 0);
         if(_pci_config_read8(bus, dev, 0, PCI_HEADERTYPE) & 0x80) {
-          for(uint8_t func = 1; func < 8; func++)
+          for(u8 func = 1; func < 8; func++)
             if(_pci_config_read16(bus, dev, func, PCI_VENDORID) != 0xffff)
               pci_dev_add(bus, dev, func);
         }

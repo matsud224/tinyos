@@ -1,9 +1,7 @@
 #include "pit.h"
 #include "pic.h"
 #include "idt.h"
-#include "vga.h"
 #include "kernasm.h"
-#include <stdint.h>
 
 #define PIT_CH0_DATA 0x40
 #define PIT_CH1_DATA 0x41
@@ -17,10 +15,11 @@
 #define PIT_CNT0 0x0
 
 #define PIT_IRQ 0 
-#define PIT_INT_VEC 0x20
 
 #define CNT_100HZ 0x2e9c
 
+void pit_isr(void);
+void pit_inthandler(void);
 
 void pit_isr() {
   pic_sendeoi();
@@ -32,6 +31,6 @@ void pit_init() {
         PIT_CNTMODE_BIN | PIT_OPMODE_RATE | PIT_LOAD16 | PIT_CNT0);
   out8(PIT_CH0_DATA, CNT_100HZ >> 8);
   out8(PIT_CH0_DATA, CNT_100HZ & 0xff);
-  idt_register(PIT_INT_VEC, IDT_INTGATE, pit_inthandler);
+  idt_register(IRQ_TO_INTVEC(PIT_INT_IRQ), IDT_INTGATE, pit_inthandler);
   pic_clearmask(PIT_IRQ);
 }

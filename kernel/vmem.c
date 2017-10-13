@@ -20,15 +20,15 @@ struct inode_mapper {
   struct mapper mapper;
 };
 
-uint32_t anon_mapper_request(struct mapper *m, uint32_t offset) {
-  return (uint32_t)page_alloc();
+u32 anon_mapper_request(struct mapper *m, u32 offset) {
+  return (u32)page_alloc();
 }
 
 static const struct mapper_ops anon_mapper_ops = {
   .request = anon_mapper_request
 };
 
-struct mapper *anon_mapper_new(uint32_t size) {
+struct mapper *anon_mapper_new(u32 size) {
   struct anon_mapper *m;
   if((m = malloc(sizeof(struct anon_mapper))) == NULL)
     return NULL;
@@ -38,18 +38,18 @@ struct mapper *anon_mapper_new(uint32_t size) {
   return &(m->mapper);
 }
 
-uint32_t inode_mapper_request(struct mapper *m, uint32_t offset) {
-  uint8_t *p = page_alloc();
+u32 inode_mapper_request(struct mapper *m, u32 offset) {
+  u8 *p = page_alloc();
   struct inode_mapper *im = container_of(m, struct inode_mapper, mapper);
   fs_read(im->inode, p, im->offset + (offset & ~(PAGESIZE-1)), PAGESIZE);
-  return (uint32_t)p;
+  return (u32)p;
 }
 
 static const struct mapper_ops inode_mapper_ops = {
   .request = inode_mapper_request
 };
 
-struct mapper *inode_mapper_new(struct inode *inode, uint32_t offset) {
+struct mapper *inode_mapper_new(struct inode *inode, u32 offset) {
   struct inode_mapper *m;
   if((m = malloc(sizeof(struct inode_mapper))) == NULL)
     return NULL;
@@ -71,7 +71,7 @@ struct vm_map *vm_map_new() {
   return m;
 }
 
-int vm_add_area(struct vm_map *map, uint32_t start, size_t size, struct mapper *mapper, uint32_t flags) {
+int vm_add_area(struct vm_map *map, u32 start, size_t size, struct mapper *mapper, u32 flags) {
   struct vm_area *a;
 
   start = start & ~(PAGESIZE-1);
@@ -101,7 +101,7 @@ int vm_add_area(struct vm_map *map, uint32_t start, size_t size, struct mapper *
 }
 
 /*
-int vm_remove_area(struct vm_map *map, uint32_t start, size_t size) {
+int vm_remove_area(struct vm_map *map, u32 start, size_t size) {
   struct vm_area *a;
 
   start = start & ~(PAGESIZE-1);
@@ -116,7 +116,7 @@ int vm_remove_area(struct vm_map *map, uint32_t start, size_t size) {
 }
 */
 
-struct vm_area *vm_findarea(struct vm_map *map, uint32_t addr) {
+struct vm_area *vm_findarea(struct vm_map *map, u32 addr) {
   struct vm_area *a;
   for(a=map->area_list; a!=NULL; a=a->next) {
     //printf("area 0x%x - 0x%x\n", a->start, a->start+a->size);

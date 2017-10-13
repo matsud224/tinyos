@@ -25,10 +25,10 @@
 #define PTE_GLOBAL				0x100
 
 
-static uint32_t *kernspace_pdt; //over 0xc0000000
+static u32 *kernspace_pdt; //over 0xc0000000
 
-uint32_t *new_procpdt() {
-  uint32_t *pdt = get_zeropage();
+u32 *new_procpdt() {
+  u32 *pdt = get_zeropage();
   //fill kernel space page diectory entry
   for(int i = 0; i < 1024; i++)
     pdt[i] = kernspace_pdt[i];
@@ -41,27 +41,27 @@ void pagetbl_init() {
   //kernel space straight mapping(896MB)
   int st_start_index = KERNSPACE_ADDR / 0x400000;
   int st_end_index = st_start_index + (KERN_STRAIGHT_MAP_SIZE/0x400000);
-  uint32_t addr = 0x0; 
+  u32 addr = 0x0; 
   for(int i = st_start_index; i < st_end_index;
         i++, addr += 0x400000){
     kernspace_pdt[i] = addr | PDE_PRESENT | PDE_RW | PDE_SIZE_4MB;
   }
   //kernel space virtual area
   for(int i = st_end_index; i < 1024; i++) {
-    uint32_t *pt = get_zeropage();
-    kernspace_pdt[i] = ((uint32_t)pt-KERNSPACE_ADDR) | PDE_PRESENT | PDE_RW;
+    u32 *pt = get_zeropage();
+    kernspace_pdt[i] = ((u32)pt-KERNSPACE_ADDR) | PDE_PRESENT | PDE_RW;
   }
 
   flushtlb(kernspace_pdt);
 }
 
-void pagetbl_add_mapping(uint32_t *pdt, uint32_t vaddr, uint32_t paddr) {
+void pagetbl_add_mapping(u32 *pdt, u32 vaddr, u32 paddr) {
   int pdtindex = vaddr>>22;
   int ptindex = (vaddr>>12) & 0x3ff;
   if((pdt[pdtindex] & PDE_PRESENT) == 0) {
-    pdt[pdtindex] = ((uint32_t)get_zeropage()-KERNSPACE_ADDR) | PDE_PRESENT | PDE_RW;
+    pdt[pdtindex] = ((u32)get_zeropage()-KERNSPACE_ADDR) | PDE_PRESENT | PDE_RW;
   }
 
-  uint32_t *pt = (uint32_t *)((pdt[pdtindex] & ~0xfff)+KERNSPACE_ADDR);
+  u32 *pt = (u32 *)((pdt[pdtindex] & ~0xfff)+KERNSPACE_ADDR);
   pt[ptindex] = ((paddr-KERNSPACE_ADDR) & ~0xfff) | PTE_PRESENT | PTE_RW;
 }

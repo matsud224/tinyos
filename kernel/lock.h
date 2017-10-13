@@ -1,9 +1,8 @@
 #pragma once
-
 #include <stdint.h>
 #include <stddef.h>
 
-typedef uint32_t mutex;
+typedef u32 mutex;
 
 void mutex_init(mutex *mtx);
 void mutex_lock(mutex *mtx);

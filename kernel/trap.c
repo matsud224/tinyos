@@ -11,7 +11,7 @@ void gpe_isr() {
   while(1);
 }
 
-void pf_isr(uint32_t addr) {
+void pf_isr(u32 addr) {
   printf("\nPage fault! addr = 0x%x\n", addr);
   //printf("eip=%x, esp=%x\n", current->regs.eip, current->regs.esp);
   struct vm_area *varea = vm_findarea(current->vmmap, addr);
@@ -19,12 +19,12 @@ void pf_isr(uint32_t addr) {
     puts("Segmentation fault!\n");
     while(1);
   } else {
-    uint32_t paddr = varea->mapper->ops->request(varea->mapper, addr - varea->start);
+    u32 paddr = varea->mapper->ops->request(varea->mapper, addr - varea->start);
     pagetbl_add_mapping(current->regs.cr3, addr, paddr);
   }
 }
 
-void syscall_isr(uint32_t eax, uint32_t ebx, uint32_t ecx, uint32_t edx, uint32_t esi, uint32_t edi) {
+void syscall_isr(u32 eax, u32 ebx, u32 ecx, u32 edx, u32 esi, u32 edi) {
   printf("syscall: %x,%x,%x,%x,%x,%x\n", eax, ebx, ecx, edx, esi, edi);
   task_yield();
 }

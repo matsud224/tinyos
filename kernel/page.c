@@ -7,9 +7,9 @@
 
 // address region descriptor
 struct ardesc {
-  uint64_t base;
-  uint64_t len;
-  uint32_t type;
+  u64 base;
+  u64 len;
+  u32 type;
 };
 
 
@@ -18,14 +18,14 @@ struct ardesc {
 
 struct page {
   struct page *next_free;
-  uint32_t flags;
+  u32 flags;
 };
 
 static size_t memsize;
 struct page *pageinfo = NULL;
 struct page *page_freelist = NULL;
-static uint32_t page_nfree;
-static uint32_t protmem_freearea_addr;
+static u32 page_nfree;
+static u32 protmem_freearea_addr;
 
 int page_getnfree() {
   return page_nfree;
@@ -39,11 +39,11 @@ void *page_alloc() {
   page_freelist = page_freelist->next_free;
   new->next_free = NULL;
   new->flags |= PAGE_ALLOCATED;
-  uint32_t phyaddr = (size_t)((uint32_t)new-(KERNSPACE_ADDR+PROTMEM_ADDR))/sizeof(struct page) * PAGESIZE;
+  u32 phyaddr = (size_t)((u32)new-(KERNSPACE_ADDR+PROTMEM_ADDR))/sizeof(struct page) * PAGESIZE;
   return (void *)(phyaddr + KERNSPACE_ADDR);
 }
 
-void page_free(uint32_t addr) {
+void page_free(u32 addr) {
   addr -= KERNSPACE_ADDR;
   int index = addr / PAGESIZE;
   pageinfo[index].flags &= ~PAGE_ALLOCATED;
@@ -52,7 +52,7 @@ void page_free(uint32_t addr) {
   page_nfree++;
 }
 
-static void recycle_area(uint32_t start, size_t size) {
+static void recycle_area(u32 start, size_t size) {
   int startindex = (start+(PAGESIZE-1)) / PAGESIZE;
   int endindex = startindex + size / PAGESIZE;
   for(int i=startindex; i<endindex; i++) {
@@ -67,7 +67,7 @@ void page_init() {
   struct ardesc *map = (struct ardesc *)(KERNSPACE_ADDR+MEMORYMAP_ADDR);
   while(map->base || map->len) {
     if(map->type == 1)
-      memsize = (uint32_t)(map->base + map->len);
+      memsize = (u32)(map->base + map->len);
     map++;
   }
   memsize = MIN(memsize, KERN_STRAIGHT_MAP_SIZE);
@@ -78,10 +78,10 @@ void page_init() {
   for(int i=0; i<npages; i++)
     pageinfo[i].flags = PAGE_RESERVED;
 
-  protmem_freearea_addr = (uint32_t)&pageinfo[npages];
+  protmem_freearea_addr = (u32)&pageinfo[npages];
   page_nfree = 0;
   page_freelist = NULL;
-  recycle_area(protmem_freearea_addr-KERNSPACE_ADDR, memsize - (((uint32_t)protmem_freearea_addr-KERNSPACE_ADDR)));
+  recycle_area(protmem_freearea_addr-KERNSPACE_ADDR, memsize - (((u32)protmem_freearea_addr-KERNSPACE_ADDR)));
   
   return;
 }

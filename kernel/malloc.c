@@ -34,7 +34,7 @@ static struct chunkhdr *getnewchunk(size_t objsize) {
   newchunk->freelist = NULL;
   int nobjs = (PAGESIZE - sizeof(struct chunkhdr)) / objsize;
   newchunk->nobjs = newchunk->nfree = nobjs;
-  uint8_t *obj = (uint8_t *)(newchunk+1);
+  u8 *obj = (u8 *)(newchunk+1);
   for(int i=0; i<nobjs; i++) {
     *(void **)obj = newchunk->freelist;
     newchunk->freelist = obj;
@@ -76,7 +76,7 @@ void *malloc(size_t request) {
 }
 
 void free(void *addr) {
-  struct chunkhdr *ch = (struct chunkhdr *)((uint32_t)addr&~(PAGESIZE-1));
+  struct chunkhdr *ch = (struct chunkhdr *)((u32)addr&~(PAGESIZE-1));
   *(void **)addr = ch->freelist;
   ch->freelist = addr;
   ch->nfree++;

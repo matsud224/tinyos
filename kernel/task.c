@@ -14,7 +14,7 @@
 static struct tss tss;
 
 struct task *current;
-uint32_t pid_next = 0; 
+u32 pid_next = 0; 
 
 struct list_head run_queue;
 struct list_head wait_queue;
@@ -43,13 +43,13 @@ void task_b() {
   printf("file found inode=%x\n", ino);
   vm_add_area(current->vmmap, 0x20000, PAGESIZE*2, inode_mapper_new(ino, 0), 0);
 
-  /*for(uint32_t addr=0x20000; addr<0x20200; addr++) {
+  /*for(u32 addr=0x20000; addr<0x20200; addr++) {
     printf("%c", *(char*)addr);
     if(*(char*)addr == '\0')
       break;
   }*/
  
-  uint8_t data;
+  u8 data;
   while(1) {
     if(chardev_read(0, &data, 1) == 1) {
       rtl8139_tx();
@@ -86,7 +86,7 @@ void task_init() {
 }
 
 void kernstack_setaddr() {
-  tss.esp0 = (uint32_t)((uint8_t *)(current->kernstack) + current->kernstacksize);
+  tss.esp0 = (u32)((u8 *)(current->kernstack) + current->kernstacksize);
 }
 
 
@@ -101,10 +101,10 @@ struct task *kernel_task_new(void *eip) {
   t->kernstack = page_alloc();
   bzero(t->kernstack, PAGESIZE);
   t->kernstacksize = PAGESIZE;
-  t->regs.esp = (uint32_t)((uint8_t *)(t->kernstack) + t->kernstacksize - 4);
-  *(uint32_t *)t->regs.esp = eip;
+  t->regs.esp = (u32)((u8 *)(t->kernstack) + t->kernstacksize - 4);
+  *(u32 *)t->regs.esp = eip;
   t->regs.esp -= 4*5;
-  *(uint32_t *)t->regs.esp = 0x200; //initial eflags(IF=1)
+  *(u32 *)t->regs.esp = 0x200; //initial eflags(IF=1)
   t->next = NULL;
   return t;
 }

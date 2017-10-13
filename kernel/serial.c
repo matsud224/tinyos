@@ -4,6 +4,7 @@
 #include "kernasm.h"
 #include "idt.h"
 #include "kernlib.h"
+#include "task.h"
 
 #define COMPORT_NUM 2
 

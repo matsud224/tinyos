@@ -1,9 +1,8 @@
 #include "page.h"
 #include "kernasm.h"
-#include "malloc.h"
 #include "blkdev.h"
-#include <stdint.h>
-#include <stddef.h>
+#include "kernlib.h"
+#include "task.h"
 
 struct blkdev *blkdev_tbl[MAX_BLKDEV];
 static u16 nblkdev;

@@ -1,4 +1,5 @@
 #include "netdev.h"
+#include "task.h"
 
 struct netdev *netdev_tbl[MAX_NETDEV];
 static u16 nnetdev;

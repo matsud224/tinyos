@@ -1,8 +1,7 @@
 #include "page.h"
-#include "malloc.h"
 #include "chardev.h"
-#include <stdint.h>
-#include <stddef.h>
+#include "kernlib.h"
+#include "task.h"
 
 struct chardev *chardev_tbl[MAX_CHARDEV];
 static u16 nchardev;

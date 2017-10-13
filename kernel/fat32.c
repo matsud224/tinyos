@@ -268,7 +268,7 @@ static char *get_sfn(struct fat32_dent *sfnent) {
         break;
     }
   }
-  *ptr = NULL;
+  *ptr = '\0';
   return name;
 }
  

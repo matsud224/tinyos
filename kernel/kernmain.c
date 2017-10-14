@@ -45,7 +45,11 @@ KERNENTRY void kernel_main(void) {
   serial_init();
   v6fs_init();
   fat32_init();
-  rtl8139_probe();
+  netdev_init();
+  if(rtl8139_probe())
+    puts("RTL8139 found");
+  else
+    puts("RTL8139 not found");
   task_init();
   HALT;
 }

@@ -92,6 +92,8 @@ enum tsd {
 #define TXQUEUE_COUNT		64
 #define TXQUEUE_SIZE		(TXQUEUE_COUNT*sizeof(intptr_t))
 
+#define TXDESC_NUM				4
+
 static struct {
   struct pci_dev *pci;
   u16 iobase;
@@ -100,7 +102,10 @@ static struct {
   u8 rxbuf[RXBUF_TOTAL];
   u16 rxbuf_index;
   u32 rxbuf_size;
-  u8 cur_txreg;
+  u8 txdesc_head;
+  u8 txdesc_tail;
+  u8 txdesc_free;
+  struct pktbuf_head *txdesc_pkt[TXDESC_NUM];
 	struct netdev_queue *rxqueue;
 	struct netdev_queue *txqueue;
   struct netdev netdev_info;
@@ -108,11 +113,11 @@ static struct {
 
 #define RTLREG(r) ((r)+rtldev.iobase)
 
-static const u16 TX_TSD[4] = {
+static const u16 TX_TSD[TXDESC_NUM] = {
   TSD, TSD+4, TSD+8, TSD+12
 };
 
-static const u16 TX_TSAD[4] = {
+static const u16 TX_TSAD[TXDESC_NUM] = {
   TSAD, TSAD+4, TSAD+8, TSAD+12
 };
 
@@ -137,7 +142,8 @@ void rtl8139_init(struct pci_dev *thisdev) {
   rtldev.iobase &= 0xfffc;
   rtldev.irq = pci_config_read8(thisdev, PCI_INTLINE);
   rtldev.rxbuf_index = 0;
-  rtldev.cur_txreg = 0;
+  rtldev.txdesc_head = rtldev.txdesc_tail = 0;
+  rtldev.txdesc_free = TXDESC_NUM;
 	rtldev.rxqueue = ndqueue_create(malloc(RXQUEUE_SIZE), RXQUEUE_COUNT);
 	rtldev.txqueue = ndqueue_create(malloc(TXQUEUE_SIZE), TXQUEUE_COUNT);
   for(int i=0; i<6; i++)
@@ -154,6 +160,9 @@ void rtl8139_init(struct pci_dev *thisdev) {
   u16 pci_cmd = pci_config_read16(thisdev, PCI_COMMAND);
   pci_cmd |= 0x4;
   //pci_config_write16(thisdev, PCI_COMMAND, pci_cmd);
+
+/* FIXME: pci_config_write8 & 16 are  broken. */
+
 #define PCI_CONFIG_ADDR 0xcf8
 #define PCI_CONFIG_DATA 0xcfc
   u32 addr = (thisdev->bus<<16) | (thisdev->dev<<11) | (thisdev->func<<8) | (PCI_COMMAND) | 0x80000000u;
@@ -183,6 +192,8 @@ int rtl8139_probe() {
   struct pci_dev *thisdev = pci_search_device(RTL8139_VENDORID, RTL8139_DEVICEID);
   if(thisdev!=NULL)
     rtl8139_init(thisdev);
+  rtldev.netdev_info.ops = &rtl8139_ops;
+  netdev_add(&rtldev.netdev_info);
   return (thisdev != NULL);
 }
 
@@ -215,31 +226,53 @@ struct ether_hdr{
   .payload = "This is a test packet."
 };
 
-int rtl8139_tx_one(void *buf, size_t size) {
-  while((in32(RTLREG(TX_TSD[rtldev.cur_txreg])) & TSD_OWN) == 0)
-    return -1; 
-  out32(RTLREG(TX_TSAD[rtldev.cur_txreg]), KERN_VMEM_TO_PHYS(buf));
-  out32(RTLREG(TX_TSD[rtldev.cur_txreg]),size); 
-  rtldev.cur_txreg = (rtldev.cur_txreg+1)%4;
-  printf("sent size=%d\n", sizeof(epkt));
-  return 1;
+int rtl8139_tx_one() {
+  struct pktbuf_head *pkt = NULL;
+	if(NDQUEUE_IS_EMPTY(rtldev.txqueue))
+    return -1;
+  
+  pkt = ndqueue_dequeue(rtldev.txqueue);
+  if(pkt == NULL)
+    return -1;
+
+  if(rtldev.txdesc_free > 0) {
+    if(pktbuf_is_nonlinear(pkt)) {
+      struct pktbuf_head *oldpkt = pkt;
+      pkt = pktbuf_copy_linear(pkt);
+      pktbuf_free(oldpkt);
+    }
+    out32(RTLREG(TX_TSAD[rtldev.txdesc_head]), KERN_VMEM_TO_PHYS(pkt->data));
+    rtldev.txdesc_pkt[rtldev.txdesc_head] = KERN_VMEM_TO_PHYS(pkt->data);
+    out32(RTLREG(TX_TSD[rtldev.txdesc_head]), pkt->total); 
+    rtldev.txdesc_free--;
+    rtldev.txdesc_head = (rtldev.txdesc_head+1) % TXDESC_NUM;
+    printf("sent size=%d\n", sizeof(epkt));
+    return 0;
+  }
+  return -1;
 }
 
 int rtl8139_tx_all() {
-
+  while(rtl8139_tx_one() == 0);
 }
 
 int rtl8139_rx_one() {
+  int error = 0;
+  if((in8(RTLREG(CR)) & CR_BUFE) == 1)
+    return -1;
+
   u32 offset = rtldev.rxbuf_index % RXBUF_SIZE;
   u32 pkt_hdr = *((u32 *)(rtldev.rxbuf+offset));
   u16 rx_status = pkt_hdr&0xffff;
   u16 rx_size = pkt_hdr>>16;
+
   if(rx_status & PKTHDR_RUNT ||
      rx_status & PKTHDR_LONG ||
      rx_status & PKTHDR_CRC ||
      rx_status & PKTHDR_FAE ||
      (rx_status & PKTHDR_ROK) == 0) {
     puts("bad packet.");
+    error = -2;
     goto out;
   }
 
@@ -247,29 +280,37 @@ int rtl8139_rx_one() {
     u8 *buf = malloc(rx_size-4);
     memcpy(buf, rtldev.rxbuf+offset+4, rx_size-4);
     ndqueue_enqueue(rtldev.rxqueue, pktbuf_create(buf, rx_size-4, free));
-	}
+    printf("received %dbytes\n", rx_size-4);
+	} else {
+    printf("dropped %dbytes\n", rx_size-4);
+  }
   
 out:
   rtldev.rxbuf_index = (offset + rx_size + 4 + 3) & ~3;
   out16(RTLREG(CAPR), rtldev.rxbuf_index - 16);
+  return error;
 }
 
 int rtl8139_rx_all() {
-  while((in8(RTLREG(CR)) & CR_BUFE) == 0)
-    rtl8139_rx_one();
+  while(rtl8139_rx_one() == 0);
 }
 
 void rtl8139_isr() {
   u16 isr = in16(RTLREG(ISR));
-  //if((in32(RTLREG(TX_TSD[0])&(TSD_OWN|TSD_TOK)) == (TSD_OWN|TSD_TOK)) {
   if(isr & ISR_TOK)
     out16(RTLREG(ISR), ISR_TOK);
   if(isr & (ISR_FOVW|ISR_RXOVW|ISR_ROK))
     out16(RTLREG(ISR), ISR_FOVW|ISR_RXOVW|ISR_ROK);
 
+  while(rtldev.txdesc_free < 4 &&
+    in32(RTLREG(TX_TSD[rtldev.txdesc_tail])&(TSD_OWN|TSD_TOK)) == (TSD_OWN|TSD_TOK)) {
+    pktbuf_free(rtldev.txdesc_pkt[rtldev.txdesc_tail]);
+    rtldev.txdesc_tail = (rtldev.txdesc_tail+1) % TXDESC_NUM;
+    rtldev.txdesc_free++;
+  }
+
   if(isr & ISR_TOK)
     rtl8139_tx_all();
-
   if(isr & ISR_ROK)
     rtl8139_rx_all();
 
@@ -291,7 +332,6 @@ int rtl8139_tx(struct netdev *dev UNUSED, struct pktbuf_head *pkt) {
 }
 
 struct pktbuf_head *rtl8139_rx(struct netdev *dev UNUSED) {
-  rtl8139_rx_all();
   return ndqueue_dequeue(rtldev.rxqueue);
 }
 

@@ -1,5 +1,4 @@
 #pragma once
-
 #include "protohdr.h"
 
 void ethernet_initialize(void);

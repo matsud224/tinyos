@@ -94,4 +94,16 @@ int pktbuf_is_nonlinear(struct pktbuf_head *head) {
   return head->total != head->size;
 }
 
+struct pktbuf_head *pktbuf_copy_linear(struct pktbuf_head *pkt) {
+  struct pktbuf_head *new = pktbuf_alloc(pkt->total);
+  pktbuf_write_fragment(new, pkt->head, pkt->size);
+
+  struct pktbuf_fragment *frag = pkt->next_frag;
+  while(frag != NULL) {
+    pktbuf_write_fragment(new, frag->head, frag->size);
+    frag = frag->next;
+  }
+
+  return new;
+}
 

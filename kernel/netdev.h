@@ -3,7 +3,7 @@
 #include "netdev.h"
 #include "pktbuf.h"
 
-#define NDQUEUE_IS_EMPTY(b) ((b)->size == (b)->free)
+#define NDQUEUE_IS_EMPTY(b) ((b)->count == (b)->free)
 #define NDQUEUE_IS_FULL(b) ((b)->free == 0)
 
 struct netdev_queue {

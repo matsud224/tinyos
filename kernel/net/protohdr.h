@@ -1,7 +1,5 @@
 #pragma once
-
-#include <stdint.h>
-#include <stddef.h>
+#include "types.h"
 #include "envdep.h"
 
 //Ethernet
@@ -12,38 +10,6 @@ struct ether_hdr{
 	u8 ether_shost[ETHER_ADDR_LEN];
 	u16 ether_type;
 };
-
-//受信したものはEthernetフレームをそのままたらい回しにする
-struct ether_flame{
-	u32 size;
-	char *buf;
-
-	~ether_flame(){
-		delete [] buf;
-	}
-};
-
-
-//送信時に上位層からだんだんヘッダを重ねていくために使う
-//   tcp/udpセグメント<-ipヘッダ<-ethernetヘッダ
-//のように連結リストで管理して、送信時には順番に書き出す
-//hdrstackという名前だが、ペイロードも統一して扱う
-struct hdrstack{
-	hdrstack *next;
-	u32 size;
-	char *buf;
-	bool delete_needed; //デストラクタでbufをdeleteする責任を負うか
-
-	hdrstack(bool delete_needed){
-		this->delete_needed = delete_needed;
-	}
-
-	~hdrstack(){
-		if(next!=NULL) delete next;
-		if(delete_needed && buf!=NULL) delete [] buf;
-	}
-};
-
 #define ETHERTYPE_IP	0x0800
 #define ETHERTYPE_ARP	0x0806
 

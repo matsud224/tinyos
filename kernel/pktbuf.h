@@ -36,4 +36,4 @@ void pktbuf_remove_header(struct pktbuf_head *head, u32 size);
 int pktbuf_write_fragment(struct pktbuf_head *head, u8 *buf, u32 size);
 void pktbuf_add_fragment(struct pktbuf_head *head, u8 *buf, u32 size, void (*freefunc)(u8 *));
 int pktbuf_is_nonlinear(struct pktbuf_head *head);
-
+struct pktbuf_head *pktbuf_copy_linear(struct pktbuf_head *pkt);

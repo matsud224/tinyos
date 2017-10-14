@@ -7,6 +7,7 @@
 #include "vmem.h"
 #include "kernlib.h"
 #include "chardev.h"
+#include "netdev.h"
 
 static struct tss tss;
 
@@ -21,7 +22,9 @@ void task_a() {
   pit_init();
   sti();
   while(1) {
-    //int80(); 
+    struct pktbuf_head *pkt = netdev_rx(0);
+    printf("Pakcet received: %d byte\n", pkt->total);
+    pktbuf_free(pkt);
   }
 }
 

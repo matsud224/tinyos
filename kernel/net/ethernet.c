@@ -2,48 +2,38 @@
 #include "util.h"
 #include "protohdr.h"
 
-void etherrecv_task(intptr_t exinf) {
-  while(true){
-		twai_sem(ETHERRECV_SEM, 10);
-		for(int i=0; i<16; i++){
-			wai_sem(ETHERIO_SEM);
-			u32 size = ethernet_receive();
-			if(size > sizeof(ether_hdr)){
-				char *buf = new char[size];
-				ethernet_read(buf, size);
-				sig_sem(ETHERIO_SEM);
+void ethernet_rx(struct pktbuf_head *frame) {
+  if(frame->total < sizeof(ether_hdr))
+    goto reject;
 
-				ether_hdr *ehdr = (ether_hdr*)buf;
-				if(memcmp(ehdr->ether_dhost, MACADDR, ETHER_ADDR_LEN)!=0 &&
-					 memcmp(ehdr->ether_dhost, ETHERBROADCAST, ETHER_ADDR_LEN)!=0){
-					delete [] buf; continue;
-				}
+  struct ether_hdr *ehdr = (struct ether_hdr *)frame->data;
+  if(memcmp(ehdr->ether_dhost, MACADDR, ETHER_ADDR_LEN)!=0 &&
+    memcmp(ehdr->ether_dhost, ETHERBROADCAST, ETHER_ADDR_LEN)!=0){
+    goto reject;
+  }
 
-				ether_flame *flm = new ether_flame;
-				flm->size = size;
-				flm->buf = buf;
-				switch(ntoh16(ehdr->ether_type)){
-				case ETHERTYPE_IP:
-					ip_process(flm, (ip_hdr*)(ehdr+1));
-					break;
-				case ETHERTYPE_ARP:
-					arp_process(flm, (ether_arp*)(ehdr+1));
-					break;
-				default:
-					delete flm;
-					break;
-				}
-			}else{
-				sig_sem(ETHERIO_SEM);
-			}
-		}
-    }
+  pktbuf_remove_header(frame, sizeof(struct ether_hdr));
+  switch(ntoh16(ehdr->ether_type)){
+  case ETHERTYPE_IP:
+		ip_rx(frame);
+		break;
+  case ETHERTYPE_ARP:
+		arp_rx(frame);
+    break;
+  default:
+    goto reject;
+    break;
+  }
+
+  return;
+
+reject:
+  pkt_free(frame);
+  return;
 }
 
-void ethernet_send(ether_flame *flm){
-	ethernet_write(flm->buf, flm->size);
-	ethernet_send();
-	sig_sem(ETHERIO_SEM);
-	return;
+void ethernet_tx(struct pktbuf_head *frame){
+  netdev_tx(0, frame);
+  return;
 }
 

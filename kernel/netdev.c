@@ -49,9 +49,10 @@ int ndqueue_enqueue(struct netdev_queue *q, struct pktbuf_head *pkt) {
 
 int netdev_tx(devno_t devno, struct pktbuf_head *pkt) {
   struct netdev *dev = netdev_tbl[devno];
-  while(1) {
+  int res = -1;
+  while(res < 0) {
     cli();
-    int res = dev->ops->tx(dev, pkt);
+    dev->ops->tx(dev, pkt);
     if(res < 0)
       task_sleep(dev);
     sti();
@@ -70,7 +71,7 @@ int netdev_tx_nowait(devno_t devno, struct pktbuf_head *pkt) {
 struct pktbuf_head *netdev_rx(devno_t devno) {
   struct netdev *dev = netdev_tbl[devno];
   struct pktbuf_head *pkt = NULL;
-  while(1) {
+  while(pkt == NULL) {
     cli();
     pkt = dev->ops->rx(dev);
     if(pkt == NULL)

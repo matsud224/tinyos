@@ -21,11 +21,9 @@ void task_a() {
   cli();
   pit_init();
   sti();
-  while(1) {
-    struct pktbuf_head *pkt = netdev_rx(0);
-    printf("Pakcet received: %d byte\n", pkt->total);
-    pktbuf_free(pkt);
-  }
+  struct pktbuf_head *pkt = netdev_rx(0);
+  printf("Pakcet received: %d byte\n", pkt->total);
+  pktbuf_free(pkt);
 }
 
 void task_b() {
@@ -48,7 +46,7 @@ void task_b() {
     if(*(char*)addr == '\0')
       break;
   }*/
- 
+return; 
   u8 data;
   while(1) {
     if(chardev_read(0, &data, 1) == 1) {
@@ -75,9 +73,9 @@ void task_init() {
   ltr(GDT_SEL_TSS);
 
   struct task *ta, *tb, *tc;
-  ta = kernel_task_new(task_a);
-  tb = kernel_task_new(task_b);
-  tc = kernel_task_new(task_idle);
+  ta = kernel_task_new(task_a, 0);
+  tb = kernel_task_new(task_b, 1);
+  tc = kernel_task_new(task_idle, 1);
   current = ta;
   task_run(tb);
   task_run(tc);
@@ -89,7 +87,8 @@ void kernstack_setaddr() {
 }
 
 
-struct task *kernel_task_new(void *eip) {
+void task_exit(void);
+struct task *kernel_task_new(void *eip, int intenable) {
   struct task *t = malloc(sizeof(struct task));
   bzero(t, sizeof(struct task));
   t->vmmap = vm_map_new();
@@ -101,10 +100,11 @@ struct task *kernel_task_new(void *eip) {
   bzero(t->kernstack, PAGESIZE);
   t->kernstacksize = PAGESIZE;
   t->regs.esp = (u32)((u8 *)(t->kernstack) + t->kernstacksize - 4);
+  *(u32 *)t->regs.esp = (u32)task_exit;
+  t->regs.esp -= 4;
   *(u32 *)t->regs.esp = eip;
   t->regs.esp -= 4*5;
-  *(u32 *)t->regs.esp = 0x200; //initial eflags(IF=1)
-  t->next = NULL;
+  *(u32 *)t->regs.esp = intenable?0x200:0; //initial eflags(IF=1)
   return t;
 }
 
@@ -112,6 +112,11 @@ void task_run(struct task *t) {
   t->state = TASK_STATE_RUNNING;
   list_pushback(&(t->link), &run_queue);
   return;
+}
+
+void freetask(struct task *t) {
+  page_free(t->kernstack);
+  free(t);
 }
 
 void task_sched() {
@@ -123,14 +128,21 @@ void task_sched() {
   case TASK_STATE_WAITING:
     list_pushback(&(current->link), &wait_queue);
     break;
+  case TASK_STATE_EXITED:
+    freetask(current);
+    break;
   }
   struct list_head *next = list_pop(&run_queue);
-  if(next == NULL)
+  if(next == NULL) {
     puts("no task!");
+    while(1)
+      cpu_halt();
+  }
   current = container_of(next, struct task, link);
 }
 
 void task_sleep(void *cause) {
+  printf("task#%d sleep\n", current->pid);
   current->state = TASK_STATE_WAITING;
   current->waitcause = cause;
   task_yield();
@@ -142,6 +154,7 @@ void task_wakeup(void *cause) {
   list_foreach_safe(h, tmp, &wait_queue) {
     struct task *t = container_of(h, struct task, link); 
     if(t->waitcause == cause) {
+  printf("task#%d wakeup\n", t->pid);
       wake = 1;
       t->state = TASK_STATE_RUNNING;
       list_remove(h);
@@ -150,3 +163,8 @@ void task_wakeup(void *cause) {
   }
 }
 
+void task_exit() {
+  printf("task#%d exit\n", current->pid);
+  current->state = TASK_STATE_EXITED;
+  task_yield();
+}

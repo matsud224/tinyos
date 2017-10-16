@@ -2,7 +2,8 @@
 
 struct pktbuf_head *pktbuf_create(u8 *buf, u32 size, void (*freefunc)(u8 *)) {
   struct pktbuf_head *head = malloc(sizeof(struct pktbuf_head));
-  head->total = head->size = 0;
+  head->size = 0;
+  head->total = size;
   head->head = head->data = head->tail = buf;
   head->end = buf + size;
   

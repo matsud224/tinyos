@@ -254,6 +254,7 @@ int rtl8139_tx_one() {
 
 int rtl8139_tx_all() {
   while(rtl8139_tx_one() == 0);
+  task_wakeup(&rtldev.netdev_info);
 }
 
 int rtl8139_rx_one() {
@@ -280,9 +281,9 @@ int rtl8139_rx_one() {
     u8 *buf = malloc(rx_size-4);
     memcpy(buf, rtldev.rxbuf+offset+4, rx_size-4);
     ndqueue_enqueue(rtldev.rxqueue, pktbuf_create(buf, rx_size-4, free));
-    printf("received %dbytes\n", rx_size-4);
+    //printf("received %dbytes\n", rx_size-4);
 	} else {
-    printf("dropped %dbytes\n", rx_size-4);
+    //printf("dropped %dbytes\n", rx_size-4);
   }
   
 out:
@@ -293,6 +294,7 @@ out:
 
 int rtl8139_rx_all() {
   while(rtl8139_rx_one() == 0);
+  task_wakeup(&rtldev.netdev_info);
 }
 
 void rtl8139_isr() {

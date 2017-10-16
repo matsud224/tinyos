@@ -67,6 +67,10 @@ struct vm_map *vm_map_new() {
   return m;
 }
 
+void vm_map_free(struct vm_map *vmmap) {
+  
+}
+
 int vm_add_area(struct vm_map *map, u32 start, size_t size, struct mapper *mapper, u32 flags UNUSED) {
   struct vm_area *a;
 

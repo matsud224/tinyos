@@ -43,6 +43,7 @@ struct task_state {
 
 #define TASK_STATE_RUNNING	0
 #define TASK_STATE_WAITING	1
+#define TASK_STATE_EXITED		2
 
 struct task {
   struct task_state regs;
@@ -53,14 +54,13 @@ struct task {
   u8 state;
   u32 flags;
   u32 pid;
-  struct task *next;
   void *waitcause;
 };
 
 
 void task_init(void);
 void kernstack_setaddr(void);
-struct task *kernel_task_new(void *eip);
+struct task *kernel_task_new(void *eip, int intenable);
 void task_run(struct task *t);
 void task_sched(void);
 void task_sleep(void *cause);

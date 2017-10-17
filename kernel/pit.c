@@ -17,7 +17,8 @@
 
 #define PIT_IRQ 0 
 
-#define CNT_100HZ 0x2e9c
+#define CNT_100HZ 0x2e9b
+
 
 void pit_isr(void);
 void pit_inthandler(void);
@@ -31,8 +32,8 @@ void pit_isr() {
 void pit_init() {
   out8(PIT_MODE_CMD_REG,
         PIT_CNTMODE_BIN | PIT_OPMODE_RATE | PIT_LOAD16 | PIT_CNT0);
-  out8(PIT_CH0_DATA, CNT_100HZ >> 8);
   out8(PIT_CH0_DATA, CNT_100HZ & 0xff);
+  out8(PIT_CH0_DATA, CNT_100HZ >> 8);
   idt_register(IRQ_TO_INTVEC(PIT_IRQ), IDT_INTGATE, pit_inthandler);
   pic_clearmask(PIT_IRQ);
 }

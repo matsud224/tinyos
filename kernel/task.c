@@ -99,7 +99,7 @@ void task_deferred() {
 
 void timer_call(void *arg ) {
   puts("hello,world!");
-  timer_start(50, timer_call, NULL);
+  timer_start(1*SEC, timer_call, NULL);
 }
 
 void task_init() {

@@ -1,14 +1,13 @@
 #include "trap.h"
-#include "vga.h"
-#include <stdint.h>
 #include "kernasm.h"
 #include "vmem.h"
 #include "pagetbl.h"
 #include "task.h"
+#include "kernlib.h"
 
 void gpe_isr() {
-  puts("General Protection Exception");
-  while(1);
+  printf("General Protection Exception in task#%d\n", current->pid);
+  task_exit();
 }
 
 void pf_isr(u32 addr) {
@@ -16,8 +15,8 @@ void pf_isr(u32 addr) {
   //printf("eip=%x, esp=%x\n", current->regs.eip, current->regs.esp);
   struct vm_area *varea = vm_findarea(current->vmmap, addr);
   if(varea == NULL) {
-    puts("Segmentation fault!\n");
-    while(1);
+    printf("Segmentation Fault in task#%d\n", current->pid);
+    task_exit();
   } else {
     u32 paddr = varea->mapper->ops->request(varea->mapper, addr - varea->start);
     pagetbl_add_mapping(current->regs.cr3, addr, paddr);

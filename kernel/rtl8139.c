@@ -5,6 +5,8 @@
 #include "kernlib.h"
 #include "pci.h"
 #include "params.h"
+#include "ethernet.h"
+#include "task.h"
 
 #define RTL8139_VENDORID 0x10ec
 #define RTL8139_DEVICEID 0x8139
@@ -197,35 +199,6 @@ int rtl8139_probe() {
   return (thisdev != NULL);
 }
 
-#define ETHER_ADDR_LEN	6
-void packet_analyze(u8 *buf) {
-  struct ether_hdr{
-    u8 ether_dhost[ETHER_ADDR_LEN];
-    u8 ether_shost[ETHER_ADDR_LEN];
-    u16 ether_type;
-  } *ehdr = buf;
-  printf("from : %x:%x:%x:%x:%x:%x\n",
-          ehdr->ether_shost[0], 
-          ehdr->ether_shost[1], 
-          ehdr->ether_shost[2], 
-          ehdr->ether_shost[3], 
-          ehdr->ether_shost[4], 
-          ehdr->ether_shost[5]);
-  free(buf);
-}
-
-struct ether_hdr{
-  u8 ether_dhost[ETHER_ADDR_LEN];
-  u8 ether_shost[ETHER_ADDR_LEN];
-  u16 ether_type;
-  u8 payload[128];
-} epkt = {
-  .ether_dhost = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
-  .ether_shost = {0xde, 0xad, 0xbe, 0xef, 0x00, 0x00},
-  .ether_type = 0x0000,
-  .payload = "This is a test packet."
-};
-
 int rtl8139_tx_one() {
   struct pktbuf_head *pkt = NULL;
 	if(NDQUEUE_IS_EMPTY(rtldev.txqueue))
@@ -246,7 +219,6 @@ int rtl8139_tx_one() {
     out32(RTLREG(TX_TSD[rtldev.txdesc_head]), pkt->total); 
     rtldev.txdesc_free--;
     rtldev.txdesc_head = (rtldev.txdesc_head+1) % TXDESC_NUM;
-    printf("sent size=%d\n", sizeof(epkt));
     return 0;
   }
   return -1;
@@ -294,6 +266,7 @@ out:
 
 int rtl8139_rx_all() {
   while(rtl8139_rx_one() == 0);
+  defer_exec(ethernet_rx, rtldev.netdev_info.devno, 1);
   task_wakeup(&rtldev.netdev_info);
 }
 

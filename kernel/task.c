@@ -11,7 +11,7 @@
 
 static struct tss tss;
 
-struct task *current;
+struct task *current = NULL;
 u32 pid_next = 0; 
 
 struct list_head run_queue;
@@ -19,11 +19,14 @@ struct list_head wait_queue;
 
 void task_a() {
   cli();
+  netdev_init();
+  if(rtl8139_probe())
+    puts("RTL8139 found");
+  else
+    puts("RTL8139 not found");
+
   pit_init();
   sti();
-  struct pktbuf_head *pkt = netdev_rx(0);
-  printf("Pakcet received: %d byte\n", pkt->total);
-  pktbuf_free(pkt);
 }
 
 void task_b() {
@@ -46,7 +49,14 @@ void task_b() {
     if(*(char*)addr == '\0')
       break;
   }*/
-return; 
+}
+
+void task_idle() {
+  while(1)
+    cpu_halt();
+}
+
+void task_echo() {
   u8 data;
   while(1) {
     if(chardev_read(0, &data, 1) == 1) {
@@ -55,15 +65,42 @@ return;
   }
 }
 
-void task_idle() {
-  while(1)
-    cpu_halt();
+struct deferred_func {
+  struct list_head link;
+  void (*func)(void *);
+  void *arg;
+};
+
+struct list_head deferred_list;
+
+void defer_exec(void (*func)(void *), void *arg, int priority) {
+  struct deferred_func *f = malloc(sizeof(struct deferred_func));
+  f->func = func;
+  f->arg = arg;
+  if(priority == 0)
+    list_pushfront(f, &deferred_list);
+  else
+    list_pushback(f, &deferred_list);
+
+  task_wakeup(&deferred_list);
+}
+
+void task_deferred() {
+  while(1) {
+    struct list_head *item;
+    while((item=list_pop(&deferred_list)) == NULL)
+      task_sleep(&deferred_list);
+    struct deferred_func *f = container_of(item, struct deferred_func, link);
+    (f->func)(f->arg);
+    free(f);
+  }
 }
 
 void task_init() {
   current = NULL;
   list_init(&run_queue);
   list_init(&wait_queue);
+  list_init(&deferred_list);
 
   bzero(&tss, sizeof(struct tss));
   tss.ss0 = GDT_SEL_DATASEG_0;
@@ -72,13 +109,11 @@ void task_init() {
   gdt_settssbase(&tss);
   ltr(GDT_SEL_TSS);
 
-  struct task *ta, *tb, *tc;
-  ta = kernel_task_new(task_a, 0);
-  tb = kernel_task_new(task_b, 1);
-  tc = kernel_task_new(task_idle, 1);
-  current = ta;
-  task_run(tb);
-  task_run(tc);
+  task_run(kernel_task_new(task_a, 0));
+  task_run(kernel_task_new(task_b, 1));
+  task_run(kernel_task_new(task_idle, 1));
+  task_run(kernel_task_new(task_deferred, 1));
+  task_run(kernel_task_new(task_echo, 1));
   jmpto_current();
 }
 
@@ -110,8 +145,10 @@ struct task *kernel_task_new(void *eip, int intenable) {
 
 void task_run(struct task *t) {
   t->state = TASK_STATE_RUNNING;
-  list_pushback(&(t->link), &run_queue);
-  return;
+  if(current == NULL)
+    current = t;
+  else
+    list_pushback(&(t->link), &run_queue);
 }
 
 void freetask(struct task *t) {

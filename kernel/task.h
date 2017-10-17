@@ -65,3 +65,4 @@ void task_run(struct task *t);
 void task_sched(void);
 void task_sleep(void *cause);
 void task_wakeup(void *cause);
+void defer_exec(void (*func)(void *), void *arg, int priority);

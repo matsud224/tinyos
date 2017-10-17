@@ -98,8 +98,8 @@ void task_deferred() {
 }
 
 void timer_call(void *arg ) {
-  puts("hello,world!");
-  timer_start(1*SEC, timer_call, NULL);
+  printf("%d sec!\n", (u32)arg/100);
+  timer_start((u32)arg, timer_call, arg);
 }
 
 void task_init() {
@@ -115,7 +115,8 @@ void task_init() {
   gdt_settssbase(&tss);
   ltr(GDT_SEL_TSS);
 
-  timer_start(20, timer_call, NULL);
+  timer_start(2*SEC, timer_call, 2*SEC);
+  timer_start(3*SEC, timer_call, 3*SEC);
 
   task_run(kernel_task_new(task_a, 0));
   task_run(kernel_task_new(task_b, 1));

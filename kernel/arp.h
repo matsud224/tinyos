@@ -2,27 +2,19 @@
 #include "protohdr.h"
 #include "netconf.h"
 
-struct flist{
-	flist *next;
-	hdrstack *flm;
-	~flist(){
-		if(next!=NULL) delete next;
-		delete flm;
-	}
-};
-
 struct arpentry{
-	uint8_t macaddr[ETHER_ADDR_LEN];
-	uint32_t ipaddr; //ネットワークバイトオーダ
-	uint16_t timeout;
+	u8 macaddr[ETHER_ADDR_LEN];
+	u32 ipaddr; //ネットワークバイトオーダ
+	u16 timeout;
 #define ARPTBL_PERMANENT 0xffff //timeoutをこの値にした時はタイムアウトしない
-	flist *pending; //アドレス解決待ちのフレーム
+	struct list_head pending; //アドレス解決待ちのフレーム
 };
 
-extern arpentry arptable[MAX_ARPTABLE];
+extern struct arpentry arptable[MAX_ARPTABLE];
 
-void arp_process(ether_flame *flm, ether_arp *earp);
-void arp_send(hdrstack *packet, uint8_t dstaddr[], uint16_t proto);
-void register_arptable(uint32_t ipaddr, uint8_t macaddr[], bool is_permanent);
-ether_flame *make_arprequest_flame(uint8_t dstaddr[]);
+void arp_init(void);
+void arp_rx(struct pktbuf_head *frm, ether_arp *earp);
+void arp_tx(struct pktbuf_head *packet, u8 dstaddr[], u16 proto);
+void register_arptable(u32 ipaddr, u8 macaddr[], bool is_permanent);
+struct pktbuf_head *make_arprequest_frame(u8 dstaddr[]);
 

@@ -119,6 +119,12 @@ getcr2:
   mov eax, cr2
   ret
 
+global geteflags
+geteflags:
+  pushfd
+  pop eax
+  ret
+
 extern current
 global flushtlb
 flushtlb:

@@ -15,6 +15,7 @@ void ltr(u16 sel);
 void sti(void);
 void cli(void);
 u32 getcr2(void);
+u32 geteflags(void);
 void flushtlb(void *addr);
 void a20_enable(void);
 void saveesp(void);

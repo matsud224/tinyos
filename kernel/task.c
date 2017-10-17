@@ -8,6 +8,7 @@
 #include "kernlib.h"
 #include "chardev.h"
 #include "netdev.h"
+#include "timer.h"
 
 static struct tss tss;
 
@@ -96,6 +97,11 @@ void task_deferred() {
   }
 }
 
+void timer_call(void *arg ) {
+  puts("hello,world!");
+  timer_start(50, timer_call, NULL);
+}
+
 void task_init() {
   current = NULL;
   list_init(&run_queue);
@@ -108,6 +114,8 @@ void task_init() {
   gdt_init();
   gdt_settssbase(&tss);
   ltr(GDT_SEL_TSS);
+
+  timer_start(20, timer_call, NULL);
 
   task_run(kernel_task_new(task_a, 0));
   task_run(kernel_task_new(task_b, 1));
@@ -179,7 +187,7 @@ void task_sched() {
 }
 
 void task_sleep(void *cause) {
-  printf("task#%d sleep\n", current->pid);
+  //printf("task#%d sleep\n", current->pid);
   current->state = TASK_STATE_WAITING;
   current->waitcause = cause;
   task_yield();
@@ -191,7 +199,7 @@ void task_wakeup(void *cause) {
   list_foreach_safe(h, tmp, &wait_queue) {
     struct task *t = container_of(h, struct task, link); 
     if(t->waitcause == cause) {
-  printf("task#%d wakeup\n", t->pid);
+  //printf("task#%d wakeup\n", t->pid);
       wake = 1;
       t->state = TASK_STATE_RUNNING;
       list_remove(h);

@@ -1,6 +1,7 @@
 #include "pit.h"
 #include "pic.h"
 #include "idt.h"
+#include "timer.h"
 #include "kernasm.h"
 
 #define PIT_CH0_DATA 0x40
@@ -22,6 +23,7 @@ void pit_isr(void);
 void pit_inthandler(void);
 
 void pit_isr() {
+  timer_tick();
   pic_sendeoi();
   task_yield();
 }

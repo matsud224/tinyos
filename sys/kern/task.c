@@ -20,15 +20,6 @@ static struct list_head run_queue;
 static struct list_head wait_queue;
 
 void task_a() {
-  cli();
-  netdev_init();
-  if(rtl8139_probe())
-    puts("RTL8139 found");
-  else
-    puts("RTL8139 not found");
-
-  pit_init();
-  sti();
   printf("%d pages free\n", page_getnfree());
 }
 
@@ -131,7 +122,7 @@ void task_init() {
   timer_start(2*SEC, timer_call, 2*SEC);
   timer_start(3*SEC, timer_call, 3*SEC);
 
-  task_run(kernel_task_new(task_a, 0));
+  task_run(kernel_task_new(task_a, 1));
   task_run(kernel_task_new(task_b, 1));
   task_run(kernel_task_new(task_idle, 1));
   task_run(kernel_task_new(task_deferred, 1));

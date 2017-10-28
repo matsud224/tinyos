@@ -16,6 +16,9 @@
           const typeof(((type *)0)->member) *__mptr=(ptr); \
           (type *)((char*)__mptr-offsetof(type, member));})
 
+#define DRIVER_INIT __attribute__((constructor))
+#define FS_INIT __attribute__((constructor))
+
 #define MAX(a, b) ((a)>(b)?(a):(b))
 #define MIN(a, b) ((a)<(b)?(a):(b))
 

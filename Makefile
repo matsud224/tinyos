@@ -13,6 +13,11 @@ BINDIR				= bin
 BOOTDIR				= boot
 SYSDIR				= sys
 
+CRTI_OBJ		 	= crti.o
+CRTBEGIN_OBJ	:= $(shell $(CC) $(CFLAGS) -print-file-name=crtbegin.o)
+CRTEND_OBJ		:= $(shell $(CC) $(CFLAGS) -print-file-name=crtend.o)
+CRTN_OBJ			= crtn.o
+
 .PHONY: all
 all:
 	-mkdir -p $(BINDIR)

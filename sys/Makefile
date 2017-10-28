@@ -6,9 +6,14 @@ RM				= rm -f
 
 BINDIR		= ../bin
 OBJDIR		= obj
-SUBDIRS		= kern dev fs
+SUBDIRS		= kern dev fs crt
 
 LDSCR			= ldscript.ld
+
+CRTI_OBJ      = crt/crti.o
+CRTBEGIN_OBJ  := $(shell $(CC) $(CFLAGS) -print-file-name=crtbegin.o)
+CRTEND_OBJ    := $(shell $(CC) $(CFLAGS) -print-file-name=crtend.o)
+CRTN_OBJ      = crt/crtn.o
 
 .PHONY: all
 all:
@@ -16,7 +21,7 @@ all:
 	$(MAKE) -C $$subdir || exit 1;\
 	done
 	-mkdir -p $(BINDIR)
-	$(CC) -T $(LDSCR) -o $(BINDIR)/kernel.elf -ffreestanding -nostdlib -lgcc $(OBJDIR)/*.o
+	$(CC) -T $(LDSCR) -o $(BINDIR)/kernel.elf -ffreestanding -nostdlib -lgcc $(CRTI_OBJ) $(CRTBEGIN_OBJ) $(OBJDIR)/*.o $(CRTEND_OBJ) $(CRTN_OBJ)
 	$(OBJCOPY) -O binary $(BINDIR)/kernel.elf $(BINDIR)/kernel.bin
 
 .PHONY: clean

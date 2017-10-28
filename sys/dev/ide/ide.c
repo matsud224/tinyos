@@ -263,7 +263,7 @@ static void ide_channel_init(u8 chan) {
   ide_setnien(chan);
 }
 
-void ide_init() {
+DRIVER_INIT void ide_init() {
   int drvno = -1;
   for(int chan = IDE_PRIMARY; chan <= IDE_SECONDARY; chan++) {
     ide_channel_init(chan);

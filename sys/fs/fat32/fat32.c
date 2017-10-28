@@ -127,7 +127,7 @@ struct fat32_inode {
 };
 
 
-void fat32_init() {
+FS_INIT void fat32_init() {
   fsinfo_add(&fat32_info);
 }
 

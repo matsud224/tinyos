@@ -61,7 +61,7 @@ static struct comport{
 };
 
 
-void serial_init() {
+DRIVER_INIT void serial_init() {
   for(int i=0; i<COMPORT_NUM; i++) {
     u16 base = comport[i].base;
 

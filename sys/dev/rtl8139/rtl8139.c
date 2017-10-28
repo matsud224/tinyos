@@ -149,7 +149,7 @@ void rtl8139_init(struct pci_dev *thisdev) {
 	rtldev.txqueue = ndqueue_create(malloc(TXQUEUE_SIZE), TXQUEUE_COUNT);
   for(int i=0; i<6; i++)
     rtldev.macaddr[i] = in8(RTLREG(IDR)+i);
-    printf("iobase=%x\nirq=%x\nmacaddr=%x:%x:%x:%x:%x:%x\n",
+  printf("iobase=%x\nirq=%x\nmacaddr=%x:%x:%x:%x:%x:%x\n",
     rtldev.iobase, rtldev.irq, 
     rtldev.macaddr[0], 
     rtldev.macaddr[1], 
@@ -190,7 +190,7 @@ void rtl8139_init(struct pci_dev *thisdev) {
   pic_clearmask(rtldev.irq);
 }
 
-int rtl8139_probe() {
+DRIVER_INIT int rtl8139_probe() {
   struct pci_dev *thisdev = pci_search_device(RTL8139_VENDORID, RTL8139_DEVICEID);
   if(thisdev!=NULL)
     rtl8139_init(thisdev);

@@ -81,7 +81,7 @@ struct v6fs_dent {
 };
 
 
-void v6fs_init() {
+FS_INIT void v6fs_init() {
   fsinfo_add(&v6fs_info);
 }
 

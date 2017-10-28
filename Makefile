@@ -7,54 +7,29 @@ QEMU			= ~/qemu-2.10.0/i386-softmmu/qemu-system-i386
 SUDO			= sudo
 QEMUFLAGS			= -m 512 -hda disk/fat32disk -hdb disk/sample -boot a -serial stdio
 QEMUNETFLAGS	= -net nic,vlan=0,model=rtl8139 -net tap,vlan=0,ifname=tap0
-
 RM						= rm -f
 
 BINDIR				= bin
-OBJDIR				= obj
 BOOTDIR				= boot
-KERNLDSCR			= $(KERNDIR)/ldscript.ld
-KERNDIR				= kernel
-KERNSRC				= $(wildcard $(KERNDIR)/*.c)
-KERNASM				= $(wildcard $(KERNDIR)/*.asm)
-KERNOBJ				= $(addprefix $(OBJDIR)/, $(notdir $(KERNSRC:.c=.o))) $(addprefix $(OBJDIR)/, $(notdir $(KERNASM:.asm=.o)))
+SYSDIR				= sys
 
-
-$(BINDIR)/kernel: $(BINDIR)/boot.bin $(BINDIR)/kernel.bin
+.PHONY: all
+all:
 	-mkdir -p $(BINDIR)
-	cat $^ > $@
-
-$(BINDIR)/boot.bin: $(BOOTDIR)/boot.asm
-	-mkdir -p $(BINDIR)
-	$(NASM) -o $@ $^
-
-$(OBJDIR)/%.o: $(KERNDIR)/%.c
-	-mkdir -p $(OBJDIR)
-	$(CC) $(CFLAGS) -ffreestanding -c $^ -o $@
-
-$(OBJDIR)/%.o: $(KERNDIR)/%.asm
-	-mkdir -p $(OBJDIR)
-	$(NASM) -f elf -o $@ $^
-
-$(BINDIR)/kernel.elf: $(KERNOBJ) $(KERNLDSCR)
-	-mkdir -p $(BINDIR)
-	$(CC) -T $(KERNLDSCR) -o $@ -ffreestanding -nostdlib $(KERNOBJ) -lgcc
-
-$(BINDIR)/kernel.bin: $(BINDIR)/kernel.elf
-	-mkdir -p $(BINDIR)
-	$(OBJCOPY) -O binary $^ $@
-
-
+	$(MAKE) -C $(BOOTDIR)
+	$(MAKE) -C $(SYSDIR)
+	cat $(BINDIR)/boot.bin $(BINDIR)/kernel.bin > $(BINDIR)/kernel
+  
 .PHONY: clean
 clean:
-	$(RM) $(OBJDIR)/*.o $(BINDIR)/*.elf $(BINDIR)/*.bin $(BINDIR)/kernel
+	$(RM) $(BINDIR)/*.elf $(BINDIR)/*.bin $(BINDIR)/kernel
+	$(MAKE) clean -C $(SYSDIR)
 
 .PHONY: run
-run: $(BINDIR)/kernel
-	$(QEMU) -fda $^ -s $(QEMUFLAGS) 
+run: all
+	$(QEMU) -fda $(BINDIR)/kernel -s $(QEMUFLAGS) 
 
 .PHONY: run-with-network
-run-with-network: $(BINDIR)/kernel
-	$(SUDO) $(QEMU) -fda $^ -s $(QEMUFLAGS) $(QEMUNETFLAGS)
-
+run-with-network: all
+	$(SUDO) $(QEMU) -fda $(BINDIR)/kernel -s $(QEMUFLAGS) $(QEMUNETFLAGS)
 

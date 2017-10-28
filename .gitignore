@@ -1,3 +1,6 @@
-obj/
 bin/
 disk/
+kern/obj/
+*.o
+*.bin
+*.elf

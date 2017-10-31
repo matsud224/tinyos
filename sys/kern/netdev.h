@@ -23,9 +23,17 @@ struct netdev_ops {
   struct pktbuf_head *(*rx)(struct netdev *dev);
 };
 
+struct ifaddr {
+  struct list_head link;
+  u8 len;
+  u8 family;
+  u8 addr[];
+};
+
 struct netdev {
   u16 devno;
   const struct netdev_ops *ops;
+  struct list_head ifaddr_list;
 };
 
 extern struct netdev *netdev_tbl[MAX_NETDEV];

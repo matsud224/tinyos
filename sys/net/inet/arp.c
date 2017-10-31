@@ -1,9 +1,9 @@
-#include "arp.h"
-#include "ethernet.h"
-#include "util.h"
-#include "netconf.h"
-#include "protohdr.h"
-#include "lock.h"
+#include <net/ether/ethernet.h>
+#include <net/inet/arp.h>
+#include <net/inet/util.h>
+#include <net/inet/params.h>
+#include <net/inet/protohdr.h>
+#include <kern/lock.h>
 
 struct arpentry arptable[MAX_ARPTABLE];
 static int next_register = 0; //次の登録位置
@@ -71,9 +71,9 @@ void register_arptable(u32 ipaddr, u8 macaddr[], bool is_permanent){
   mutex_lock(&arptbl_mtx);
 
 	//IPアドレスだけ登録されている（アドレス解決待ち）エントリを探す
-	for(int i=0;i<MAX_ARPTABLE;i++){
+	for(int i=0; i<MAX_ARPTABLE; i++){
 		if(arptable[i].ipaddr == ipaddr && arptable[i].timeout>0){
-			arptable[i].timeout=is_permanent?ARPTBL_PERMANENT:ARBTBL_TIMEOUT_CLC; //延長
+			arptable[i].timeout = is_permanent ? ARPTBL_PERMANENT : ARBTBL_TIMEOUT_CLC; //延長
 			if(!list_is_empty(&arptable[i].pending)){
 				memcpy(arptable[i].macaddr, macaddr,ETHER_ADDR_LEN);
         struct arpentry *p;
@@ -117,18 +117,18 @@ void arp_rx(struct pktbuf_head *frm, struct ether_hdr *ehdr){
 	case ARPOP_REQUEST:
 		if(memcmp(earp->arp_tpa, IPADDR,IP_ADDR_LEN)==0){
 			//相手のIPアドレスとMACアドレスを登録
-			register_arptable(IPADDR_TO_UINT32(earp->arp_spa), earp->arp_sha, false);
+			register_arptable(earp->arp_spa, earp->arp_sha, false);
 
 			//パケットを改変
 			memcpy(earp->arp_tha, earp->arp_sha, ETHER_ADDR_LEN);
-			memcpy(earp->arp_tpa, earp->arp_spa, IP_ADDR_LEN);
+			earp->arp_tpa = earp->arp_spa;
 			memcpy(earp->arp_sha, MACADDR, ETHER_ADDR_LEN);
-			memcpy(earp->arp_spa, IPADDR, IP_ADDR_LEN);
-            earp->arp_op = hton16(ARPOP_REPLY);
+			earp->arp_spa = IPADDR;
+      earp->arp_op = hton16(ARPOP_REPLY);
       memcpy(ehdr->ether_dhost, ehdr->ether_shost, ETHER_ADDR_LEN);
       memcpy(ehdr->ether_shost, MACADDR, ETHER_ADDR_LEN);
       //送り返す
-			ethernet_send(flm);
+			ether_tx(frm);
 		}
 		break;
 	case ARPOP_REPLY:
@@ -138,7 +138,7 @@ void arp_rx(struct pktbuf_head *frm, struct ether_hdr *ehdr){
 	return;
 }
 
-struct pktbuf_head *make_arprequest_frame(u8 dstaddr[]){
+struct pktbuf_head *make_arprequest_frame(in_addr_t dstaddr){
 	struct pktbuf_head *frm =
     pktbuf_alloc(sizeof(struct ether_hdr) + sizeof(struct ether_arp));
 
@@ -156,25 +156,24 @@ struct pktbuf_head *make_arprequest_frame(u8 dstaddr[]){
 	earp->arp_pln = 4;
 	earp->arp_op = hton16(ARPOP_REQUEST);
 	memcpy(earp->arp_sha, MACADDR, ETHER_ADDR_LEN);
-	memcpy(earp->arp_spa, IPADDR, IP_ADDR_LEN);
+	earp->arp_spa = IPADDR;
 	memset(earp->arp_tha, 0x00, ETHER_ADDR_LEN);
-	memcpy(earp->arp_tpa, dstaddr, IP_ADDR_LEN);
+	earp->arp_tpa = dstaddr;
 	return frm;
 }
 
-void arp_tx(struct pktbuf_head *packet, u8 dstaddr[], u16 proto){
+void arp_tx(struct pktbuf_head *pkt, in_addr_t dstaddr, u16 proto){
 	struct ether_hdr *ehdr =
     (struct ether_hdr *)pktbuf_add_header(sizeof(struct ether_hdr));
 	ehdr->ether_type = hton16(proto);
 	memcpy(ehdr->ether_shost, MACADDR, ETHER_ADDR_LEN);
 
-	switch(search_arptable(IPADDR_TO_UINT32(dstaddr), ehdr->ether_dhost, packet)){
+	switch(search_arptable(dstaddr, ehdr->ether_dhost, pkt)){
 	case RESULT_FOUND:
-		//ARPテーブルに...ある時!
-		ethernet_tx(packet);
+		ethernet_tx(pkt);
 		break;
 	case RESULT_NOT_FOUND:
-		//無いとき... はsearch_arptableが保留リストに登録しておいてくれる
+		//無いときはsearch_arptableが保留リストに登録しておいてくれる
 		//ARPリクエストを送信する
 		{
 			struct pktbuf_head *request = make_arprequest_frame(dstaddr);

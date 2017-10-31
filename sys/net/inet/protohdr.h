@@ -1,28 +1,16 @@
 #pragma once
-#include "types.h"
-#include "envdep.h"
-
-//Ethernet
-#define ETHER_ADDR_LEN 6
-
-struct ether_hdr{
-	u8 ether_dhost[ETHER_ADDR_LEN];
-	u8 ether_shost[ETHER_ADDR_LEN];
-	u16 ether_type;
-};
-#define ETHERTYPE_IP	0x0800
-#define ETHERTYPE_ARP	0x0806
+#include <kern/types.h>
+#include <kern/machine.h>
+#include <net/ether/ether.h>
 
 //IPv4
-#define IPV4_ADDR_LEN 4
-
-struct ipv4_hdr{
-#ifdef BIG_ENDIAN
+struct ip_hdr{
+#ifdef ENDIAN_BE
 	unsigned ip_v:4, ip_hl:4;
-#endif //BIG_ENDIAN
-#ifdef LITTLE_ENDIAN
+#endif //ENDIAN_BE
+#ifdef ENDIAN_LE
 	unsigned ip_hl:4, ip_v:4;
-#endif // LITTLE_ENDIAN
+#endif // ENDIAN_LE
 	u8 ip_tos;
 	u16 ip_len;
 	u16 ip_id;
@@ -30,8 +18,8 @@ struct ipv4_hdr{
 	u8 ip_ttl;
 	u8 ip_p;
 	u16 ip_sum;
-	u8 ip_src[IP_ADDR_LEN];
-	u8 ip_dst[IP_ADDR_LEN];
+	in_addr_t ip_src;
+	in_addr_t ip_dst;
 };
 
 #define IP_RF 0x8000
@@ -60,10 +48,10 @@ struct arp_hdr{
 
 struct ether_arp{
 	struct arp_hdr ea_hdr;
-	u8 arp_sha[ETHER_ADDR_LEN];
-	u8 arp_spa[IP_ADDR_LEN];
-	u8 arp_tha[ETHER_ADDR_LEN];
-	u8 arp_tpa[IP_ADDR_LEN];
+	etheraddr arp_sha;
+	in_addr_t arp_spa;
+	etheraddr arp_tha;
+	in_addr_t arp_tpa;
 };
 
 #define ARPHRD_ETHER 1
@@ -80,7 +68,7 @@ struct icmp{
 	u16 icmp_cksum;
 	union{
 		u8 ih_pptr;
-		u8 ih_gwaddr[IP_ADDR_LEN];
+		in_addr_t ih_gwaddr;
 		struct ih_idseq{
 			int16_t icd_id;
 			int16_t icd_seq;
@@ -160,23 +148,23 @@ struct icmp{
 
 //UDP
 struct udp_hdr{
-	u16 uh_sport;
-	u16 uh_dport;
+	in_port_t uh_sport;
+	in_port_t uh_dport;
 	u16 uh_ulen;
 	u16 sum;
 };
 
 struct udp_pseudo_hdr{
-	u8 up_src[IP_ADDR_LEN];
-	u8 up_dst[IP_ADDR_LEN];
+	in_addr_t up_src;
+	in_addr_t up_dst;
 	u8 up_void;
 	u8 up_type;
 	u16 up_len;
 };
 
 struct tcp_pseudo_hdr{
-	u8 tp_src[IP_ADDR_LEN];
-	u8 tp_dst[IP_ADDR_LEN];
+	in_addr_t tp_src;
+	in_addr_t tp_dst;
 	u8 tp_void;
 	u8 tp_type;
 	u16 tp_len;
@@ -185,16 +173,16 @@ struct tcp_pseudo_hdr{
 
 //TCP
 struct tcp_hdr{
-	u16 th_sport;
-	u16 th_dport;
+	in_addr_t th_sport;
+	in_addr_t th_dport;
 	u32 th_seq;
 	u32 th_ack;
-#ifdef BIG_ENDIAN
+#ifdef ENDIAN_BE
 	unsigned th_off:4,th_x2:4;
-#endif
-#ifdef LITTLE_ENDIAN
+#endif //ENDIAN_BE
+#ifdef ENDIAN_LE
 	unsigned th_x2:4,th_off:4;
-#endif // BYTE_ORDER
+#endif // ENDIAN_LE
 	u8 th_flags;
 	u16 th_win;
 	u16 th_sum;

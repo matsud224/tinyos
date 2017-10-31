@@ -49,7 +49,7 @@ reject:
   return;
 }
 
-void ethernet_tx(struct pktbuf_head *frame){
+void ethernet_tx(struct pktbuf_head *frame, struct ether_addr ea){
   netdev_tx(0, frame);
   return;
 }

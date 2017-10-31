@@ -4,7 +4,8 @@
 #include <kern/kernlib.h>
 #include <kern/pci.h>
 #include <kern/params.h>
-//#include <kern/ethernet.h>
+#include <net/net.h>
+#include <net/ether/ether.h>
 #include <kern/task.h>
 
 #define RTL8139_VENDORID 0x10ec
@@ -147,16 +148,14 @@ void rtl8139_init(struct pci_dev *thisdev) {
   rtldev.txdesc_free = TXDESC_NUM;
 	rtldev.rxqueue = ndqueue_create(malloc(RXQUEUE_SIZE), RXQUEUE_COUNT);
 	rtldev.txqueue = ndqueue_create(malloc(TXQUEUE_SIZE), TXQUEUE_COUNT);
+	list_init(&rtldev.netdev_info.ifaddr_list);
+  struct ifaddr *eaddr = malloc(sizeof(struct ifaddr) + 6);
+  eaddr->len = 6;
+  eaddr->family = PF_LINK;
   for(int i=0; i<6; i++)
-    rtldev.macaddr[i] = in8(RTLREG(IDR)+i);
-  printf("iobase=%x\nirq=%x\nmacaddr=%x:%x:%x:%x:%x:%x\n",
-    rtldev.iobase, rtldev.irq, 
-    rtldev.macaddr[0], 
-    rtldev.macaddr[1], 
-    rtldev.macaddr[2], 
-    rtldev.macaddr[3], 
-    rtldev.macaddr[4], 
-    rtldev.macaddr[5] );
+    eaddr->addr[i] = in8(RTLREG(IDR)+i);
+  list_pushfront(eaddr, &rtldev.netdev_info.ifaddr_list);
+
   //enable PCI bus mastering
   u16 pci_cmd = pci_config_read16(thisdev, PCI_COMMAND);
   pci_cmd |= 0x4;

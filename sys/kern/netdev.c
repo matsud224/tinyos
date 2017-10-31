@@ -5,7 +5,7 @@ struct netdev *netdev_tbl[MAX_NETDEV];
 static u16 nnetdev;
 
 void netdev_init() {
-  for(int i=0; i<MAX_BLKDEV; i++)
+  for(int i=0; i<MAX_NETDEV; i++)
     netdev_tbl[i] = NULL;
   nnetdev = 0;
 }

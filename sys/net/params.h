@@ -1,0 +1,9 @@
+#pragma once
+
+#define MAX_SOCKET 256
+
+#define DGRAM_RECV_QUEUE 255
+#define DGRAM_SEND_QUEUE 255
+#define STREAM_RECV_BUF 2048
+#define STREAM_SEND_BUF 4096
+

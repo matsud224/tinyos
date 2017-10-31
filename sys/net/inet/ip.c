@@ -1,10 +1,9 @@
-#include "ethernet.h"
-#include "ipv4.h"
-#include "arp.h"
-#include "icmp.h"
-#include "util.h"
-#include "netconf.h"
-#include "protohdr.h"
+#include <net/inet/ip.h>
+#include <net/inet/arp.h>
+#include <net/inet/icmp.h>
+#include <net/inet/util.h>
+#include <net/inet/params.h>
+#include <net/inet/protohdr.h>
 
 #define INF 0xffff
 
@@ -35,8 +34,8 @@ static void fragment_free(struct fragment *frag) {
 struct reasminfo{
 	struct reasminfo *next;
 	struct{
-		u8 ip_src[IP_ADDR_LEN];
-		u8 ip_dst[IP_ADDR_LEN];
+		in_addr_t ip_src;
+		in_addr_t ip_dst;
 		u8 ip_pro;
 		u16 ip_id;
 	} id;
@@ -66,7 +65,7 @@ void start_ip(){
 	sta_cyc(TIMEOUT_10SEC_CYC);
 }
 
-void ip_10sec(intptr_t exinf) {
+void ip_10sec() {
 	//10sec周期で動き、タイムアウトを管理するタスク
 	while(true){
 		//IPフラグメント組み立てタイムアウト
@@ -107,7 +106,7 @@ void ip_10sec(intptr_t exinf) {
   defer_exec(ip_10sec, 
 }
 
-static reasminfo *get_reasminfo(u8 ip_src[], u8 ip_dst[], u8 ip_pro, u16 ip_id){
+static reasminfo *get_reasminfo(in_addr_t ip_src, in_addr_t ip_dst, u8 ip_pro, u16 ip_id){
 	// already locked.
 	struct reasminfo *ptr = reasm_ongoing;
 	while(ptr!=NULL){
@@ -119,8 +118,8 @@ static reasminfo *get_reasminfo(u8 ip_src[], u8 ip_dst[], u8 ip_pro, u16 ip_id){
 		}
 	}
 	struct reasminfo *info = malloc(sizeof(struct reasminfo));
-	memcpy(info->id.ip_src, ip_src, IP_ADDR_LEN);
-	memcpy(info->id.ip_dst, ip_dst, IP_ADDR_LEN);
+	info->id.ip_src = ip_src;
+	info->id.ip_dst = ip_dst;
 	info->id.ip_pro=ip_pro; info->id.ip_id=ip_id;
 	info->timeout = IPFRAG_TIMEOUT_CLC;
 	info->next = reasm_ongoing;
@@ -150,7 +149,7 @@ static void modify_inf_holelist(struct hole **holepp, u16 newsize){
 		if((*holepp)->last==INF){
 			(*holepp)->last=newsize;
 			if((*holepp)->first==(*holepp)->last){
-				hole *tmp=*holepp;
+				struct hole *tmp=*holepp;
 				*holepp = (*holepp)->next;
 				delete tmp;
 			}
@@ -164,7 +163,7 @@ void ip_rx(struct pktbuf_head *pkt){
 	//正しいヘッダかチェック
 	if(pkt->total < sizeof(struct ip_hdr))
 		goto exit;
-	if(pkt->total < ntoh16(iphdr->ip_len) )
+	if(pkt->total < ntoh16(iphdr->ip_len))
 		goto exit;
 
 	if(iphdr->ip_v != 4)
@@ -247,7 +246,7 @@ void ip_rx(struct pktbuf_head *pkt){
 		if(info->holelist==NULL){
 			//holeがなくなり、おしまい
 			//パケットを構築
-			frm=pktbuf_alloc(info->headerlen+info->datalen);
+			frm = pktbuf_alloc(info->headerlen+info->datalen);
 			//LOG("total %d/%d",info->headerlen,info->datalen);
 			memcpy(frm->buf,info->beginningframe->buf,info->headerlen);
 			char *origin = frm->buf + info->headerlen;
@@ -268,13 +267,13 @@ void ip_rx(struct pktbuf_head *pkt){
 
 	switch(iphdr->ip_p){
 	case IPTYPE_ICMP:
-		icmp_rx(pkt, iphdr, (icmp*)(((u8*)iphdr)+(iphdr->ip_hl*4)));
+		icmp_rx(pkt, iphdr);
 		break;
 	case IPTYPE_TCP:
 		//tcp_rx(frm, iphdr, (tcp_hdr*)(((u8*)iphdr)+(iphdr->ip_hl*4)));
 		break;
 	case IPTYPE_UDP:
-		//udp_rx(frm, iphdr, (udp_hdr*)(((u8*)iphdr)+(iphdr->ip_hl*4)));
+		udp_rx(frm, iphdr);
 		break;
 	}
 
@@ -283,8 +282,8 @@ void ip_rx(struct pktbuf_head *pkt){
 
 static u16 ip_id = 0;
 
-static void prep_ipv4hdr(ip_hdr *iphdr, u16 len, u16 id,
-					bool mf, u16 offset, u8 proto, u8 dstaddr[]){
+static void prep_iphdr(ip_hdr *iphdr, u16 len, u16 id,
+					bool mf, u16 offset, u8 proto, in_addr_t dstaddr){
   iphdr->ip_v = 4;
   iphdr->ip_hl = sizeof(ip_hdr)/4;
   iphdr->ip_tos = 0x80;
@@ -294,25 +293,26 @@ static void prep_ipv4hdr(ip_hdr *iphdr, u16 len, u16 id,
   iphdr->ip_ttl = IP_TTL;
   iphdr->ip_p = proto;
   iphdr->ip_sum = 0;
-  memcpy(iphdr->ip_src, IPADDR, IP_ADDR_LEN);
-  memcpy(iphdr->ip_dst, dstaddr, IP_ADDR_LEN);
+  iphdr->ip_src =  IPADDR;
+  iphdr->ip_dst =  dstaddr;
 
   iphdr->ip_sum = checksum((u16*)iphdr, sizeof(ip_hdr));
   return;
 }
 
-//dstaddrは書き換わるかもしれない
-void ipv4_routing(u8 dstaddr[]){
-	u32 myaddr=IPADDR_TO_UINT32(IPADDR);
-	u32 mymask=IPADDR_TO_UINT32(NETMASK);
-	u32 dst = IPADDR_TO_UINT32(dstaddr);
-	if(dst!=0 && (myaddr&mymask)!=(dst&mymask) && memcmp(dstaddr, IPBROADCAST, IP_ADDR_LEN) != 0){
+in_addr_t ip_routing(in_addr_t dstaddr){
+	in_addr_t myaddr=IPADDR_TO_UINT32(IPADDR);
+	in_addr_t mymask=IPADDR_TO_UINT32(NETMASK);
+	in_addr_t dst = IPADDR_TO_UINT32(dstaddr);
+	if(dst!=0 && (myaddr&mymask)!=(dst&mymask) && dstaddr != IPBROADCAST){
 		//同一のネットワークでない->デフォルトゲートウェイに流す
-		memcpy(dstaddr, DEFAULT_GATEWAY, IP_ADDR_LEN);
+		dstaddr = DEFAULT_GATEWAY;
 	}
+
+  return dstaddr;
 }
 
-u16 ipv4_getid(){
+u16 ip_getid(){
 	u16 id;
 	wai_sem(IPID_SEM);
   id = ip_id; ip_id++;
@@ -320,14 +320,14 @@ u16 ipv4_getid(){
   return id;
 }
 
-void ipv4_tx(struct pktbuf_head *data, u8 *dstaddr, u8 proto){
+void ip_tx(struct pktbuf_head *data, in_addr_t dstaddr, u8 proto){
 	u32 datalen = data->total; //IPペイロード長
 	u32 remainlen = datalen;
   u16 currentid = ip_getid(); //今回のパケットに付与する識別子
 
   //ルーティング
-  u8 dstaddr_r[IPV4_ADDR_LEN];
-  memcpy(dstaddr_r, dstaddr, IPV4_ADDR_LEN); //ip_routing()で書き換えられるかもしれないのでコピー
+  in_addr_t dstaddr_r;
+  dstaddr_r =  dstaddr; //ip_routing()で書き換えられるかもしれないのでコピー
 	ip_routing(dstaddr_r);
 
   //複数のフラグメントを送信する際、iphdr_itemはつなぐ先と内容を変えながら使い回せそうに思える

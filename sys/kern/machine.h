@@ -1,3 +1,3 @@
 #pragma once
 
-#define LITTLE_ENDIAN
+#define ENDIAN_LE

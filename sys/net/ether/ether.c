@@ -30,12 +30,12 @@ void ethernet_rx_one(struct pktbuf_head *frame) {
   case ETHERTYPE_IP:
     puts("ip packet");
   pktbuf_free(frame);
-		//ip_rx(frame);
-		break;
+    //ip_rx(frame);
+    break;
   case ETHERTYPE_ARP:
     puts("arp packet");
   pktbuf_free(frame);
-		//arp_rx(frame);
+    //arp_rx(frame);
     break;
   default:
     goto reject;

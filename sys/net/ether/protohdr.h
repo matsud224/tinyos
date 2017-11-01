@@ -4,10 +4,10 @@
 #include <net/ether/ether.h>
 
 struct ether_hdr{
-	ether_addr ether_dhost;
-	ether_addr ether_shost;
-	u16 ether_type;
+  ether_addr ether_dhost;
+  ether_addr ether_shost;
+  u16 ether_type;
 };
-#define ETHERTYPE_IP	0x0800
-#define ETHERTYPE_ARP	0x0806
+#define ETHERTYPE_IP  0x0800
+#define ETHERTYPE_ARP  0x0806
 

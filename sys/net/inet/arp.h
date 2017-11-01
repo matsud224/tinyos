@@ -2,11 +2,11 @@
 #include <net/inet/protohdr.h>
 
 struct arpentry{
-	etheraddr macaddr;
-	in_addr_t ipaddr;
-	u16 timeout;
+  etheraddr macaddr;
+  in_addr_t ipaddr;
+  u16 timeout;
 #define ARPTBL_PERMANENT 0xffff //timeoutをこの値にした時はタイムアウトしない
-	struct list_head pending; //アドレス解決待ちのフレーム
+  struct list_head pending; //アドレス解決待ちのフレーム
 };
 
 extern struct arpentry arptable[MAX_ARPTABLE];

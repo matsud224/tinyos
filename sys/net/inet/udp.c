@@ -6,8 +6,9 @@
 #include "errnolist.h"
 #include <net/sockif.h>
 #include <net/netlib.h>
+#include <kern/kernlib.h>
 
-static u16 udp_checksum(ip_hdr *iphdr, udp_hdr *uhdr){
+static u16 udp_checksum(struct ip_hdr *iphdr, struct udp_hdr *uhdr){
   struct udp_pseudo_hdr pseudo;
   pseudo.up_src = iphdr->ip_src;
   pseudo.up_dst = iphdr->ip_dst;
@@ -21,12 +22,7 @@ static u16 udp_checksum(ip_hdr *iphdr, udp_hdr *uhdr){
 void udp_rx(struct pktbuf_head *pkt, struct ip_hdr *iphdr){
   struct udp_hdr *uhdr = pkt->data;
 
-  //ブロードキャスト/マルチキャストアドレスは不許可
-  /*if(memcmp(iphdr->ip_dst, IPADDR, IP_ADDR_LEN) != 0){
-    goto exit;
-  }*/
-  //ヘッダ検査
-  if(pkt->total < sizeof(udp_hdr) ||
+  if(pkt->total < sizeof(struct udp_hdr) ||
     pkt->totale != ntoh16(uhdr->uh_ulen)){
     goto exit;
   }
@@ -38,7 +34,7 @@ void udp_rx(struct pktbuf_head *pkt, struct ip_hdr *iphdr){
 
   int s;
   struct socket_t *sock;
-  for(s=0;s<MAX_SOCKET;s++){
+  for(s=0; s<MAX_SOCKET; s++){
     sock = &sockets[s];
     if(sock->type==SOCK_DGRAM && sock->addr.my_port==ntoh16(uhdr->uh_dport))
       break;
@@ -72,7 +68,7 @@ exit:
 }
 
 //UDPヘッダのチェックサム計算にはIPアドレスが必要
-static void set_udpheader(udp_hdr *uhdr, u16 seglen, u16 sport, u16 dport, u8 daddr[]){
+static void set_udpheader(struct udp_hdr *uhdr, u16 seglen, in_port_t sport, in_port_t dport, in_addr_t daddr){
   uhdr->uh_sport = hton16(sport);
   uhdr->uh_dport = hton16(dport);
   uhdr->uh_ulen = hton16(seglen);
@@ -114,7 +110,7 @@ static char *udp_analyze(ether_flame *flm, u16 *datalen, u8 srcaddr[], u16 *srcp
   return (char*)(udphdr+1);
 }
 
-s32 udp_recvfrom(udp_ctrlblock *ucb, char *buf, u32 len, int flags, u8 from_addr[], u16 *from_port, TMO timeout){
+ssize_t udp_recvfrom(udp_ctrlblock *ucb, char *buf, size_t len, int flags, in_addr_t *from_addr, in_port_t *from_port, TMO timeout){
   wai_sem(UDP_RECV_SEM);
   //recv_waitingがtrueの時にデータグラムがやってきたら起こしてもらえる
   ucb->recv_waiting = true;
@@ -129,7 +125,9 @@ s32 udp_recvfrom(udp_ctrlblock *ucb, char *buf, u32 len, int flags, u8 from_addr
       }
     }else{
       u16 datalen;
-      char *data = udp_analyze(ucb->recv_queue[ucb->recv_back], &datalen, from_addr, from_port);
+      //char *data = udp_analyze(ucb->recv_queue[ucb->recv_back], &datalen, from_addr, from_port);
+      struct pktbuf *pkt = recv_queue[ucb_recv_back];
+      struct 
       memcpy(buf, data, MIN(len,datalen));
       delete ucb->recv_queue[ucb->recv_back];
       ucb->recv_back++;

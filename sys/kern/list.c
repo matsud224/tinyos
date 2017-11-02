@@ -1,5 +1,5 @@
 #include <kern/list.h>
-#include <stddef.h>
+#include <kern/kernlib.h>
 
 void list_init(struct list_head *hdr) {
   hdr->next = hdr;
@@ -24,14 +24,17 @@ void list_pushback(struct list_head *item, struct list_head *list) {
   list->prev = item;
 }
 
-void list_remove(struct list_head *item);
-void list_move_forward(struct list_head *list) {
+void list_rotate_forward(struct list_head *list) {
+  if(list_is_empty(list))
+    return;
   struct list_head *next = list->next;
   list_remove(list);
   list_pushfront(list, next);
 }
 
-void list_move_backward(struct list_head *list) {
+void list_rotete_backward(struct list_head *list) {
+  if(list_is_empty(list))
+    return;
   struct list_head *prev = list->prev;
   list_remove(list);
   list_pushback(list, prev);
@@ -49,4 +52,5 @@ struct list_head *list_pop(struct list_head *list) {
   list_remove(first);
   return first;
 }
+
 

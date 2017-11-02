@@ -1,4 +1,4 @@
-#include <net/ether/ethernet.h>
+#include <net/ether/ether.h>
 #include <net/inet/arp.h>
 #include <net/inet/util.h>
 #include <net/inet/params.h>
@@ -9,9 +9,9 @@ struct arpentry arptable[MAX_ARPTABLE];
 static int next_register = 0; //次の登録位置
 
 enum arpresult {
-  RESULT_FOUND			= 0,
-  RESULT_NOT_FOUND	= 1,
-  RESULT_ADD_LIST		= 2,
+  RESULT_FOUND      = 0,
+  RESULT_NOT_FOUND  = 1,
+  RESULT_ADD_LIST    = 2,
 };
 
 static mutex arptbl_mtx;

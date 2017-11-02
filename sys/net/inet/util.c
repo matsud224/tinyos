@@ -1,9 +1,5 @@
-#include <stdint.h>
-#include <stddef.h>
-#include "util.h"
-#include "protohdr.h"
-
-#define MIN(x,y) ((x)<(y)?(x):(y))
+#include <net/inet/util.h>
+#include <kern/kernlib.h>
 
 char *macaddr2str(u8 ma[]){
   static char str[18];
@@ -18,24 +14,6 @@ char *ipaddr2str(u8 ia[]){
   //  ia[0], ia[1], ia[2], ia[3]);
   return str;
 }
-
-/*
-u64 macaddr2uint64(const u8 mac[]){
-  u64 val = 0;
-  for(int i=ETHER_ADDR_LEN-1, j=8; i>=0; i--, j*=2){
-    val |= ((u64)mac[i]) << j;
-  }
-  return val;
-}
-
-u32 ipaddr2uint32(const u8 ip[]){
-  u64 val = 0;
-  for(int i=IP_ADDR_LEN-1, j=8; i>=0; i--, j*=2){
-    val |= ((u64)ip[i]) << j;
-  }
-  return val;
-}
-*/
 
 u16 checksum(u16 *data, int len){
   u32 sum = 0;

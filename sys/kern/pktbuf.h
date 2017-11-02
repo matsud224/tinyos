@@ -4,7 +4,7 @@
 
 struct pktbuf_head;
 struct pktbuf_fragment {
-  struct pktbuf_fragment *next;
+  struct *next;
   struct pktbuf_head *parent;
 
   u32 size;
@@ -14,8 +14,8 @@ struct pktbuf_fragment {
 };
 
 struct pktbuf_head {
-  struct pktbuf_fragment *next_frag;
-  struct list_head pkt_link;
+  struct list_head frag;
+  struct list_head link;
 
   u32 total;
   u32 size;

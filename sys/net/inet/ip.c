@@ -20,15 +20,19 @@ struct fragment{
   struct pktbuf_head *frm;
 };
 
-static void fragment_free(struct fragment *frag) {
-  struct fragment *cur = frag;
-  struct fragment *next = NULL;
-  while(cur != NULL) {
-    next = cur->next;
-    pktbuf_free(cur->frm);
-    free(cur);
-    cur = next;
-  }
+static struct hole *hole_new(u16 first, u16 last) {
+  struct hole *h = malloc(sizeof(struct hole));
+  h->first = first;
+  h->last = last;
+  return h;
+}
+
+static struct fragment *fragment_new(u16 first, u16 last, struct pktbuf_head *frm) {
+  struct fragment *frag = malloc(sizeof(struct fragment));
+  frag->first = first;
+  frag->last = last;
+  frag->frm = frm;
+  return frag;
 }
 
 struct reasminfo{
@@ -39,8 +43,8 @@ struct reasminfo{
     u8 ip_pro;
     u16 ip_id;
   } id;
-  struct hole *holelist;
-  struct fragment *fraglist;
+  struct list_head holelist;
+  struct list_head fraglist;
   struct pktbuf_head *head_frame;
   u8 headerlen; //etherヘッダ込
   u16 datalen;
@@ -48,13 +52,18 @@ struct reasminfo{
 };
 
 static void reasminfo_free(struct reasminfo *ri) {
-  struct hole *hptr = holelist;
-  while(hptr!=NULL){
-    struct hole *tmp = hptr;
-    hptr=hptr->next;
-    free(tmp);
+  struct list_head *p, *tmp;
+  list_foreach_safe(p, tmp, &ri->holelist) {
+    struct hole *h = list_entry(p, struct hole, link);
+    free(h);
   }
-  fragment_free(fraglist);
+  list_foreach_safe(p, tmp, &ri->holelist) {
+    struct fragment *f = list_entry(p, struct fragment, link);
+    pktbuf_free(f->frm);
+    free(f);
+  }
+  pktbuf_free(head_frame);
+  free(ri);
 }
 
 static struct list_head reasm_ongoing;
@@ -71,14 +80,13 @@ void ip_10sec() {
   while(true){
     //IPフラグメント組み立てタイムアウト
     wai_sem(TIMEOUT_10SEC_SEM);
-    struct reasminfo **pp = &reasm_ongoing;
-    while(*pp!=NULL){
-      if(--((*pp)->timeout) <= 0 || (*pp)->holelist==NULL){
-        reasminfo *tmp=*pp;
-        *pp=(*pp)->next;
-        delete tmp;
+    struct reasminfo *p, *tmp;
+    list_foreach_safe(p, tmp, &reasm_ongoing) {
+      struct reasminfo *info = list_entry(p, struct reasminfo, link);
+      if(--(info->timeout) <= 0 || list_is_empty(info->holelist)){
+        list_remove(p);
+        reasminfo_free(info);
       }
-      pp=&((*pp)->next);
     }
     sig_sem(TIMEOUT_10SEC_SEM);
 
@@ -95,7 +103,7 @@ void ip_10sec() {
         }
       }else{
         if(arptable[i].pending!=NULL){
-          ether_flame *request = make_arprequest_flame((u8*)(&arptable[i].ipaddr));
+          ether_flame *request = make_arprequest_frame((u8*)(&arptable[i].ipaddr));
           ethernet_send(request);
           delete request;
         }
@@ -109,50 +117,43 @@ void ip_10sec() {
 
 static reasminfo *get_reasminfo(in_addr_t ip_src, in_addr_t ip_dst, u8 ip_pro, u16 ip_id){
   // already locked.
-  struct reasminfo *ptr = reasm_ongoing;
-  while(ptr!=NULL){
-    if(memcmp(ptr->id.ip_src,ip_src,IP_ADDR_LEN)==0 &&
-      memcmp(ptr->id.ip_dst,ip_dst,IP_ADDR_LEN)==0 &&
-      ptr->id.ip_pro==ip_pro && ptr->id.ip_id==ip_id &&
-      ptr->timeout > 0){
-      return ptr;
+  struct list_head *p;
+  list_foreach(p, &reasm_ongoing){
+    struct reasminfo *ri = list_entry(p, struct reasminfo, link);
+    if(ri->id.ip_src == ip_src && ri->id.ip_dst == ip_dst &&
+       ri->id.ip_pro == ip_pro && ri->id.ip_id == ip_id &&
+       ri->timeout > 0) {
+      return ri;
     }
   }
+
   struct reasminfo *info = malloc(sizeof(struct reasminfo));
   info->id.ip_src = ip_src;
   info->id.ip_dst = ip_dst;
   info->id.ip_pro=ip_pro; info->id.ip_id=ip_id;
   info->timeout = IPFRAG_TIMEOUT_CLC;
-  info->next = reasm_ongoing;
-  struct hole *newh = malloc(sizeof(struct hole));
-  newh->first=0;
-  newh->last=INF;
-  newh->next=NULL;
-  info->holelist = newh;
-  info->fraglist=NULL;
-  info->head_frame=NULL;
-  reasm_ongoing = info;
+  list_pushfront(info, &reasm_ongoing);
+
+  list_init(&info->holelist);
+  list_init(&info->fraglist);
+
+  list_pushfront(hole_new(0, INF), &info->holelist);
+  info->head_frame = NULL;
+
   return info;
 }
 
-static void show_holelist(struct hole *holelist){
-  puts("---");
-  while(holelist!=NULL){
-    puts("  %d ~ %d",holelist->first,holelist->last);
-    holelist=holelist->next;
-  }
-  puts("---");
-}
 
 //データ領域のサイズが分かったので、last=無限大(0xffff)のホールを修正
-static void modify_inf_holelist(struct hole **holepp, u16 newsize){
-  for(;*holepp!=NULL;holepp = &((*holepp)->next)){
-    if((*holepp)->last==INF){
-      (*holepp)->last=newsize;
-      if((*holepp)->first==(*holepp)->last){
-        struct hole *tmp=*holepp;
-        *holepp = (*holepp)->next;
-        delete tmp;
+static void modify_inf_holelist(struct list_head *head, u16 newsize){
+  struct list_head *p, *tmp;
+  list_foreach_safe(p, tmp, head){
+    struct hole *hole = list_entry(p, struct hole, link);
+    if(hole->last == INF) {
+      hole->last = newsize;
+      if(hole->first == hole->last) {
+        list_remove(p);
+        free(hole);
       }
       return;
     }
@@ -174,92 +175,64 @@ void ip_rx(struct pktbuf_head *pkt){
   if(checksum((u16*)iphdr, iphdr->ip_hl*4) != 0)
     goto exit;
 
-  //自分宛てかチェック
-  /*
-  if(memcmp(iphdr->ip_dst, IPADDR, IP_ADDR_LEN) != 0){
-    u32 addr=ntoh32(*(u32*)IPADDR),
-          mask=ntoh32(*(u32*)NETMASK),broad;
-    broad = hton32((addr & mask) | (~(mask)));
-    if(memcmp(iphdr->ip_dst, &broad, IP_ADDR_LEN) != 0){
-      goto exit;
-    }
-  }
-  */
-
   if(!((ntoh16(iphdr->ip_off) & IP_OFFMASK) == 0 && (ntoh16(iphdr->ip_off) & IP_MF) == 0)){
     //フラグメント
     wai_sem(TIMEOUT_10SEC_SEM);
     u16 ffirst = (ntoh16(iphdr->ip_off) & IP_OFFMASK)*8;
     u16 flast = ffirst + (ntoh16(iphdr->ip_len) - iphdr->ip_hl*4) - 1;
 
-    struct reasminfo *info = get_reasminfo(iphdr->ip_src,iphdr->ip_dst,iphdr->ip_p,ntoh16(iphdr->ip_id));
-    for(struct hole **holepp = &(info->holelist);*holepp!=NULL;){
-      u16 hfirst=(*holepp)->first;
-      u16 hlast=(*holepp)->last;
-      //現holeにかぶっているか
-      if(ffirst>hlast || flast<hfirst){
-        holepp = &((*holepp)->next);
+    struct reasminfo *info = get_reasminfo(iphdr->ip_src, iphdr->ip_dst, iphdr->ip_p, ntoh16(iphdr->ip_id));
+    struct list_head *p, *tmp;
+
+    list_foreach_safe(p, tmp, &(info->holelist)){
+      struct hole *hole = list_entry(p, struct hole, link);
+      u16 hfirst = hole->first;
+      u16 hlast = hole->last;
+
+      if(ffirst > hlast || flast < hfirst)
         continue;
-      }
-      //holeを削除
-      struct hole *tmp=*holepp;
-      *holepp = (*holepp)->next;
-      free(tmp);
+
       //タイムアウトを延長
-      info->timeout=IPFRAG_TIMEOUT_CLC;
-      //現holeにかぶっているか
-      if(ffirst>hfirst){
-        //holeを追加
-        struct hole *newh = malloc(sizeof(struct hole));
-        newh->first=hfirst;
-        newh->last=ffirst-1;
-        newh->next=*holepp;
-        *holepp=newh;
-        holepp=&(newh->next);
-      }
-      if(flast<hlast){
-        //holeを追加
-        struct hole *newh = malloc(sizeof(struct hole));
-        newh->first=flast+1;
-        newh->last=hlast;
-        newh->next=*holepp;
-        *holepp=newh;
-        holepp=&(newh->next);
-      }
-      //fragmentを追加
-      struct fragment *newf = malloc(sizeof(struct fragment));
-      newf->next=info->fraglist;
-      info->fraglist=newf;
-      newf->first=ffirst; newf->last=flast;
-      newf->frm = frm;
+      info->timeout = IPFRAG_TIMEOUT_CLC;
+
+      if(ffirst > hfirst)
+        list_insert_front(hole_new(hfirst, ffirst-1), p);
+      if(flast < hlast)
+        list_insert_front(hole_new(flast+1, hlast), p);
+
+      list_pushfront(fragment_new(ffirst, flast, frm), info->fraglist);
+      list_remove(p);
+      free(hole);
+
       //more fragment がOFF
-      if((ntoh16(iphdr->ip_off) & IP_MF) == 0){
-        info->datalen=flast+1;
-        modify_inf_holelist(&(info->holelist),info->datalen);
+      if((ntoh16(iphdr->ip_off) & IP_MF) == 0) {
+        info->datalen = flast+1;
+        modify_inf_holelist(&(info->holelist), info->datalen);
       }
       //はじまりのフラグメント
-      if(ffirst==0){
+      if(ffirst == 0) {
         info->head_frame = frm;
-        info->headerlen=sizeof(ether_hdr)+iphdr->ip_hl*4;
+        info->headerlen = sizeof(ether_hdr) + (iphdr->ip_hl*4);
       }
-
     }
-    if(info->holelist==NULL){
+
+    if(list_is_empty(&info->holelist)) {
       //holeがなくなり、おしまい
       //パケットを構築
-      frm = pktbuf_alloc(info->headerlen+info->datalen);
-      //LOG("total %d/%d",info->headerlen,info->datalen);
-      memcpy(frm->buf,info->head_frame->buf,info->headerlen);
+      frm = pktbuf_alloc(info->headerlen + info->datalen);
+      memcpy(frm->data, info->head_frame->buf, info->headerlen);
       char *origin = frm->buf + info->headerlen;
-      int total=0;
-      for(struct fragment *fptr=info->fraglist;fptr!=NULL;fptr=fptr->next){
-        memcpy(origin+fptr->first,((u8*)(fptr->frm->buf))+info->headerlen,fptr->last-fptr->first+1);
-        total+=fptr->last-fptr->first+1;
+      int total = 0;
+      struct list_head *p;
+      list_foreach(p, info->fraglist) {
+        struct fragment *f = list_entry(p, struct fragment, link);
+        memcpy(origin+f->first, ((u8*)(f->frm->buf)) + info->headerlen, f->last - fptr->first + 1);
+        total += fptr->last - fptr->first + 1;
       }
       //frmを上書きしたので、iphdrも修正必要
       iphdr = (ip_hdr*)(frm->buf+sizeof(ether_hdr));
-      info->timeout=0;
-    }else{
+      info->timeout = 0;
+    } else {
       sig_sem(TIMEOUT_10SEC_SEM);
       return;
     }
@@ -322,17 +295,14 @@ u16 ip_getid(){
 }
 
 void ip_tx(struct pktbuf_head *data, in_addr_t dstaddr, u8 proto){
-  u32 datalen = data->total; //IPペイロード長
+  u32 datalen = data->total;
   u32 remainlen = datalen;
-  u16 currentid = ip_getid(); //今回のパケットに付与する識別子
+  u16 currentid = ip_getid();
 
   //ルーティング
   in_addr_t dstaddr_r;
-  dstaddr_r =  dstaddr; //ip_routing()で書き換えられるかもしれないのでコピー
-  ip_routing(dstaddr_r);
+  dstaddr_r = ip_routing(dstaddr_r);
 
-  //複数のフラグメントを送信する際、iphdr_itemはつなぐ先と内容を変えながら使い回せそうに思える
-  //でも、送信はすぐに行われないかもしれない(MACアドレス解決待ち)ので使い回しはダメ
   if(sizeof(ip_hdr)+remainlen <= MTU){
     hdrstack *iphdr_item = new hdrstack(true);
     iphdr_item->size = sizeof(ip_hdr);
@@ -341,22 +311,21 @@ void ip_tx(struct pktbuf_head *data, in_addr_t dstaddr, u8 proto){
     iphdr_item->next = data;
     arp_send(iphdr_item, dstaddr_r, ETHERTYPE_IP);
   }else{
-    //フラグメント化必要
-    //フラグメント化に際して、IPペイロードを分割後のパケットにコピーしないといけない
     while(remainlen > 0){
-      u32 thispkt_totallen = MIN(remainlen+sizeof(ip_hdr), MTU);
-      u32 thispkt_datalen = thispkt_totallen - sizeof(ip_hdr);
+      u32 thispkt_totallen = 
+        MIN(remainlen + sizeof(struct ip_hdr), MTU);
+      u32 thispkt_datalen = thispkt_totallen - sizeof(struct ip_hdr);
       u16 offset = datalen - remainlen;
-      hdrstack *ippkt = new hdrstack(true);
-      ippkt->next = NULL;
+      struct pktbuf *pkt = pktbuf_alloc();
+      pkt->next = NULL;
       remainlen -= thispkt_datalen;
-      ippkt->size = thispkt_totallen;
-      ippkt->buf = new char[ippkt->size];
+      pkt->size = thispkt_totallen;
+      pkt->buf = new char[ippkt->size];
       prep_iphdr((ip_hdr*)ippkt->buf, thispkt_totallen, currentid, (remainlen>0)?true:false
             , offset, proto, dstaddr);
       hdrstack_cpy((char*)(((ip_hdr*)ippkt->buf)+1), data, offset, thispkt_datalen);
 
-      arp_send(ippkt, dstaddr_r, ETHERTYPE_IP);
+      arp_send(pkt, dstaddr_r, ETHERTYPE_IP);
     }
   }
 }

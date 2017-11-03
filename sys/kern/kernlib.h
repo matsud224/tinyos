@@ -18,6 +18,7 @@
 
 #define DRIVER_INIT __attribute__((constructor))
 #define FS_INIT __attribute__((constructor))
+#define NET_INIT __attribute__((constructor))
 
 #define MAX(a, b) ((a)>(b)?(a):(b))
 #define MIN(a, b) ((a)<(b)?(a):(b))

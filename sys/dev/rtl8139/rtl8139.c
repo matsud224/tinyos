@@ -107,7 +107,7 @@ static struct {
   u8 txdesc_head;
   u8 txdesc_tail;
   u8 txdesc_free;
-  struct pktbuf_head *txdesc_pkt[TXDESC_NUM];
+  struct pktbuf *txdesc_pkt[TXDESC_NUM];
 	struct netdev_queue *rxqueue;
 	struct netdev_queue *txqueue;
   struct netdev netdev_info;
@@ -125,8 +125,8 @@ static const u16 TX_TSAD[TXDESC_NUM] = {
 
 void rtl8139_open(struct netdev *dev);
 void rtl8139_close(struct netdev *dev);
-int rtl8139_tx(struct netdev *dev, struct pktbuf_head *pkt);
-struct pktbuf_head *rtl8139_rx(struct netdev *dev);
+int rtl8139_tx(struct netdev *dev, struct pktbuf *pkt);
+struct pktbuf *rtl8139_rx(struct netdev *dev);
 static const struct netdev_ops rtl8139_ops = {
   .open = rtl8139_open,
   .close = rtl8139_close,
@@ -199,7 +199,7 @@ DRIVER_INIT int rtl8139_probe() {
 }
 
 int rtl8139_tx_one() {
-  struct pktbuf_head *pkt = NULL;
+  struct pktbuf *pkt = NULL;
 	if(NDQUEUE_IS_EMPTY(rtldev.txqueue))
     return -1;
   
@@ -209,7 +209,7 @@ int rtl8139_tx_one() {
 
   if(rtldev.txdesc_free > 0) {
     if(pktbuf_is_nonlinear(pkt)) {
-      struct pktbuf_head *oldpkt = pkt;
+      struct pktbuf *oldpkt = pkt;
       pkt = pktbuf_copy_linear(pkt);
       pktbuf_free(oldpkt);
     }
@@ -300,12 +300,12 @@ void rtl8139_close(struct netdev *dev UNUSED) {
   return;
 }
 
-int rtl8139_tx(struct netdev *dev UNUSED, struct pktbuf_head *pkt) {
+int rtl8139_tx(struct netdev *dev UNUSED, struct pktbuf *pkt) {
   ndqueue_enqueue(rtldev.txqueue, pkt);
   rtl8139_tx_all();
 }
 
-struct pktbuf_head *rtl8139_rx(struct netdev *dev UNUSED) {
+struct pktbuf *rtl8139_rx(struct netdev *dev UNUSED) {
   return ndqueue_dequeue(rtldev.rxqueue);
 }
 

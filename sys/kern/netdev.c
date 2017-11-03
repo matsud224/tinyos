@@ -26,8 +26,8 @@ struct netdev_queue *ndqueue_create(u8 *mem, size_t count) {
   return buf;
 }
 
-struct pktbuf_head *ndqueue_dequeue(struct netdev_queue *q) {
-  struct pktbuf_head *pkt = NULL;
+struct pktbuf *ndqueue_dequeue(struct netdev_queue *q) {
+  struct pktbuf *pkt = NULL;
   if(q->head != q->tail) {
     pkt = q->addr[q->tail++];
     if(q->tail == q->count)
@@ -37,7 +37,7 @@ struct pktbuf_head *ndqueue_dequeue(struct netdev_queue *q) {
   return pkt;
 }
 
-int ndqueue_enqueue(struct netdev_queue *q, struct pktbuf_head *pkt) {
+int ndqueue_enqueue(struct netdev_queue *q, struct pktbuf *pkt) {
   if(q->free == 0)
     return 0;
   q->addr[q->head++] = pkt;
@@ -47,7 +47,7 @@ int ndqueue_enqueue(struct netdev_queue *q, struct pktbuf_head *pkt) {
   return 1;
 }
 
-int netdev_tx(devno_t devno, struct pktbuf_head *pkt) {
+int netdev_tx(devno_t devno, struct pktbuf *pkt) {
   struct netdev *dev = netdev_tbl[devno];
   int res = -1;
   while(res < 0) {
@@ -60,7 +60,7 @@ int netdev_tx(devno_t devno, struct pktbuf_head *pkt) {
   return 0;
 }
 
-int netdev_tx_nowait(devno_t devno, struct pktbuf_head *pkt) {
+int netdev_tx_nowait(devno_t devno, struct pktbuf *pkt) {
   struct netdev *dev = netdev_tbl[devno];
   cli();
   int res = dev->ops->tx(dev, pkt);
@@ -68,9 +68,9 @@ int netdev_tx_nowait(devno_t devno, struct pktbuf_head *pkt) {
   return res;
 }
 
-struct pktbuf_head *netdev_rx(devno_t devno) {
+struct pktbuf *netdev_rx(devno_t devno) {
   struct netdev *dev = netdev_tbl[devno];
-  struct pktbuf_head *pkt = NULL;
+  struct pktbuf *pkt = NULL;
   while(pkt == NULL) {
     cli();
     pkt = dev->ops->rx(dev);
@@ -81,10 +81,10 @@ struct pktbuf_head *netdev_rx(devno_t devno) {
   return pkt;
 }
 
-struct pktbuf_head *netdev_rx_nowait(devno_t devno) {
+struct pktbuf *netdev_rx_nowait(devno_t devno) {
   struct netdev *dev = netdev_tbl[devno];
   cli();
-  struct pktbuf_head *pkt = dev->ops->rx(dev);
+  struct pktbuf *pkt = dev->ops->rx(dev);
   sti();
   return pkt;
 }

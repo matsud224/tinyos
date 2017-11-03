@@ -8,14 +8,14 @@
 void ethernet_rx(void *_devno) {
   int remain = ETHER_RX_MAX;
   devno_t devno = (devno_t)_devno;
-  struct pktbuf_head *frame = NULL;
+  struct pktbuf *frame = NULL;
   while(--remain && (frame = netdev_rx_nowait(devno)) != NULL)
     ethernet_rx_one(frame);
   if(remain == 0)
     defer_exec(ethernet_rx, devno, 1);
 }
 
-void ethernet_rx_one(struct pktbuf_head *frame) {
+void ethernet_rx_one(struct pktbuf *frame) {
   if(frame->total < sizeof(struct ether_hdr))
     goto reject;
 
@@ -49,7 +49,7 @@ reject:
   return;
 }
 
-void ethernet_tx(struct pktbuf_head *frame, struct ether_addr ea){
+void ethernet_tx(struct pktbuf *frame, struct ether_addr ea){
   netdev_tx(0, frame);
   return;
 }

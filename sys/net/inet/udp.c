@@ -19,7 +19,7 @@ static u16 udp_checksum(struct ip_hdr *iphdr, struct udp_hdr *uhdr){
   return checksum2((u16*)(&pseudo), (u16*)uhdr, sizeof(udp_pseudo_hdr), ntoh16(uhdr->uh_ulen));
 }
 
-void udp_rx(struct pktbuf_head *pkt, struct ip_hdr *iphdr){
+void udp_rx(struct pktbuf *pkt, struct ip_hdr *iphdr){
   struct udp_hdr *uhdr = pkt->data;
 
   if(pkt->total < sizeof(struct udp_hdr) ||
@@ -88,7 +88,7 @@ int udp_sendto(const char *msg, size_t len, int flags, in_addr to_addr, in_port_
   //UDPで送れる最大サイズを超えている
   if(0xffff-sizeof(udp_hdr) < len) return EMSGSIZE;
 
-  struct pktbuf_head *udpseg = new hdrstack(true);
+  struct pktbuf *udpseg = new hdrstack(true);
   udpseg->next = NULL;
   udpseg->size=sizeof(udp_hdr)+len;
   udpseg->buf=new char[udpseg->size];

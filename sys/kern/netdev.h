@@ -11,7 +11,7 @@ struct netdev_queue {
   u32 free;
   u32 head; //次の書き込み位置
   u32 tail; //次の読み出し位置
-  struct pktbuf_head **addr;
+  struct pktbuf **addr;
 };
 
 struct netdev;
@@ -19,8 +19,8 @@ struct netdev;
 struct netdev_ops {
   void (*open)(struct netdev *dev);
   void (*close)(struct netdev *dev);
-  int (*tx)(struct netdev *dev, struct pktbuf_head *pkt);
-  struct pktbuf_head *(*rx)(struct netdev *dev);
+  int (*tx)(struct netdev *dev, struct pktbuf *pkt);
+  struct pktbuf *(*rx)(struct netdev *dev);
 };
 
 struct ifaddr {
@@ -41,10 +41,10 @@ extern struct netdev *netdev_tbl[MAX_NETDEV];
 void netdev_init(void);
 void netdev_add(struct netdev *dev);
 struct netdev_queue *ndqueue_create(u8 *mem, size_t count);
-struct pktbuf_head *ndqueue_dequeue(struct netdev_queue *q);
-int ndqueue_enqueue(struct netdev_queue *q, struct pktbuf_head *pkt);
-int netdev_tx(devno_t devno, struct pktbuf_head *pkt);
-int netdev_tx_nowait(devno_t devno, struct pktbuf_head *pkt);
-struct pktbuf_head *netdev_rx(devno_t devno);
-struct pktbuf_head *netdev_rx_nowait(devno_t devno);
+struct pktbuf *ndqueue_dequeue(struct netdev_queue *q);
+int ndqueue_enqueue(struct netdev_queue *q, struct pktbuf *pkt);
+int netdev_tx(devno_t devno, struct pktbuf *pkt);
+int netdev_tx_nowait(devno_t devno, struct pktbuf *pkt);
+struct pktbuf *netdev_rx(devno_t devno);
+struct pktbuf *netdev_rx_nowait(devno_t devno);
 

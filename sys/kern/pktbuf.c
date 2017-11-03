@@ -1,110 +1,46 @@
 #include <kern/pktbuf.h>
 
-struct pktbuf_head *pktbuf_create(u8 *buf, u32 size, void (*freefunc)(u8 *)) {
-  struct pktbuf_head *head = malloc(sizeof(struct pktbuf_head));
-  head->size = 0;
-  head->total = size;
-  head->head = head->data = head->tail = buf;
-  head->end = buf + size;
-  
-  head->next_frag = NULL;
-  list_init(&head->pkt_link);
-
-  head->freefunc = freefunc;
-
-  return head;
+struct pktbuf *pktbuf_create(u8 *buf, size_t size, void (*freefunc)(u8 *)) {
+  struct pktbuf *pkt = malloc(sizeof(struct pktbuf));
+  pkt->begin = pkt->head = buf;
+  pkt->end = pkt->tail = buf + size;
+  pkt->freefunc = freefunc;
+  return pkt;
 }
 
-struct pktbuf_head *pktbuf_alloc(u32 size) {
-  return pktbuf_create(malloc(size), size, free);
+struct pktbuf *pktbuf_alloc(size_t size) {
+  struct pktbuf *pkt = pktbuf_create(malloc(size), size, free);
+  pkt->tail = pkt->head;
 }
 
-static void pktbuf_free_fragment(struct pktbuf_fragment *frag) {
-  if(frag->freefunc != NULL)
-    frag->freefunc(frag->head);
-  free(frag);
+void pktbuf_free(struct pktbuf *pkt) {
+  if(pkt->freefunc != NULL)
+    pkt->freefunc(pkt->begin);
+  free(pkt);
 }
 
-void pktbuf_free(struct pktbuf_head *head) {
-  struct pktbuf_fragment *frag = head->next_frag;
-  struct pktbuf_fragment *next = NULL;
-  while(frag != NULL) {
-    next = head->next_frag;
-    pktbuf_free_fragment(frag);
-    frag = next;
-  }
-
-  if(head->freefunc != NULL)
-    head->freefunc(head->head);
-  free(head);
-}
-
-int pktbuf_reserve_header(struct pktbuf_head *head, u32 size) {
-  if(head->size > 0 || head->data + size > head->end) {
+int pktbuf_reserve_headroom(struct pktbuf *pkt, size_t size) {
+  if(pkt->head + size > pkt->end) {
     return -1;
   }
-  head->data += size;
-  head->tail = MAX(head->data, head->tail);
+  pkt->head += size;
+  pkt->tail = MAX(pkt->head, pkt->tail);
   return 0;
 }
 
-u8 *pktbuf_add_header(struct pktbuf_head *head, u32 size) {
-  if(head->head + size > head->data) {
+u8 *pktbuf_add_header(struct pktbuf *pkt, size_t size) {
+  if(pkt->begin + size > pkt->head) {
     return NULL;
   }
-  head->data -= size;
-  head->size += size;
-  head->total += size;
-  return head->data;
+  pkt->head -= size;
+  return pkt->head;
 }
 
-void pktbuf_remove_header(struct pktbuf_head *head, u32 size) {
-  head->data += size;
-  head->size -= size;
-  head->total -= size;
+void pktbuf_remove_header(struct pktbuf *pkt, size_t size) {
+  pkt->head += size;
 }
 
-int pktbuf_write_fragment(struct pktbuf_head *head, u8 *buf, u32 size) {
-  if(head->next_frag)
-    return -1;
-  if(head->tail+size > head->end)
-    return -1;
-  memcpy(head->tail, buf, size);
-  head->tail += size;
-  head->size += size;
-  head->total += size;
-  return 0;
-}
-
-void pktbuf_add_fragment(struct pktbuf_head *head, u8 *buf UNUSED, u32 size, void (*freefunc)(u8 *)) {
-  struct pktbuf_fragment *frag = malloc(sizeof(struct pktbuf_fragment));
-  frag->next = NULL;
-  frag->parent = head;
-  frag->size = size;
-  frag->head = head;
-  frag->freefunc = freefunc;
-
-  struct pktbuf_fragment **last = &head->next_frag;
-  while(*last != NULL)
-    last = &((*last)->next);
-  *last = frag;
-  head->total += frag->size;
-}
-
-int pktbuf_is_nonlinear(struct pktbuf_head *head) {
-  return head->total != head->size;
-}
-
-struct pktbuf_head *pktbuf_copy_linear(struct pktbuf_head *pkt) {
-  struct pktbuf_head *new = pktbuf_alloc(pkt->total);
-  pktbuf_write_fragment(new, pkt->head, pkt->size);
-
-  struct pktbuf_fragment *frag = pkt->next_frag;
-  while(frag != NULL) {
-    pktbuf_write_fragment(new, frag->head, frag->size);
-    frag = frag->next;
-  }
-
-  return new;
+void pktbuf_copyin(struct pktbuf *pkt, u8 *data, size_t size, off_t offset) {
+  memcpy(pkt->head+offset, data, size);
 }
 

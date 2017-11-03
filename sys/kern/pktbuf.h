@@ -1,39 +1,23 @@
 #pragma once
-
 #include <kern/kernlib.h>
 
-struct pktbuf_head;
-struct pktbuf_fragment {
-  struct *next;
-  struct pktbuf_head *parent;
+struct pktbuf {
+  struct list_pkt link;
 
-  u32 size;
+  u8 *begin;
   u8 *head;
-
-  void (*freefunc)(u8 *);
-};
-
-struct pktbuf_head {
-  struct list_head frag;
-  struct list_head link;
-
-  u32 total;
-  u32 size;
-  u8 *head;
-  u8 *data;
   u8 *tail;
   u8 *end;
 
   void (*freefunc)(u8 *);
 };
 
-struct pktbuf_head *pktbuf_create(u8 *buf, u32 size, void (*freefunc)(u8 *));
-struct pktbuf_head *pktbuf_alloc(u32 size);
-void pktbuf_free(struct pktbuf_head *head);
-int pktbuf_reserve_header(struct pktbuf_head *head, u32 size);
-u8 *pktbuf_add_header(struct pktbuf_head *head, u32 size);
-void pktbuf_remove_header(struct pktbuf_head *head, u32 size);
-int pktbuf_write_fragment(struct pktbuf_head *head, u8 *buf, u32 size);
-void pktbuf_add_fragment(struct pktbuf_head *head, u8 *buf, u32 size, void (*freefunc)(u8 *));
-int pktbuf_is_nonlinear(struct pktbuf_head *head);
-struct pktbuf_head *pktbuf_copy_linear(struct pktbuf_head *pkt);
+#define pktbuf_get_size(pkt) ((pkt)->tail - (pkt)->head)
+
+struct pktbuf *pktbuf_create(u8 *buf, size_t size, void (*freefunc)(u8 *));
+struct pktbuf *pktbuf_alloc(size_t size);
+void pktbuf_free(struct pktbuf *pkt);
+int pktbuf_reserve_headroom(struct pktbuf *pkt, size_t size);
+u8 *pktbuf_add_header(struct pktbuf *pkt, size_t size);
+void pktbuf_remove_header(struct pktbuf *pkt, size_t size);
+void pktbuf_copyin(struct pktbuf *pkt, u8 *data, size_t size, off_t offset);

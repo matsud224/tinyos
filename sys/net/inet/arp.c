@@ -4,6 +4,16 @@
 #include <net/inet/params.h>
 #include <net/inet/protohdr.h>
 #include <kern/lock.h>
+#include <kern/kernlib.h>
+#include <kern/pktbuf.h>
+
+struct arpentry{
+  etheraddr macaddr;
+  in_addr_t ipaddr;
+  u16 timeout;
+#define ARPTBL_PERMANENT 0xffff //timeoutをこの値にした時はタイムアウトしない
+  struct list_head pending; //アドレス解決待ちのフレーム
+};
 
 struct arpentry arptable[MAX_ARPTABLE];
 static int next_register = 0; //次の登録位置
@@ -16,7 +26,7 @@ enum arpresult {
 
 static mutex arptbl_mtx;
 
-void arp_init() {
+NETINIT void arp_init() {
   mutex_init(&arptbl_mtx);
 
   for(int i=0;i<MAX_ARPTABLE;i++)
@@ -32,7 +42,7 @@ static void pending_remove_all(struct list_head *pending) {
   }
 }
 
-static int search_arptable(u32 ipaddr, etheraddr *macaddr, struct pktbuf_head *frm){
+static int arp_resolve(in_addr_t ipaddr, etheraddr *macaddr, struct pktbuf *frm){
   mutex_lock(&arptbl_mtx);
 
   for(int i=0; i<MAX_ARPTABLE; i++){
@@ -67,7 +77,7 @@ static int search_arptable(u32 ipaddr, etheraddr *macaddr, struct pktbuf_head *f
   return RESULT_NOT_FOUND;
 }
 
-void register_arptable(in_addr_t ipaddr, etheraddr macaddr, bool is_permanent){
+void register_arptable(in_addr_t ipaddr, etheraddr macaddr, int is_permanent){
   mutex_lock(&arptbl_mtx);
 
   //IPアドレスだけ登録されている（アドレス解決待ち）エントリを探す
@@ -78,7 +88,7 @@ void register_arptable(in_addr_t ipaddr, etheraddr macaddr, bool is_permanent){
         arptable[i].macaddr = macaddr;
         struct arpentry *p;
         list_for_each(p, &arptable[i].pending) {
-          struct pktbuf_head *frm = container_of(p, struct pktbuf_head, link);
+          struct pktbuf *frm = container_of(p, struct pktbuf, link);
           struct ether_hdr *ehdr = (ether_hdr*)ptr->flm->buf;
           //宛先MACアドレス欄を埋める
           ehdr->ether_dhost = macaddr;
@@ -100,7 +110,7 @@ void register_arptable(in_addr_t ipaddr, etheraddr macaddr, bool is_permanent){
   return;
 }
 
-void arp_rx(struct pktbuf_head *frm, struct ether_hdr *ehdr){
+void arp_rx(struct pktbuf *frm, struct ether_hdr *ehdr){
   //正しいヘッダかチェック
   if(frm->total < sizeof(ether_arp) ||
     ntoh16(earp->arp_hrd) != ARPHRD_ETHER ||
@@ -131,19 +141,19 @@ void arp_rx(struct pktbuf_head *frm, struct ether_hdr *ehdr){
     }
     break;
   case ARPOP_REPLY:
-    register_arptable(IPADDR_TO_UINT32(earp->arp_spa), earp->arp_sha, false);
+    register_arptable(earp->arp_spa, earp->arp_sha, 0);
     break;
   }
   return;
 }
 
-struct pktbuf_head *make_arprequest_frame(in_addr_t dstaddr){
-  struct pktbuf_head *frm =
+struct pktbuf *send_arprequest(in_addr_t dstaddr){
+  struct pktbuf *req =
     pktbuf_alloc(sizeof(struct ether_hdr) + sizeof(struct ether_arp));
 
-  pktbuf_reserve(sizeof(struct ether_hdr) + sizeof(struct ether_arp));
+  pktbuf_reserve_headroom(req, sizeof(struct ether_hdr) + sizeof(struct ether_arp));
   struct ether_arp *earp =
-   (struct ether_arp *) pktbuf_add_header(sizeof(struct ether_arp));
+   (struct ether_arp *) pktbuf_add_header(req, sizeof(struct ether_arp));
 /*
   ehdr->ether_type = hton16(ETHERTYPE_ARP);
   memcpy(ehdr->ether_shost, MACADDR, ETHER_ADDR_LEN);
@@ -158,31 +168,47 @@ struct pktbuf_head *make_arprequest_frame(in_addr_t dstaddr){
   earp->arp_spa = IPADDR;
   memset(earp->arp_tha, 0x00, ETHER_ADDR_LEN);
   earp->arp_tpa = dstaddr;
-  return frm;
+
+  ethernet_tx(req, ETHER_ADDR_BROADCAST, ETHERTYPE_ARP);
 }
 
-void arp_tx(struct pktbuf_head *pkt, in_addr_t dstaddr, u16 proto){
-  struct ether_hdr *ehdr =
-    (struct ether_hdr *)pktbuf_add_header(sizeof(struct ether_hdr));
-  ehdr->ether_type = hton16(proto);
-  ehdr->ether_shost = MACADDR;
+void arp_10sec() {
+  mutex_lock(&arptbl_mtx);
+  for(int i=0; i<MAX_ARPTABLE; i++) {
+    if(arptable[i].timeout > 0 && 
+       arptable[i].timeout != ARPTBL_PERMANENT) {
+      arptable[i].timeout--;
+    }
+    if(arptable[i].timeout == 0) {
+      if(!list_is_empty(arptable[i].pending)) {
+        struct list_head *p, *tmp;
+        list_foreach_safe(p, tmp, &arptable[i].pending) {
+          struct pktbuf *pkt = list_entry(p, struct pktbuf, link);
+          pktbuf_free(pkt);
+          list_remove(p);
+        }
+      }
+    } else {
+      if(!list_is_empty(arptable[i].pending))
+        send_arprequest(arptable[i].ipaddr);
+    }
+  }
+  mutex_unlock(&arptbl_mtx);
+  defer_exec(arp_10sec, 
+}
 
-  switch(search_arptable(dstaddr, &(ehdr->ether_dhost), pkt)){
+void arp_tx(struct pktbuf *pkt, in_addr_t dstaddr, u16 proto){
+  ethraddr dest_ether;
+
+  switch(arp_resolve(dstaddr, &dest_ether), pkt){
   case RESULT_FOUND:
-    ethernet_tx(pkt);
+    ethernet_tx(pkt, dest_ether, proto);
     break;
   case RESULT_NOT_FOUND:
-    //無いときはsearch_arptableが保留リストに登録しておいてくれる
-    //ARPリクエストを送信する
-    {
-      struct pktbuf_head *request = make_arprequest_frame(dstaddr);
-      ethernet_tx(request, ETHER_ADDR_BROADCAST, ETHERTYPE_ARP);
-      break;
-    }
+    send_arprequest_frame(dstaddr);
+    break;
   case RESULT_ADD_LIST:
-    //以前から保留状態にあった
     break;
   }
 }
-
 

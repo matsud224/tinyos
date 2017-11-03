@@ -4,8 +4,13 @@
 #include <net/inet/util.h>
 #include <net/inet/params.h>
 #include <net/inet/protohdr.h>
+#include <kern/lock.h>
+#include <kern/kernlib.h>
+#include <kern/pktbuf.h>
 
 #define INF 0xffff
+
+#define ip_header_len(iphdr) (iphdr->ip_hl*4)
 
 struct hole{
   struct list_head link;
@@ -17,7 +22,7 @@ struct fragment{
   struct list_head link;
   u16 first;
   u16 last;
-  struct pktbuf_head *frm;
+  struct pktbuf *pkt;
 };
 
 static struct hole *hole_new(u16 first, u16 last) {
@@ -27,11 +32,11 @@ static struct hole *hole_new(u16 first, u16 last) {
   return h;
 }
 
-static struct fragment *fragment_new(u16 first, u16 last, struct pktbuf_head *frm) {
+static struct fragment *fragment_new(u16 first, u16 last, struct pktbuf *pkt) {
   struct fragment *frag = malloc(sizeof(struct fragment));
   frag->first = first;
   frag->last = last;
-  frag->frm = frm;
+  frag->pkt = pkt;
   return frag;
 }
 
@@ -45,7 +50,7 @@ struct reasminfo{
   } id;
   struct list_head holelist;
   struct list_head fraglist;
-  struct pktbuf_head *head_frame;
+  struct pktbuf *head_frame;
   u8 headerlen; //etherヘッダ込
   u16 datalen;
   int16_t timeout; //タイムアウトまでのカウント
@@ -62,55 +67,28 @@ static void reasminfo_free(struct reasminfo *ri) {
     pktbuf_free(f->frm);
     free(f);
   }
-  pktbuf_free(head_frame);
   free(ri);
 }
 
 static struct list_head reasm_ongoing;
+static mutex reasm_ongoing_mtx;
 
-void start_ip(){
+NETINIT void ip_init(){
   list_init(&reasm_ongoing);
-  act_tsk(ETHERRECV_TASK);
-  act_tsk(TIMEOUT_10SEC_TASK);
-  sta_cyc(TIMEOUT_10SEC_CYC);
+  mutex_init(&reasm_ongoing_mtx);
 }
 
 void ip_10sec() {
-  //10sec周期で動き、タイムアウトを管理するタスク
-  while(true){
-    //IPフラグメント組み立てタイムアウト
-    wai_sem(TIMEOUT_10SEC_SEM);
-    struct reasminfo *p, *tmp;
-    list_foreach_safe(p, tmp, &reasm_ongoing) {
-      struct reasminfo *info = list_entry(p, struct reasminfo, link);
-      if(--(info->timeout) <= 0 || list_is_empty(info->holelist)){
-        list_remove(p);
-        reasminfo_free(info);
-      }
+  mutex_lock(&reasm_ongoing_lock);
+  struct reasminfo *p, *tmp;
+  list_foreach_safe(p, tmp, &reasm_ongoing) {
+    struct reasminfo *info = list_entry(p, struct reasminfo, link);
+    if(--(info->timeout) <= 0 || list_is_empty(info->holelist)){
+      list_remove(p);
+      reasminfo_free(info);
     }
-    sig_sem(TIMEOUT_10SEC_SEM);
-
-    //ARPテーブル
-    wai_sem(ARPTBL_SEM);
-    for(int i=0; i<MAX_ARPTABLE; i++){
-      if(arptable[i].timeout>0 && arptable[i].timeout!=ARPTBL_PERMANENT){
-        arptable[i].timeout--;
-      }
-      if(arptable[i].timeout == 0){
-        if(arptable[i].pending!=NULL){
-          delete arptable[i].pending;
-          arptable[i].pending = NULL;
-        }
-      }else{
-        if(arptable[i].pending!=NULL){
-          ether_flame *request = make_arprequest_frame((u8*)(&arptable[i].ipaddr));
-          ethernet_send(request);
-          delete request;
-        }
-      }
-    }
-    sig_sem(ARPTBL_SEM);
   }
+  mutex_unlock(&reasm_ongoing_lock);
   
   defer_exec(ip_10sec, 
 }
@@ -160,7 +138,7 @@ static void modify_inf_holelist(struct list_head *head, u16 newsize){
   }
 }
 
-void ip_rx(struct pktbuf_head *pkt){
+void ip_rx(struct pktbuf *pkt){
   struct ip_hdr *iphdr = pkt->data;
   //正しいヘッダかチェック
   if(pkt->total < sizeof(struct ip_hdr))
@@ -172,14 +150,14 @@ void ip_rx(struct pktbuf_head *pkt){
     goto exit;
   if(iphdr->ip_hl < 5){
     goto exit;
-  if(checksum((u16*)iphdr, iphdr->ip_hl*4) != 0)
+  if(checksum((u16*)iphdr, ip_header_len(iphdr)) != 0)
     goto exit;
 
   if(!((ntoh16(iphdr->ip_off) & IP_OFFMASK) == 0 && (ntoh16(iphdr->ip_off) & IP_MF) == 0)){
     //フラグメント
-    wai_sem(TIMEOUT_10SEC_SEM);
+    mutex_lock(&reasm_ongoing_lock);
     u16 ffirst = (ntoh16(iphdr->ip_off) & IP_OFFMASK)*8;
-    u16 flast = ffirst + (ntoh16(iphdr->ip_len) - iphdr->ip_hl*4) - 1;
+    u16 flast = ffirst + (ntoh16(iphdr->ip_len) - ip_header_len(iphdr)) - 1;
 
     struct reasminfo *info = get_reasminfo(iphdr->ip_src, iphdr->ip_dst, iphdr->ip_p, ntoh16(iphdr->ip_id));
     struct list_head *p, *tmp;
@@ -200,7 +178,8 @@ void ip_rx(struct pktbuf_head *pkt){
       if(flast < hlast)
         list_insert_front(hole_new(flast+1, hlast), p);
 
-      list_pushfront(fragment_new(ffirst, flast, frm), info->fraglist);
+      list_pushfront(fragment_new(ffirst, flast, pkt), info->fraglist);
+
       list_remove(p);
       free(hole);
 
@@ -211,32 +190,34 @@ void ip_rx(struct pktbuf_head *pkt){
       }
       //はじまりのフラグメント
       if(ffirst == 0) {
-        info->head_frame = frm;
-        info->headerlen = sizeof(ether_hdr) + (iphdr->ip_hl*4);
+        info->head_frame = pkt;
+        info->headerlen = sizeof(ether_hdr) + ip_header_len(iphdr);
       }
+
+      pktbuf_remove_header(pkt, ip_header_len(iphdr));
     }
 
     if(list_is_empty(&info->holelist)) {
-      //holeがなくなり、おしまい
-      //パケットを構築
-      frm = pktbuf_alloc(info->headerlen + info->datalen);
-      memcpy(frm->data, info->head_frame->buf, info->headerlen);
-      char *origin = frm->buf + info->headerlen;
-      int total = 0;
+      //フラグメントが揃った
+      pkt = pktbuf_alloc(info->headerlen + info->datalen);
+      pktbuf_copyin(pkt, info->head_frame->head - info->headerlen, info->headerlen, 0);
+      iphdr = (struct ip_hdr *)pktbuf->head;
+      pktbuf_remove_header(pkt, info->headerlen);
+
       struct list_head *p;
       list_foreach(p, info->fraglist) {
         struct fragment *f = list_entry(p, struct fragment, link);
-        memcpy(origin+f->first, ((u8*)(f->frm->buf)) + info->headerlen, f->last - fptr->first + 1);
-        total += fptr->last - fptr->first + 1;
+        pktbuf_copyin(pkt, f->pkt->data, f->last - f->first +1, f->first);
       }
-      //frmを上書きしたので、iphdrも修正必要
-      iphdr = (ip_hdr*)(frm->buf+sizeof(ether_hdr));
+
       info->timeout = 0;
     } else {
-      sig_sem(TIMEOUT_10SEC_SEM);
+      mutex_unlock(&reasm_ongoing_lock);
       return;
     }
-    sig_sem(TIMEOUT_10SEC_SEM);
+    mutex_unlock(&reasm_ongoing_lock);
+  } else {
+    pktbuf_remove_header(pkt, info->headerlen);
   }
 
   switch(iphdr->ip_p){
@@ -244,24 +225,23 @@ void ip_rx(struct pktbuf_head *pkt){
     icmp_rx(pkt, iphdr);
     break;
   case IPTYPE_TCP:
-    //tcp_rx(frm, iphdr, (tcp_hdr*)(((u8*)iphdr)+(iphdr->ip_hl*4)));
+    //tcp_rx(pkt, iphdr);
     break;
   case IPTYPE_UDP:
-    udp_rx(frm, iphdr);
+    udp_rx(pkt, iphdr);
     break;
   }
 
   return;
 }
 
-static u16 ip_id = 0;
 
-static void prep_iphdr(ip_hdr *iphdr, u16 len, u16 id,
-          bool mf, u16 offset, u8 proto, in_addr_t dstaddr){
+static void fill_iphdr(struct ip_hdr *iphdr, u16 datalen, u16 id,
+          int mf, u16 offset, u8 proto, in_addr_t dstaddr){
   iphdr->ip_v = 4;
-  iphdr->ip_hl = sizeof(ip_hdr)/4;
+  iphdr->ip_hl = sizeof(struct ip_hdr)/4;
   iphdr->ip_tos = 0x80;
-  iphdr->ip_len = hton16(len);
+  iphdr->ip_len = hton16(sizeof(struct ip_hdr)+datalen);
   iphdr->ip_id = hton16(id);
   iphdr->ip_off = hton16((offset/8) | (mf?IP_MF:0));
   iphdr->ip_ttl = IP_TTL;
@@ -270,7 +250,7 @@ static void prep_iphdr(ip_hdr *iphdr, u16 len, u16 id,
   iphdr->ip_src =  IPADDR;
   iphdr->ip_dst =  dstaddr;
 
-  iphdr->ip_sum = checksum((u16*)iphdr, sizeof(ip_hdr));
+  iphdr->ip_sum = checksum((u16*)iphdr, sizeof(struct ip_hdr));
   return;
 }
 
@@ -287,45 +267,37 @@ in_addr_t ip_routing(in_addr_t dstaddr){
 }
 
 u16 ip_getid(){
-  u16 id;
-  wai_sem(IPID_SEM);
-  id = ip_id; ip_id++;
-  sig_sem(IPID_SEM);
-  return id;
+  static u16 ip_id = 0;
+  u16 newid;
+  while(newid = ip_id, newid != xchg(ip_id+1, &ip_id));
+  return newid;
 }
 
-void ip_tx(struct pktbuf_head *data, in_addr_t dstaddr, u8 proto){
-  u32 datalen = data->total;
-  u32 remainlen = datalen;
+void ip_tx(struct pktbuf *data, in_addr_t dstaddr, u8 proto){
+  size_t datalen = pktbuf_get_size(data);
+  size_t remainlen = datalen;
   u16 currentid = ip_getid();
 
-  //ルーティング
-  in_addr_t dstaddr_r;
-  dstaddr_r = ip_routing(dstaddr_r);
+  dstaddr = ip_routing(dstaddr);
 
-  if(sizeof(ip_hdr)+remainlen <= MTU){
-    hdrstack *iphdr_item = new hdrstack(true);
-    iphdr_item->size = sizeof(ip_hdr);
-    iphdr_item->buf = new char[sizeof(ip_hdr)];
-    prep_iphdr((ip_hdr*)iphdr_item->buf, sizeof(ip_hdr)+remainlen, currentid, false, 0, proto, dstaddr);
-    iphdr_item->next = data;
-    arp_send(iphdr_item, dstaddr_r, ETHERTYPE_IP);
+  if(sizeof(struct ip_hdr) + remainlen <= MTU){
+    fill_iphdr((struct ip_hdr *)pktbuf_add_header(data, sizeof(struct ip_hdr)), 
+                 remainlen, currentid, 0, 0, proto, dstaddr);
+    arp_send(data, dstaddr_r, ETHERTYPE_IP);
   }else{
-    while(remainlen > 0){
-      u32 thispkt_totallen = 
+    while(remainlen > 0) {
+      size_t frag_totallen = 
         MIN(remainlen + sizeof(struct ip_hdr), MTU);
-      u32 thispkt_datalen = thispkt_totallen - sizeof(struct ip_hdr);
-      u16 offset = datalen - remainlen;
-      struct pktbuf *pkt = pktbuf_alloc();
-      pkt->next = NULL;
-      remainlen -= thispkt_datalen;
-      pkt->size = thispkt_totallen;
-      pkt->buf = new char[ippkt->size];
-      prep_iphdr((ip_hdr*)ippkt->buf, thispkt_totallen, currentid, (remainlen>0)?true:false
-            , offset, proto, dstaddr);
-      hdrstack_cpy((char*)(((ip_hdr*)ippkt->buf)+1), data, offset, thispkt_datalen);
+      size_t frag_datalen = frag_totallen - sizeof(struct ip_hdr);
+      off_t offset = datalen - remainlen;
+      struct pktbuf *pkt = pktbuf_alloc(sizeof(struct ether_hdr) + frag_totallen);
+      pktbuf_reserve_headroom(sizeof(struct ether_hdr) + sizeof(struct ip_hdr));
+      pktbuf_copyin(pkt, data->head + offset, frag_datalen, 0);
+      fill_iphdr((struct ip_hdr *)pktbuf_add_header(pkt, sizeof(struct ip_hdr)), frag_datalen, 
+                   currentid, remainlen>0, offset, proto, dstaddr);
 
-      arp_send(pkt, dstaddr_r, ETHERTYPE_IP);
+      arp_send(pkt, dstaddr, ETHERTYPE_IP);
+      remainlen -= frag_datalen;
     }
   }
 }

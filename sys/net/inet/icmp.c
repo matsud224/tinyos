@@ -3,7 +3,7 @@
 #include <net/inet/ip.h>
 #include <kern/types.h>
 
-void icmp_rx(struct pktbuf_head *pkt, struct ip_hdr *iphdr){
+void icmp_rx(struct pktbuf *pkt, struct ip_hdr *iphdr){
   struct icmp *icmpdata = pkt->data;
   if( pkt->total < 4 /*ICMPヘッダのサイズ*/ ||
     checksum((u16*)icmpdata, pkt->total) != 0){

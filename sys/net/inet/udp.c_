@@ -7,6 +7,15 @@
 #include <net/sockif.h>
 #include <net/netlib.h>
 #include <kern/kernlib.h>
+#include <kern/lock.h>
+
+static mutex udp_mtx;
+static mutex udp_recv_mtx;
+
+NET_INIT void udp_init() {
+  mutex_init(&udp_mtx);
+  mutex_init(&udp_recv_mtx);
+}
 
 static u16 udp_checksum(struct ip_hdr *iphdr, struct udp_hdr *uhdr){
   struct udp_pseudo_hdr pseudo;
@@ -16,21 +25,21 @@ static u16 udp_checksum(struct ip_hdr *iphdr, struct udp_hdr *uhdr){
   pseudo.up_void = 0;
   pseudo.up_len = uhdr->uh_ulen; //UDPヘッダ+UDPペイロードの長さ
 
-  return checksum2((u16*)(&pseudo), (u16*)uhdr, sizeof(udp_pseudo_hdr), ntoh16(uhdr->uh_ulen));
+  return checksum2((u16*)(&pseudo), (u16*)uhdr, sizeof(struct udp_pseudo_hdr), ntoh16(uhdr->uh_ulen));
 }
 
 void udp_rx(struct pktbuf *pkt, struct ip_hdr *iphdr){
   struct udp_hdr *uhdr = pkt->data;
 
-  if(pkt->total < sizeof(struct udp_hdr) ||
-    pkt->totale != ntoh16(uhdr->uh_ulen)){
+  if(pktbuf_get_size(pkt) < sizeof(struct udp_hdr) ||
+    pktbuf_get_size(pkt) != ntoh16(uhdr->uh_ulen)){
     goto exit;
   }
   if(uhdr->sum != 0 && udp_checksum(iphdr, uhdr) != 0){
     goto exit;
   }
 
-  wai_sem(UDP_SEM);
+  mutex_lock(&udp_mtx);
 
   int s;
   struct socket_t *sock;
@@ -58,12 +67,12 @@ void udp_rx(struct pktbuf *pkt, struct ip_hdr *iphdr){
   }
 
   if(ucb->recv_waiting) wup_tsk(sock->ownertsk);
-  sig_sem(UDP_RECV_SEM);
+  mutex_unlock(&udp_recv_mtx);
 
-  sig_sem(UDP_SEM);
+  mutex_unlock(&udp_mtx);
   return;
 exit:
-  sig_sem(UDP_SEM);
+  mutex_unlock(&udp_mtx);
   return;
 }
 
@@ -111,16 +120,16 @@ static char *udp_analyze(ether_flame *flm, u16 *datalen, u8 srcaddr[], u16 *srcp
 }
 
 ssize_t udp_recvfrom(udp_ctrlblock *ucb, char *buf, size_t len, int flags, in_addr_t *from_addr, in_port_t *from_port, TMO timeout){
-  wai_sem(UDP_RECV_SEM);
+  mutex_lock(&udp_recv_mtx);
   //recv_waitingがtrueの時にデータグラムがやってきたら起こしてもらえる
   ucb->recv_waiting = true;
   while(true){
     if(ucb->recv_front == ucb->recv_back){
-      sig_sem(UDP_RECV_SEM);
+      mutex_unlock(&udp_recv_mtx);
       if(tslp_tsk(timeout) == E_TMOUT){
-        wai_sem(UDP_RECV_SEM);
+        mutex_lock(&udp_recv_mtx);
         ucb->recv_waiting = false;
-        sig_sem(UDP_RECV_SEM);
+        mutex_unlock(&udp_recv_mtx);
         return ETIMEOUT;
       }
     }else{
@@ -133,11 +142,11 @@ ssize_t udp_recvfrom(udp_ctrlblock *ucb, char *buf, size_t len, int flags, in_ad
       ucb->recv_back++;
       if(ucb->recv_back==DGRAM_RECV_QUEUE) ucb->recv_back=0;
       ucb->recv_waiting = false;
-      sig_sem(UDP_RECV_SEM);
+      mutex_unlock(&udp_recv_mtx);
       return MIN(len,datalen);
     }
 
-    wai_sem(UDP_RECV_SEM);
+    mutex_lock(&udp_recv_mtx);
   }
 }
 

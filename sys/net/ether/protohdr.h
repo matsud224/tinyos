@@ -4,8 +4,8 @@
 #include <net/ether/ether.h>
 
 struct ether_hdr{
-  ether_addr ether_dhost;
-  ether_addr ether_shost;
+  struct etheraddr ether_dhost;
+  struct etheraddr ether_shost;
   u16 ether_type;
 };
 #define ETHERTYPE_IP  0x0800

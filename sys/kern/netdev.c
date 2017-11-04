@@ -47,8 +47,7 @@ int ndqueue_enqueue(struct netdev_queue *q, struct pktbuf *pkt) {
   return 1;
 }
 
-int netdev_tx(devno_t devno, struct pktbuf *pkt) {
-  struct netdev *dev = netdev_tbl[devno];
+int netdev_tx(struct netdev *dev, struct pktbuf *pkt) {
   int res = -1;
   while(res < 0) {
     cli();
@@ -60,16 +59,14 @@ int netdev_tx(devno_t devno, struct pktbuf *pkt) {
   return 0;
 }
 
-int netdev_tx_nowait(devno_t devno, struct pktbuf *pkt) {
-  struct netdev *dev = netdev_tbl[devno];
+int netdev_tx_nowait(struct netdev *dev, struct pktbuf *pkt) {
   cli();
   int res = dev->ops->tx(dev, pkt);
   sti();
   return res;
 }
 
-struct pktbuf *netdev_rx(devno_t devno) {
-  struct netdev *dev = netdev_tbl[devno];
+struct pktbuf *netdev_rx(struct netdev *dev) {
   struct pktbuf *pkt = NULL;
   while(pkt == NULL) {
     cli();
@@ -81,11 +78,15 @@ struct pktbuf *netdev_rx(devno_t devno) {
   return pkt;
 }
 
-struct pktbuf *netdev_rx_nowait(devno_t devno) {
-  struct netdev *dev = netdev_tbl[devno];
+struct pktbuf *netdev_rx_nowait(struct netdev *dev) {
   cli();
   struct pktbuf *pkt = dev->ops->rx(dev);
   sti();
   return pkt;
 }
 
+void netdev_add_ifaddr(struct netdev *dev, struct ifaddr *addr) {
+  addr->dev = dev;
+  list_pushback(&addr->dev_link, &dev->ifaddr_list);
+  list_pushback(&addr->family_link, &ifaddr_table[addr->family]);
+}

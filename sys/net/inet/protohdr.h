@@ -1,4 +1,5 @@
 #pragma once
+#include <net/inet/inet.h>
 #include <kern/types.h>
 #include <kern/machine.h>
 #include <net/ether/ether.h>
@@ -48,9 +49,9 @@ struct arp_hdr{
 
 struct ether_arp{
   struct arp_hdr ea_hdr;
-  etheraddr arp_sha;
+  struct etheraddr arp_sha;
   in_addr_t arp_spa;
-  etheraddr arp_tha;
+  struct etheraddr arp_tha;
   in_addr_t arp_tpa;
 };
 

@@ -73,7 +73,7 @@ static void reasminfo_free(struct reasminfo *ri) {
 static struct list_head reasm_ongoing;
 static mutex reasm_ongoing_mtx;
 
-NETINIT void ip_init(){
+NET_INIT void ip_init(){
   list_init(&reasm_ongoing);
   mutex_init(&reasm_ongoing_mtx);
 }
@@ -254,21 +254,31 @@ static void fill_iphdr(struct ip_hdr *iphdr, u16 datalen, u16 id,
   return;
 }
 
-in_addr_t ip_routing(in_addr_t dstaddr){
-  in_addr_t myaddr=IPADDR_TO_UINT32(IPADDR);
-  in_addr_t mymask=IPADDR_TO_UINT32(NETMASK);
-  in_addr_t dst = IPADDR_TO_UINT32(dstaddr);
-  if(dst!=0 && (myaddr&mymask)!=(dst&mymask) && dstaddr != IPBROADCAST){
-    //同一のネットワークでない->デフォルトゲートウェイに流す
-    dstaddr = DEFAULT_GATEWAY;
+static in_addr_t defaultgw;
+void ip_set_defaultgw(in_addr_t addr) {
+  defaultgw = addr;
+}
+
+in_addr_t ip_get_defaultgw() {
+  return defaultgw;
+}
+
+in_addr_t ip_routing(in_addr_t dstaddr, struct netdev **dev) {
+  struct list_head *p;
+  list_foreach(p, &ifaddr_table[PF_INET]) {
+    struct ifaddr_in *inaddr = list_entry(p, struct ifaddr_in, link);
+    if((inaddr->addr & inaddr->netmask) == (dstaddr & inaddr->netmask)) {
+      return dstaddr;
+    }
   }
 
-  return dstaddr;
+  return defaultgw;
 }
 
 u16 ip_getid(){
   static u16 ip_id = 0;
   u16 newid;
+  //ip_idをインクリメント
   while(newid = ip_id, newid != xchg(ip_id+1, &ip_id));
   return newid;
 }
@@ -277,13 +287,14 @@ void ip_tx(struct pktbuf *data, in_addr_t dstaddr, u8 proto){
   size_t datalen = pktbuf_get_size(data);
   size_t remainlen = datalen;
   u16 currentid = ip_getid();
+  struct netdev *dev = NULL;
 
-  dstaddr = ip_routing(dstaddr);
+  dstaddr = ip_routing(dstaddr, &dev);
 
   if(sizeof(struct ip_hdr) + remainlen <= MTU){
     fill_iphdr((struct ip_hdr *)pktbuf_add_header(data, sizeof(struct ip_hdr)), 
                  remainlen, currentid, 0, 0, proto, dstaddr);
-    arp_send(data, dstaddr_r, ETHERTYPE_IP);
+    arp_tx(data, dstaddr, ETHERTYPE_IP, dev);
   }else{
     while(remainlen > 0) {
       size_t frag_totallen = 
@@ -296,7 +307,7 @@ void ip_tx(struct pktbuf *data, in_addr_t dstaddr, u8 proto){
       fill_iphdr((struct ip_hdr *)pktbuf_add_header(pkt, sizeof(struct ip_hdr)), frag_datalen, 
                    currentid, remainlen>0, offset, proto, dstaddr);
 
-      arp_send(pkt, dstaddr, ETHERTYPE_IP);
+      arp_tx(pkt, dstaddr, ETHERTYPE_IP, dev);
       remainlen -= frag_datalen;
     }
   }

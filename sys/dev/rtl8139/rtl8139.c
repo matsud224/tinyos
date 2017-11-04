@@ -154,7 +154,7 @@ void rtl8139_init(struct pci_dev *thisdev) {
   eaddr->family = PF_LINK;
   for(int i=0; i<6; i++)
     eaddr->addr[i] = in8(RTLREG(IDR)+i);
-  list_pushfront(eaddr, &rtldev.netdev_info.ifaddr_list);
+  netdev_add_ifaddr(&rtldev.netdev_info, eaddr);
 
   //enable PCI bus mastering
   u16 pci_cmd = pci_config_read16(thisdev, PCI_COMMAND);

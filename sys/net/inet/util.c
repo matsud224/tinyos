@@ -33,9 +33,9 @@ u16 checksum(u16 *data, int len){
   return ~sum;
 }
 
-u16 checksum2(u16 *data1, u16 *data2, int len1, int len2){
+u16 checksum2(u16 *data1, u16 *data2, size_t len1, size_t len2){
   u32 sum = 0;
-  int len = len1 + len2;
+  size_t len = len1 + len2;
   u16 *data = data1;
   int complen = 0;
   for(; len>1;len-=2){

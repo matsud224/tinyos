@@ -6,7 +6,7 @@ RM				= rm -f
 
 BINDIR		= ../bin
 OBJDIR		= obj
-SUBDIRS		= kern dev fs crt
+SUBDIRS		= kern dev fs crt net
 
 LDSCR			= ldscript.ld
 

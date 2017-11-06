@@ -2,6 +2,7 @@
 #include <kern/task.h>
 
 struct netdev *netdev_tbl[MAX_NETDEV];
+struct list_head *ifaddr_tbl[MAX_PF];
 static u16 nnetdev;
 
 void netdev_init() {
@@ -88,5 +89,17 @@ struct pktbuf *netdev_rx_nowait(struct netdev *dev) {
 void netdev_add_ifaddr(struct netdev *dev, struct ifaddr *addr) {
   addr->dev = dev;
   list_pushback(&addr->dev_link, &dev->ifaddr_list);
-  list_pushback(&addr->family_link, &ifaddr_table[addr->family]);
+  list_pushback(&addr->family_link, ifaddr_tbl[addr->family]);
 }
+
+struct ifaddr *netdev_find_addr(struct netdev *dev, u16 pf) {
+  struct list_head *p;
+  list_foreach(p, &dev->ifaddr_list) {
+    struct ifaddr *addr = list_entry(p, struct ifaddr, dev_link);
+    if(addr->family == pf)
+      return addr;
+  }
+  return NULL;
+}
+
+

@@ -2,15 +2,16 @@
 #include <net/inet/arp.h>
 #include <net/inet/icmp.h>
 #include <net/inet/util.h>
+#include <net/util.h>
 #include <net/inet/params.h>
 #include <net/inet/protohdr.h>
 #include <kern/lock.h>
 #include <kern/kernlib.h>
 #include <kern/pktbuf.h>
+#include <kern/task.h>
 
 #define INF 0xffff
 
-#define ip_header_len(iphdr) (iphdr->ip_hl*4)
 
 struct hole{
   struct list_head link;
@@ -64,7 +65,7 @@ static void reasminfo_free(struct reasminfo *ri) {
   }
   list_foreach_safe(p, tmp, &ri->holelist) {
     struct fragment *f = list_entry(p, struct fragment, link);
-    pktbuf_free(f->frm);
+    pktbuf_free(f->pkt);
     free(f);
   }
   free(ri);
@@ -79,21 +80,21 @@ NET_INIT void ip_init(){
 }
 
 void ip_10sec() {
-  mutex_lock(&reasm_ongoing_lock);
-  struct reasminfo *p, *tmp;
+  mutex_lock(&reasm_ongoing_mtx);
+  struct list_head *p, *tmp;
   list_foreach_safe(p, tmp, &reasm_ongoing) {
     struct reasminfo *info = list_entry(p, struct reasminfo, link);
-    if(--(info->timeout) <= 0 || list_is_empty(info->holelist)){
+    if(--(info->timeout) <= 0 || list_is_empty(&info->holelist)){
       list_remove(p);
       reasminfo_free(info);
     }
   }
-  mutex_unlock(&reasm_ongoing_lock);
+  mutex_unlock(&reasm_ongoing_mtx);
   
-  defer_exec(ip_10sec, 
+  defer_exec(ip_10sec, NULL, 0, 10);
 }
 
-static reasminfo *get_reasminfo(in_addr_t ip_src, in_addr_t ip_dst, u8 ip_pro, u16 ip_id){
+static struct reasminfo *get_reasminfo(in_addr_t ip_src, in_addr_t ip_dst, u8 ip_pro, u16 ip_id){
   // already locked.
   struct list_head *p;
   list_foreach(p, &reasm_ongoing){
@@ -110,12 +111,12 @@ static reasminfo *get_reasminfo(in_addr_t ip_src, in_addr_t ip_dst, u8 ip_pro, u
   info->id.ip_dst = ip_dst;
   info->id.ip_pro=ip_pro; info->id.ip_id=ip_id;
   info->timeout = IPFRAG_TIMEOUT_CLC;
-  list_pushfront(info, &reasm_ongoing);
+  list_pushfront(&info->link, &reasm_ongoing);
 
   list_init(&info->holelist);
   list_init(&info->fraglist);
 
-  list_pushfront(hole_new(0, INF), &info->holelist);
+  list_pushfront(&hole_new(0, INF)->link, &info->holelist);
   info->head_frame = NULL;
 
   return info;
@@ -138,24 +139,24 @@ static void modify_inf_holelist(struct list_head *head, u16 newsize){
   }
 }
 
-void ip_rx(struct pktbuf *pkt){
-  struct ip_hdr *iphdr = pkt->data;
-  //正しいヘッダかチェック
-  if(pkt->total < sizeof(struct ip_hdr))
+void ip_rx(struct pktbuf *pkt) {
+  struct ip_hdr *iphdr = (struct ip_hdr *)pkt->head;
+  u32 pktsize = pktbuf_get_size(pkt);
+  if(pktsize < sizeof(struct ip_hdr))
     goto exit;
-  if(pkt->total < ntoh16(iphdr->ip_len))
+  if(pktsize < ntoh16(iphdr->ip_len))
     goto exit;
 
   if(iphdr->ip_v != 4)
     goto exit;
-  if(iphdr->ip_hl < 5){
+  if(iphdr->ip_hl < 5)
     goto exit;
   if(checksum((u16*)iphdr, ip_header_len(iphdr)) != 0)
     goto exit;
 
   if(!((ntoh16(iphdr->ip_off) & IP_OFFMASK) == 0 && (ntoh16(iphdr->ip_off) & IP_MF) == 0)){
     //フラグメント
-    mutex_lock(&reasm_ongoing_lock);
+    mutex_lock(&reasm_ongoing_mtx);
     u16 ffirst = (ntoh16(iphdr->ip_off) & IP_OFFMASK)*8;
     u16 flast = ffirst + (ntoh16(iphdr->ip_len) - ip_header_len(iphdr)) - 1;
 
@@ -174,11 +175,11 @@ void ip_rx(struct pktbuf *pkt){
       info->timeout = IPFRAG_TIMEOUT_CLC;
 
       if(ffirst > hfirst)
-        list_insert_front(hole_new(hfirst, ffirst-1), p);
+        list_insert_front(&hole_new(hfirst, ffirst-1)->link, p);
       if(flast < hlast)
-        list_insert_front(hole_new(flast+1, hlast), p);
+        list_insert_front(&hole_new(flast+1, hlast)->link, p);
 
-      list_pushfront(fragment_new(ffirst, flast, pkt), info->fraglist);
+      list_pushfront(&fragment_new(ffirst, flast, pkt)->link, &info->fraglist);
 
       list_remove(p);
       free(hole);
@@ -191,7 +192,7 @@ void ip_rx(struct pktbuf *pkt){
       //はじまりのフラグメント
       if(ffirst == 0) {
         info->head_frame = pkt;
-        info->headerlen = sizeof(ether_hdr) + ip_header_len(iphdr);
+        info->headerlen = sizeof(struct ether_hdr) + ip_header_len(iphdr);
       }
 
       pktbuf_remove_header(pkt, ip_header_len(iphdr));
@@ -201,23 +202,23 @@ void ip_rx(struct pktbuf *pkt){
       //フラグメントが揃った
       pkt = pktbuf_alloc(info->headerlen + info->datalen);
       pktbuf_copyin(pkt, info->head_frame->head - info->headerlen, info->headerlen, 0);
-      iphdr = (struct ip_hdr *)pktbuf->head;
+      iphdr = (struct ip_hdr *)pkt->head;
       pktbuf_remove_header(pkt, info->headerlen);
 
       struct list_head *p;
-      list_foreach(p, info->fraglist) {
+      list_foreach(p, &info->fraglist) {
         struct fragment *f = list_entry(p, struct fragment, link);
-        pktbuf_copyin(pkt, f->pkt->data, f->last - f->first +1, f->first);
+        pktbuf_copyin(pkt, f->pkt->head, f->last - f->first +1, f->first);
       }
 
       info->timeout = 0;
     } else {
-      mutex_unlock(&reasm_ongoing_lock);
+      mutex_unlock(&reasm_ongoing_mtx);
       return;
     }
-    mutex_unlock(&reasm_ongoing_lock);
+    mutex_unlock(&reasm_ongoing_mtx);
   } else {
-    pktbuf_remove_header(pkt, info->headerlen);
+    pktbuf_remove_header(pkt, ip_header_len(iphdr));
   }
 
   switch(iphdr->ip_p){
@@ -228,16 +229,18 @@ void ip_rx(struct pktbuf *pkt){
     //tcp_rx(pkt, iphdr);
     break;
   case IPTYPE_UDP:
-    udp_rx(pkt, iphdr);
+    //udp_rx(pkt, iphdr);
     break;
   }
 
   return;
+
+exit:
+  pktbuf_free(pkt);
 }
 
-
 static void fill_iphdr(struct ip_hdr *iphdr, u16 datalen, u16 id,
-          int mf, u16 offset, u8 proto, in_addr_t dstaddr){
+          int mf, u16 offset, u8 proto, in_addr_t dstaddr, struct netdev *dev) {
   iphdr->ip_v = 4;
   iphdr->ip_hl = sizeof(struct ip_hdr)/4;
   iphdr->ip_tos = 0x80;
@@ -247,8 +250,8 @@ static void fill_iphdr(struct ip_hdr *iphdr, u16 datalen, u16 id,
   iphdr->ip_ttl = IP_TTL;
   iphdr->ip_p = proto;
   iphdr->ip_sum = 0;
-  iphdr->ip_src =  IPADDR;
-  iphdr->ip_dst =  dstaddr;
+  iphdr->ip_src = ((struct ifaddr_in *)netdev_find_addr(dev, PF_INET))->addr;
+  iphdr->ip_dst = dstaddr;
 
   iphdr->ip_sum = checksum((u16*)iphdr, sizeof(struct ip_hdr));
   return;
@@ -265,9 +268,10 @@ in_addr_t ip_get_defaultgw() {
 
 in_addr_t ip_routing(in_addr_t dstaddr, struct netdev **dev) {
   struct list_head *p;
-  list_foreach(p, &ifaddr_table[PF_INET]) {
-    struct ifaddr_in *inaddr = list_entry(p, struct ifaddr_in, link);
+  list_foreach(p, ifaddr_tbl[PF_INET]) {
+    struct ifaddr_in *inaddr = list_entry(p, struct ifaddr_in, family_link);
     if((inaddr->addr & inaddr->netmask) == (dstaddr & inaddr->netmask)) {
+      *dev = inaddr->dev;
       return dstaddr;
     }
   }
@@ -283,7 +287,7 @@ u16 ip_getid(){
   return newid;
 }
 
-void ip_tx(struct pktbuf *data, in_addr_t dstaddr, u8 proto){
+void ip_tx(struct pktbuf *data, in_addr_t dstaddr, u8 proto) {
   size_t datalen = pktbuf_get_size(data);
   size_t remainlen = datalen;
   u16 currentid = ip_getid();
@@ -293,19 +297,19 @@ void ip_tx(struct pktbuf *data, in_addr_t dstaddr, u8 proto){
 
   if(sizeof(struct ip_hdr) + remainlen <= MTU){
     fill_iphdr((struct ip_hdr *)pktbuf_add_header(data, sizeof(struct ip_hdr)), 
-                 remainlen, currentid, 0, 0, proto, dstaddr);
+                 remainlen, currentid, 0, 0, proto, dstaddr, dev);
     arp_tx(data, dstaddr, ETHERTYPE_IP, dev);
   }else{
     while(remainlen > 0) {
       size_t frag_totallen = 
         MIN(remainlen + sizeof(struct ip_hdr), MTU);
       size_t frag_datalen = frag_totallen - sizeof(struct ip_hdr);
-      off_t offset = datalen - remainlen;
+      u8 offset = datalen - remainlen;
       struct pktbuf *pkt = pktbuf_alloc(sizeof(struct ether_hdr) + frag_totallen);
-      pktbuf_reserve_headroom(sizeof(struct ether_hdr) + sizeof(struct ip_hdr));
+      pktbuf_reserve_headroom(pkt, sizeof(struct ether_hdr) + sizeof(struct ip_hdr));
       pktbuf_copyin(pkt, data->head + offset, frag_datalen, 0);
       fill_iphdr((struct ip_hdr *)pktbuf_add_header(pkt, sizeof(struct ip_hdr)), frag_datalen, 
-                   currentid, remainlen>0, offset, proto, dstaddr);
+                   currentid, remainlen>0, offset, proto, dstaddr, dev);
 
       arp_tx(pkt, dstaddr, ETHERTYPE_IP, dev);
       remainlen -= frag_datalen;

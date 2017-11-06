@@ -7,6 +7,8 @@
 #include <kern/lock.h>
 #include <kern/kernlib.h>
 #include <kern/pktbuf.h>
+#include <kern/netdev.h>
+#include <kern/task.h>
 
 struct pending_frame {
   struct list_head link;
@@ -127,42 +129,44 @@ void register_arptable(in_addr_t ipaddr, struct etheraddr macaddr, int is_perman
   return;
 }
 
-void arp_rx(struct pktbuf *frm, struct ether_hdr *ehdr){
+void arp_rx(struct pktbuf *frm){
   struct ether_arp *earp = (struct ether_arp *)frm->head;
   if(pktbuf_get_size(frm) < sizeof(struct ether_arp) ||
     ntoh16(earp->arp_hrd) != ARPHRD_ETHER ||
     ntoh16(earp->arp_pro) != ETHERTYPE_IP ||
     earp->arp_hln != ETHER_ADDR_LEN || earp->arp_pln != 4 ||
     (ntoh16(earp->arp_op) != ARPOP_REQUEST && ntoh16(earp->arp_op) !=ARPOP_REPLY) ){
-    goto exit;
+    pktbuf_free(frm);
+    return;
   }
 
   switch(ntoh16(earp->arp_op)){
   case ARPOP_REQUEST:
-    if(earp->arp_tpa == IPADDR){
-      //相手のIPアドレスとMACアドレスを登録
-      register_arptable(earp->arp_spa, earp->arp_sha, 0);
-
-      struct netdev *dev = NULL;
-      struct list_head *p;
-      list_foreach(p, &ifaddr_table[PF_INET]) {
-        struct ifaddr_in *inaddr = list_entry(p, struct ifaddr_in, link);
-        if((inaddr->addr & inaddr->netmask) == (earp->arp_tha & inaddr->netmask)) {
-          dev = inaddr->dev;
-          break;
-        }
+  {
+    struct netdev *dev = NULL;
+    struct list_head *p;
+    list_foreach(p, ifaddr_tbl[PF_INET]) {
+      struct ifaddr_in *inaddr = 
+         list_entry(p, struct ifaddr_in, family_link);
+      if(inaddr->addr == earp->arp_tpa) {
+        dev = inaddr->dev;
+        break;
       }
-
-      earp->arp_tha = earp->arp_sha;
-      earp->arp_tpa = earp->arp_spa;
-      earp->arp_sha = dev->;
-      earp->arp_spa = IPADDR;
-      earp->arp_op = hton16(ARPOP_REPLY);
-      ehdr->ether_dhost = ehdr->ether_shost;
-      ehdr->ether_shost = MACADDR;
-      ether_tx(frm, earp_);
     }
+    if(dev == NULL)
+      break;
+
+    register_arptable(earp->arp_spa, earp->arp_sha, 0);
+
+    struct etheraddr destether = earp->arp_sha;
+    earp->arp_tha = earp->arp_sha;
+    earp->arp_tpa = earp->arp_spa;
+    earp->arp_sha = *(struct etheraddr *)(netdev_find_addr(dev, PF_LINK)->addr);
+    earp->arp_spa = ((struct ifaddr_in *)netdev_find_addr(dev, PF_INET))->addr;
+    earp->arp_op = hton16(ARPOP_REPLY);
+    ether_tx(frm, destether, ETHERTYPE_ARP, dev);
     break;
+  }
   case ARPOP_REPLY:
     register_arptable(earp->arp_spa, earp->arp_sha, 0);
     break;
@@ -170,7 +174,7 @@ void arp_rx(struct pktbuf *frm, struct ether_hdr *ehdr){
   return;
 }
 
-struct pktbuf *send_arprequest(in_addr_t dstaddr){
+static void send_arprequest(in_addr_t dstaddr, struct netdev *dev){
   struct pktbuf *req =
     pktbuf_alloc(sizeof(struct ether_hdr) + sizeof(struct ether_arp));
 
@@ -180,15 +184,15 @@ struct pktbuf *send_arprequest(in_addr_t dstaddr){
 
   earp->arp_hrd = hton16(ARPHRD_ETHER);
   earp->arp_pro = hton16(ETHERTYPE_IP);
-  earp->arp_hln = 6;
+  earp->arp_hln = ETHER_ADDR_LEN;
   earp->arp_pln = 4;
   earp->arp_op = hton16(ARPOP_REQUEST);
-  earp->arp_sha = MACADDR;
-  earp->arp_spa = IPADDR;
+  earp->arp_sha = *(struct etheraddr *)netdev_find_addr(dev, PF_LINK)->addr;
+  earp->arp_spa = ((struct ifaddr_in *)netdev_find_addr(dev, PF_INET))->addr;
   memset(&earp->arp_tha, 0x00, ETHER_ADDR_LEN);
   earp->arp_tpa = dstaddr;
 
-  ether_tx(req, ETHER_ADDR_BROADCAST, ETHERTYPE_ARP);
+  ether_tx(req, ETHER_ADDR_BROADCAST, ETHERTYPE_ARP, dev);
 }
 
 void arp_10sec() {
@@ -208,23 +212,25 @@ void arp_10sec() {
         }
       }
     } else {
-      if(!list_is_empty(&arptable[i].pending))
-        send_arprequest(arptable[i].ipaddr);
+      if(!list_is_empty(&arptable[i].pending)) {
+        // TODO リスト先頭要素の取り出し関数:
+        send_arprequest(arptable[i].ipaddr, list_entry(arptable[i].pending.next, struct pending_frame, link)->dev);
+      }
     }
   }
   mutex_unlock(&arptbl_mtx);
-  defer_exec(arp_10sec, 
+  defer_exec(arp_10sec, NULL, 0, 10);
 }
 
 void arp_tx(struct pktbuf *pkt, in_addr_t dstaddr, u16 proto, struct netdev *dev){
-  struct ethraddr dest_ether;
+  struct etheraddr dest_ether;
 
   switch(arp_resolve(dstaddr, &dest_ether, pkt, proto, dev)){
   case RESULT_FOUND:
     ether_tx(pkt, dest_ether, proto, dev);
     break;
   case RESULT_NOT_FOUND:
-    send_arprequest(dstaddr);
+    send_arprequest(dstaddr, dev);
     break;
   case RESULT_ADD_LIST:
     break;

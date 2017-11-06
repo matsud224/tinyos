@@ -149,10 +149,10 @@ void rtl8139_init(struct pci_dev *thisdev) {
 	rtldev.rxqueue = ndqueue_create(malloc(RXQUEUE_SIZE), RXQUEUE_COUNT);
 	rtldev.txqueue = ndqueue_create(malloc(TXQUEUE_SIZE), TXQUEUE_COUNT);
 	list_init(&rtldev.netdev_info.ifaddr_list);
-  struct ifaddr *eaddr = malloc(sizeof(struct ifaddr) + 6);
-  eaddr->len = 6;
+  struct ifaddr *eaddr = malloc(sizeof(struct ifaddr)+ETHER_ADDR_LEN);
+  eaddr->len = ETHER_ADDR_LEN;
   eaddr->family = PF_LINK;
-  for(int i=0; i<6; i++)
+  for(int i=0; i<ETHER_ADDR_LEN; i++)
     eaddr->addr[i] = in8(RTLREG(IDR)+i);
   netdev_add_ifaddr(&rtldev.netdev_info, eaddr);
 
@@ -208,14 +208,9 @@ int rtl8139_tx_one() {
     return -1;
 
   if(rtldev.txdesc_free > 0) {
-    if(pktbuf_is_nonlinear(pkt)) {
-      struct pktbuf *oldpkt = pkt;
-      pkt = pktbuf_copy_linear(pkt);
-      pktbuf_free(oldpkt);
-    }
-    out32(RTLREG(TX_TSAD[rtldev.txdesc_head]), KERN_VMEM_TO_PHYS(pkt->data));
-    rtldev.txdesc_pkt[rtldev.txdesc_head] = KERN_VMEM_TO_PHYS(pkt->data);
-    out32(RTLREG(TX_TSD[rtldev.txdesc_head]), pkt->total); 
+    out32(RTLREG(TX_TSAD[rtldev.txdesc_head]), KERN_VMEM_TO_PHYS(pkt->head));
+    rtldev.txdesc_pkt[rtldev.txdesc_head] = KERN_VMEM_TO_PHYS(pkt->head);
+    out32(RTLREG(TX_TSD[rtldev.txdesc_head]), pktbuf_get_size(pkt)); 
     rtldev.txdesc_free--;
     rtldev.txdesc_head = (rtldev.txdesc_head+1) % TXDESC_NUM;
     return 0;

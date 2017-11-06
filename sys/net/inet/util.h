@@ -5,8 +5,8 @@
 char *macaddr2str(u8 ma[]);
 char *ipaddr2str(u8 ia[]);
 
-u16 checksum(u16 *data, int len);
-u16 checksum2(u16 *data1, u16 *data2, int len1, int len2);
+u16 checksum(u16 *data, size_t len);
+u16 checksum2(u16 *data1, u16 *data2, size_t len1, size_t len2);
 
-void ipaddr_hostpart(u8 *dst, u8 *addr, u8 *mask);
-void ipaddr_networkpart(u8 *dst, u8 *addr, u8 *mask);
+#define inaddr_hostpart(a, m) ((a) & (~m))
+#define inaddr_networkpart(a, m) ((a) & (m))

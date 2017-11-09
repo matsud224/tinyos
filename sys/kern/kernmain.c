@@ -16,9 +16,12 @@
 #include <kern/blkdev.h>
 #include <kern/chardev.h>
 #include <kern/netdev.h>
+#include <net/inet/inet.h>
+#include <net/inet/ip.h>
 
 
 void _init(void);
+
 
 KERNENTRY void kernel_main(void) {
   a20_enable();
@@ -40,6 +43,9 @@ KERNENTRY void kernel_main(void) {
   netdev_init();
 
   _init();
+
+  
+  ip_set_defaultgw(IPADDR(192,168,4,1));
 
   task_init();
 

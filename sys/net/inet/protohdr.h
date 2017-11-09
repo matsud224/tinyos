@@ -1,4 +1,5 @@
 #pragma once
+#include <kern/kernlib.h>
 #include <net/inet/inet.h>
 #include <kern/types.h>
 #include <kern/machine.h>
@@ -21,7 +22,7 @@ struct ip_hdr{
   u16 ip_sum;
   in_addr_t ip_src;
   in_addr_t ip_dst;
-};
+} PACKED;
 
 #define IP_RF 0x8000
 #define IP_DE 0x4000
@@ -39,7 +40,7 @@ struct arp_hdr{
   u8  ar_hln;
   u8 ar_pln;
   u16 ar_op;
-};
+} PACKED;
 
 #define arp_hrd ea_hdr.ar_hrd
 #define arp_pro ea_hdr.ar_pro
@@ -53,7 +54,7 @@ struct ether_arp{
   in_addr_t arp_spa;
   struct etheraddr arp_tha;
   in_addr_t arp_tpa;
-};
+} PACKED;
 
 #define ARPHRD_ETHER 1
 #define ETHERTYPE_IP 0x0800
@@ -73,18 +74,18 @@ struct icmp{
     struct ih_idseq{
       int16_t icd_id;
       int16_t icd_seq;
-    } ih_idseq;
+    } PACKED ih_idseq;
     u32 ih_void;
     struct ih_pmtu{
       u16 ipm_void;
       u16 ipm_nextmtu;
-    } ih_pmtu;
+    } PACKED ih_pmtu;
 
     struct ih_rtradv{
       u8 irt_num_addrs;
       u8 irt_wpa;
       u16 irt_lifetime;
-    } ih_rtradv;
+    } PACKED ih_rtradv;
   } icmp_hun;
 
 #define icmp_pptr imcp_hun.ih_pptr
@@ -103,14 +104,14 @@ struct icmp{
       u32 its_otime;
       u32 its_rtime;
       u32 its_ttime;
-    } id_ts;
+    } PACKED id_ts;
     struct id_ip{
       struct ip_hdr idi_ip;
-    } id_ip;
+    } PACKED id_ip;
     struct icmp_ra_addr{
       u32 ira_addr;
       u32 ira_preference;
-    } ip_radv;;
+    } PACKED ip_radv;
     u32 id_mask;
     u8 id_data[1];
   } icmp_dun;
@@ -123,7 +124,7 @@ struct icmp{
 #define icmp_mask icmp_dun.id_mask
 #define icmp_data icmp_dun.id_data
 
-};
+} PACKED;
 
 #define ICMP_ECHOREPLY 0
 #define ICMP_UNREACH 3
@@ -153,7 +154,7 @@ struct udp_hdr{
   in_port_t uh_dport;
   u16 uh_ulen;
   u16 sum;
-};
+} PACKED;
 
 struct udp_pseudo_hdr{
   in_addr_t up_src;
@@ -161,7 +162,7 @@ struct udp_pseudo_hdr{
   u8 up_void;
   u8 up_type;
   u16 up_len;
-};
+} PACKED;
 
 struct tcp_pseudo_hdr{
   in_addr_t tp_src;
@@ -169,7 +170,7 @@ struct tcp_pseudo_hdr{
   u8 tp_void;
   u8 tp_type;
   u16 tp_len;
-};
+} PACKED;
 
 
 //TCP
@@ -188,7 +189,7 @@ struct tcp_hdr{
   u16 th_win;
   u16 th_sum;
   u16 th_urp;
-};
+} PACKED;
 
 #define TH_FIN 0x01
 #define TH_SYN 0x02

@@ -40,7 +40,7 @@ struct netdev {
 };
 
 extern struct netdev *netdev_tbl[MAX_NETDEV];
-extern struct list_head *ifaddr_tbl[MAX_PF];
+extern struct list_head ifaddr_tbl[MAX_PF];
 
 void netdev_init(void);
 void netdev_add(struct netdev *dev);

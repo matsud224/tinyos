@@ -102,7 +102,7 @@ void task_deferred() {
 }
 
 void timer_call(void *arg ) {
-  printf("%d sec!\n", (u32)arg/100);
+  //printf("%d sec!\n", (u32)arg/100);
   timer_start((u32)arg, timer_call, arg);
 }
 
@@ -136,6 +136,7 @@ void kernstack_setaddr() {
 
 
 void task_exit(void);
+
 struct task *kernel_task_new(void *eip, int intenable) {
   struct task *t = malloc(sizeof(struct task));
   bzero(t, sizeof(struct task));

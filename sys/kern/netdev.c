@@ -2,12 +2,14 @@
 #include <kern/task.h>
 
 struct netdev *netdev_tbl[MAX_NETDEV];
-struct list_head *ifaddr_tbl[MAX_PF];
+struct list_head ifaddr_tbl[MAX_PF];
 static u16 nnetdev;
 
 void netdev_init() {
   for(int i=0; i<MAX_NETDEV; i++)
     netdev_tbl[i] = NULL;
+  for(int i=0; i<MAX_PF; i++)
+    list_init(&ifaddr_tbl[i]);
   nnetdev = 0;
 }
 
@@ -39,8 +41,9 @@ struct pktbuf *ndqueue_dequeue(struct netdev_queue *q) {
 }
 
 int ndqueue_enqueue(struct netdev_queue *q, struct pktbuf *pkt) {
-  if(q->free == 0)
+  if(q->free == 0) {
     return 0;
+  }
   q->addr[q->head++] = pkt;
   q->free--;
   if(q->head == q->count)
@@ -52,7 +55,7 @@ int netdev_tx(struct netdev *dev, struct pktbuf *pkt) {
   int res = -1;
   while(res < 0) {
     cli();
-    dev->ops->tx(dev, pkt);
+    res = dev->ops->tx(dev, pkt);
     if(res < 0)
       task_sleep(dev);
     sti();
@@ -64,6 +67,7 @@ int netdev_tx_nowait(struct netdev *dev, struct pktbuf *pkt) {
   cli();
   int res = dev->ops->tx(dev, pkt);
   sti();
+printf("TX result = %d\n", res);
   return res;
 }
 
@@ -89,7 +93,7 @@ struct pktbuf *netdev_rx_nowait(struct netdev *dev) {
 void netdev_add_ifaddr(struct netdev *dev, struct ifaddr *addr) {
   addr->dev = dev;
   list_pushback(&addr->dev_link, &dev->ifaddr_list);
-  list_pushback(&addr->family_link, ifaddr_tbl[addr->family]);
+  list_pushback(&addr->family_link, &ifaddr_tbl[addr->family]);
 }
 
 struct ifaddr *netdev_find_addr(struct netdev *dev, u16 pf) {

@@ -5,14 +5,20 @@
 #include <kern/task.h>
 #include <kern/kernlib.h>
 
+struct trap_stack {
+  u32 errcode;
+  u32 eip;
+  u32 cs;
+  u32 eflags;
+};
+
 void gpe_isr() {
   printf("General Protection Exception in task#%d\n", current->pid);
   task_exit();
 }
 
-void pf_isr(u32 addr) {
-  printf("\nPage fault! addr = 0x%x\n", addr);
-  //printf("eip=%x, esp=%x\n", current->regs.eip, current->regs.esp);
+void pf_isr(u32 addr, u32 eip) {
+  printf("\nPage fault addr = 0x%x (eip = 0x%x)\n", addr, eip);
   struct vm_area *varea = vm_findarea(current->vmmap, addr);
   if(varea == NULL) {
     printf("Segmentation Fault in task#%d\n", current->pid);

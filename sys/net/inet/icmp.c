@@ -11,12 +11,12 @@ void icmp_rx(struct pktbuf *pkt, struct ip_hdr *iphdr){
     checksum((u16*)icmpdata, pktsize) != 0){
     goto exit;
   }
-
+puts("ICMP packet received.");
   switch(icmpdata->icmp_type){
   case ICMP_ECHO:
     icmpdata->icmp_type = ICMP_ECHOREPLY;
     icmpdata->icmp_cksum = 0;
-    icmpdata->icmp_cksum = checksum((u16*)icmpdata, pktsize-ip_header_len(iphdr));
+    icmpdata->icmp_cksum = checksum((u16*)icmpdata, pktsize);
     ip_tx(pkt, iphdr->ip_src, IPTYPE_ICMP);
     break;
   }

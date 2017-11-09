@@ -6,6 +6,7 @@
 #include <kern/params.h>
 #include <net/net.h>
 #include <net/ether/ether.h>
+#include <net/inet/inet.h>
 #include <kern/task.h>
 
 #define RTL8139_VENDORID 0x10ec
@@ -148,13 +149,22 @@ void rtl8139_init(struct pci_dev *thisdev) {
   rtldev.txdesc_free = TXDESC_NUM;
 	rtldev.rxqueue = ndqueue_create(malloc(RXQUEUE_SIZE), RXQUEUE_COUNT);
 	rtldev.txqueue = ndqueue_create(malloc(TXQUEUE_SIZE), TXQUEUE_COUNT);
+
 	list_init(&rtldev.netdev_info.ifaddr_list);
+
   struct ifaddr *eaddr = malloc(sizeof(struct ifaddr)+ETHER_ADDR_LEN);
   eaddr->len = ETHER_ADDR_LEN;
   eaddr->family = PF_LINK;
   for(int i=0; i<ETHER_ADDR_LEN; i++)
     eaddr->addr[i] = in8(RTLREG(IDR)+i);
   netdev_add_ifaddr(&rtldev.netdev_info, eaddr);
+
+  struct ifaddr_in *inaddr = malloc(sizeof(struct ifaddr_in));
+  inaddr->len = sizeof(in_addr_t) * 3;
+  inaddr->family = PF_INET;
+  inaddr->addr = IPADDR(192,168,4,2);
+  inaddr->netmask = IPADDR(255,255,255,0);
+  netdev_add_ifaddr(&rtldev.netdev_info, inaddr);
 
   //enable PCI bus mastering
   u16 pci_cmd = pci_config_read16(thisdev, PCI_COMMAND);
@@ -191,10 +201,11 @@ void rtl8139_init(struct pci_dev *thisdev) {
 
 DRIVER_INIT int rtl8139_probe() {
   struct pci_dev *thisdev = pci_search_device(RTL8139_VENDORID, RTL8139_DEVICEID);
-  if(thisdev!=NULL)
+  if(thisdev != NULL) {
     rtl8139_init(thisdev);
-  rtldev.netdev_info.ops = &rtl8139_ops;
-  netdev_add(&rtldev.netdev_info);
+    rtldev.netdev_info.ops = &rtl8139_ops;
+    netdev_add(&rtldev.netdev_info);
+  }
   return (thisdev != NULL);
 }
 
@@ -209,10 +220,12 @@ int rtl8139_tx_one() {
 
   if(rtldev.txdesc_free > 0) {
     out32(RTLREG(TX_TSAD[rtldev.txdesc_head]), KERN_VMEM_TO_PHYS(pkt->head));
-    rtldev.txdesc_pkt[rtldev.txdesc_head] = KERN_VMEM_TO_PHYS(pkt->head);
+    rtldev.txdesc_pkt[rtldev.txdesc_head] = pkt;
+printf("size = %d\n", pktbuf_get_size(pkt));
     out32(RTLREG(TX_TSD[rtldev.txdesc_head]), pktbuf_get_size(pkt)); 
     rtldev.txdesc_free--;
     rtldev.txdesc_head = (rtldev.txdesc_head+1) % TXDESC_NUM;
+    printf("txdesc_free = %d, txdesc_tail = %d\n", rtldev.txdesc_free, rtldev.txdesc_tail);
     return 0;
   }
   return -1;
@@ -260,7 +273,7 @@ out:
 
 int rtl8139_rx_all() {
   while(rtl8139_rx_one() == 0);
-  //defer_exec(ethernet_rx, rtldev.netdev_info.devno, 1, 0);
+  defer_exec(ether_rx, &rtldev.netdev_info, 1, 0);
   task_wakeup(&rtldev.netdev_info);
 }
 
@@ -272,14 +285,16 @@ void rtl8139_isr() {
     out16(RTLREG(ISR), ISR_FOVW|ISR_RXOVW|ISR_ROK);
 
   while(rtldev.txdesc_free < 4 &&
-    in32(RTLREG(TX_TSD[rtldev.txdesc_tail])&(TSD_OWN|TSD_TOK)) == (TSD_OWN|TSD_TOK)) {
+    (in32(RTLREG(TX_TSD[rtldev.txdesc_tail]))&(TSD_OWN|TSD_TOK)) == (TSD_OWN|TSD_TOK)) {
     pktbuf_free(rtldev.txdesc_pkt[rtldev.txdesc_tail]);
     rtldev.txdesc_tail = (rtldev.txdesc_tail+1) % TXDESC_NUM;
     rtldev.txdesc_free++;
+    printf("txdesc_free = %d\n", rtldev.txdesc_free);
   }
 
   if(isr & ISR_TOK)
     rtl8139_tx_all();
+  
   if(isr & ISR_ROK)
     rtl8139_rx_all();
 
@@ -296,8 +311,10 @@ void rtl8139_close(struct netdev *dev UNUSED) {
 }
 
 int rtl8139_tx(struct netdev *dev UNUSED, struct pktbuf *pkt) {
-  ndqueue_enqueue(rtldev.txqueue, pkt);
+  if(ndqueue_enqueue(rtldev.txqueue, pkt) == 0)
+    return -1;
   rtl8139_tx_all();
+  return 0;
 }
 
 struct pktbuf *rtl8139_rx(struct netdev *dev UNUSED) {

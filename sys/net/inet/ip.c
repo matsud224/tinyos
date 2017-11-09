@@ -9,6 +9,7 @@
 #include <kern/kernlib.h>
 #include <kern/pktbuf.h>
 #include <kern/task.h>
+#include <kern/timer.h>
 
 #define INF 0xffff
 
@@ -74,12 +75,15 @@ static void reasminfo_free(struct reasminfo *ri) {
 static struct list_head reasm_ongoing;
 static mutex reasm_ongoing_mtx;
 
+static void ip_10sec(void);
+
 NET_INIT void ip_init(){
   list_init(&reasm_ongoing);
   mutex_init(&reasm_ongoing_mtx);
+  defer_exec(ip_10sec, NULL, 0, 10*SEC);
 }
 
-void ip_10sec() {
+static void ip_10sec() {
   mutex_lock(&reasm_ongoing_mtx);
   struct list_head *p, *tmp;
   list_foreach_safe(p, tmp, &reasm_ongoing) {
@@ -91,7 +95,7 @@ void ip_10sec() {
   }
   mutex_unlock(&reasm_ongoing_mtx);
   
-  defer_exec(ip_10sec, NULL, 0, 10);
+  defer_exec(ip_10sec, NULL, 0, 10*SEC);
 }
 
 static struct reasminfo *get_reasminfo(in_addr_t ip_src, in_addr_t ip_dst, u8 ip_pro, u16 ip_id){
@@ -268,7 +272,7 @@ in_addr_t ip_get_defaultgw() {
 
 in_addr_t ip_routing(in_addr_t dstaddr, struct netdev **dev) {
   struct list_head *p;
-  list_foreach(p, ifaddr_tbl[PF_INET]) {
+  list_foreach(p, &ifaddr_tbl[PF_INET]) {
     struct ifaddr_in *inaddr = list_entry(p, struct ifaddr_in, family_link);
     if((inaddr->addr & inaddr->netmask) == (dstaddr & inaddr->netmask)) {
       *dev = inaddr->dev;
@@ -276,7 +280,10 @@ in_addr_t ip_routing(in_addr_t dstaddr, struct netdev **dev) {
     }
   }
 
-  return defaultgw;
+  if(dstaddr == defaultgw)
+    return 0;
+
+  return ip_routing(defaultgw, dev);
 }
 
 u16 ip_getid(){
@@ -294,6 +301,11 @@ void ip_tx(struct pktbuf *data, in_addr_t dstaddr, u8 proto) {
   struct netdev *dev = NULL;
 
   dstaddr = ip_routing(dstaddr, &dev);
+  if(dev == NULL) {
+    //no interface available
+    pktbuf_free(data);
+    return;
+  }
 
   if(sizeof(struct ip_hdr) + remainlen <= MTU){
     fill_iphdr((struct ip_hdr *)pktbuf_add_header(data, sizeof(struct ip_hdr)), 

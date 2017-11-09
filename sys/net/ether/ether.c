@@ -14,14 +14,14 @@ const struct etheraddr ETHER_ADDR_BROADCAST = {
 
 static void ether_rx_one(struct pktbuf *frame);
 
-void ether_rx(void *_devno) {
+void ether_rx(void *ndev) {
   int remain = ETHER_RX_MAX;
-  devno_t devno = (devno_t)_devno;
+  struct netdev *dev = (struct netdev *)ndev;
   struct pktbuf *frame = NULL;
-  while(--remain && (frame = netdev_rx_nowait(devno)) != NULL)
+  while(--remain && (frame = netdev_rx_nowait(dev)) != NULL)
     ether_rx_one(frame);
   if(remain == 0)
-    defer_exec(ether_rx, (void *)devno, 0, 1);
+    defer_exec(ether_rx, (void *)dev, 0, 1);
 }
 
 static void ether_rx_one(struct pktbuf *frame) {
@@ -32,11 +32,9 @@ static void ether_rx_one(struct pktbuf *frame) {
   pktbuf_remove_header(frame, sizeof(struct ether_hdr));
   switch(ntoh16(ehdr->ether_type)){
   case ETHERTYPE_IP:
-    puts("ip packet");
     ip_rx(frame);
     break;
   case ETHERTYPE_ARP:
-    puts("arp packet");
     arp_rx(frame);
     break;
   default:
@@ -56,7 +54,8 @@ void ether_tx(struct pktbuf *frm, struct etheraddr dest, u16 proto, struct netde
   ehdr->ether_type = hton16(proto);
   ehdr->ether_dhost = dest;
   ehdr->ether_shost = *(struct etheraddr *)netdev_find_addr(dev, PF_LINK)->addr;
-  netdev_tx(dev->devno, frm);
+  if(netdev_tx_nowait(dev, frm) < 0)
+    pktbuf_free(frm);
   return;
 }
 

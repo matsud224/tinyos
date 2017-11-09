@@ -1,10 +1,17 @@
 #pragma once
+#include <kern/machine.h>
 #include <net/net.h>
 #include <kern/netdev.h>
 #include <kern/kernlib.h>
 
 typedef u32 in_addr_t;
 typedef u16 in_port_t;
+
+#ifdef ENDIAN_BE
+#define IPADDR(a,b,c,d) (((a)<<24)|((b)<<16)|((c)<<8)|(d))
+#else
+#define IPADDR(a,b,c,d) ((a)|((b)<<8)|((c)<<16)|((d)<<24))
+#endif
 
 struct sockaddr_in {
   u8 len;

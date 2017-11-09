@@ -73,10 +73,13 @@ global pf_inthandler
 pf_inthandler:
   add esp, 4 ; pop error code
   handler_enter
+  mov ecx, esp
+  mov eax, [ecx+12] ;saved eip
+  push eax
   mov eax, cr2
   push eax
   call pf_isr
-  add esp, 4
+  add esp, 8
   handler_leave
 
 extern syscall_isr

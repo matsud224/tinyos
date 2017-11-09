@@ -57,7 +57,6 @@ struct task {
   void *waitcause;
 };
 
-
 void task_init(void);
 void kernstack_setaddr(void);
 struct task *kernel_task_new(void *eip, int intenable);

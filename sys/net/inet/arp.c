@@ -9,6 +9,7 @@
 #include <kern/pktbuf.h>
 #include <kern/netdev.h>
 #include <kern/task.h>
+#include <kern/timer.h>
 
 struct pending_frame {
   struct list_head link;
@@ -36,11 +37,15 @@ enum arpresult {
 
 static mutex arptbl_mtx;
 
+static void arp_10sec(void);
+
 NET_INIT void arp_init() {
   mutex_init(&arptbl_mtx);
 
   for(int i=0;i<MAX_ARPTABLE;i++)
     list_init(&arptable[i].pending);
+
+  defer_exec(arp_10sec, NULL, 0, 10*SEC);
 }
 
 static struct pending_frame *pending_frame_new(struct pktbuf *frm, u16 proto, struct netdev *dev) {
@@ -103,7 +108,7 @@ void register_arptable(in_addr_t ipaddr, struct etheraddr macaddr, int is_perman
   mutex_lock(&arptbl_mtx);
 
   //IPアドレスだけ登録されている（アドレス解決待ち）エントリを探す
-  for(int i=0; i<MAX_ARPTABLE; i++){
+  for(int i=0; i<MAX_ARPTABLE; i++) {
     if(arptable[i].ipaddr == ipaddr && arptable[i].timeout>0){
       arptable[i].timeout = is_permanent ? ARPTBL_PERMANENT : ARBTBL_TIMEOUT_CLC; //延長
       if(!list_is_empty(&arptable[i].pending)){
@@ -145,7 +150,7 @@ void arp_rx(struct pktbuf *frm){
   {
     struct netdev *dev = NULL;
     struct list_head *p;
-    list_foreach(p, ifaddr_tbl[PF_INET]) {
+    list_foreach(p, &ifaddr_tbl[PF_INET]) {
       struct ifaddr_in *inaddr = 
          list_entry(p, struct ifaddr_in, family_link);
       if(inaddr->addr == earp->arp_tpa) {
@@ -153,8 +158,10 @@ void arp_rx(struct pktbuf *frm){
         break;
       }
     }
-    if(dev == NULL)
+    if(dev == NULL) {
+      pktbuf_free(frm);
       break;
+    }
 
     register_arptable(earp->arp_spa, earp->arp_sha, 0);
 
@@ -195,7 +202,7 @@ static void send_arprequest(in_addr_t dstaddr, struct netdev *dev){
   ether_tx(req, ETHER_ADDR_BROADCAST, ETHERTYPE_ARP, dev);
 }
 
-void arp_10sec() {
+static void arp_10sec() {
   mutex_lock(&arptbl_mtx);
   for(int i=0; i<MAX_ARPTABLE; i++) {
     if(arptable[i].timeout > 0 && 
@@ -219,7 +226,7 @@ void arp_10sec() {
     }
   }
   mutex_unlock(&arptbl_mtx);
-  defer_exec(arp_10sec, NULL, 0, 10);
+  defer_exec(arp_10sec, NULL, 0, 10*SEC);
 }
 
 void arp_tx(struct pktbuf *pkt, in_addr_t dstaddr, u16 proto, struct netdev *dev){

@@ -37,7 +37,7 @@ enum arpresult {
 
 static mutex arptbl_mtx;
 
-static void arp_10sec(void);
+static void arp_10sec(void *);
 
 NET_INIT void arp_init() {
   mutex_init(&arptbl_mtx);
@@ -202,7 +202,7 @@ static void send_arprequest(in_addr_t dstaddr, struct netdev *dev){
   ether_tx(req, ETHER_ADDR_BROADCAST, ETHERTYPE_ARP, dev);
 }
 
-static void arp_10sec() {
+static void arp_10sec(void *arg UNUSED) {
   mutex_lock(&arptbl_mtx);
   for(int i=0; i<MAX_ARPTABLE; i++) {
     if(arptable[i].timeout > 0 && 

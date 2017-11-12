@@ -7,7 +7,7 @@ struct chardev *chardev_tbl[MAX_CHARDEV];
 static u16 nchardev;
 
 void chardev_init() {
-  for(int i=0; i<MAX_BLKDEV; i++)
+  for(int i=0; i<MAX_CHARDEV; i++)
     chardev_tbl[i] = NULL;
   nchardev = 0;
 }

@@ -67,7 +67,6 @@ int netdev_tx_nowait(struct netdev *dev, struct pktbuf *pkt) {
   cli();
   int res = dev->ops->tx(dev, pkt);
   sti();
-printf("TX result = %d\n", res);
   return res;
 }
 

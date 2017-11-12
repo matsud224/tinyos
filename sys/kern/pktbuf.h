@@ -20,4 +20,4 @@ void pktbuf_free(struct pktbuf *pkt);
 int pktbuf_reserve_headroom(struct pktbuf *pkt, size_t size);
 u8 *pktbuf_add_header(struct pktbuf *pkt, size_t size);
 void pktbuf_remove_header(struct pktbuf *pkt, size_t size);
-void pktbuf_copyin(struct pktbuf *pkt, u8 *data, size_t size, u32 offset);
+void pktbuf_copyin(struct pktbuf *pkt, const u8 *data, size_t size, u32 offset);

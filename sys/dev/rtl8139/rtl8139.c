@@ -221,11 +221,9 @@ int rtl8139_tx_one() {
   if(rtldev.txdesc_free > 0) {
     out32(RTLREG(TX_TSAD[rtldev.txdesc_head]), KERN_VMEM_TO_PHYS(pkt->head));
     rtldev.txdesc_pkt[rtldev.txdesc_head] = pkt;
-printf("size = %d\n", pktbuf_get_size(pkt));
     out32(RTLREG(TX_TSD[rtldev.txdesc_head]), pktbuf_get_size(pkt)); 
     rtldev.txdesc_free--;
     rtldev.txdesc_head = (rtldev.txdesc_head+1) % TXDESC_NUM;
-    printf("txdesc_free = %d, txdesc_tail = %d\n", rtldev.txdesc_free, rtldev.txdesc_tail);
     return 0;
   }
   return -1;
@@ -289,7 +287,6 @@ void rtl8139_isr() {
     pktbuf_free(rtldev.txdesc_pkt[rtldev.txdesc_tail]);
     rtldev.txdesc_tail = (rtldev.txdesc_tail+1) % TXDESC_NUM;
     rtldev.txdesc_free++;
-    printf("txdesc_free = %d\n", rtldev.txdesc_free);
   }
 
   if(isr & ISR_TOK)

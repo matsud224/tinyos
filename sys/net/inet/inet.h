@@ -1,11 +1,13 @@
 #pragma once
 #include <kern/machine.h>
-#include <net/net.h>
+#include <net/socket.h>
 #include <kern/netdev.h>
 #include <kern/kernlib.h>
 
 typedef u32 in_addr_t;
 typedef u16 in_port_t;
+
+#define INADDR_ANY 0
 
 #ifdef ENDIAN_BE
 #define IPADDR(a,b,c,d) (((a)<<24)|((b)<<16)|((c)<<8)|(d))

@@ -30,7 +30,7 @@ void task_b() {
   } else {
     puts("mount ok");
   }
-  struct inode *ino = fs_nametoi("/verilog/../verilog/counter/counter.v");
+  struct inode *ino = fs_nametoi("/foo/../foo/rfc3514.txt");
   if(ino == NULL) {
     puts("nametoi failed.");
     while(1);
@@ -38,7 +38,7 @@ void task_b() {
   printf("file found inode=%x\n", ino);
   vm_add_area(current->vmmap, 0x20000, PAGESIZE*2, inode_mapper_new(ino, 0), 0);
 
-  for(u32 addr=0x20000; addr<0x20200; addr++) {
+  for(u32 addr=0x20200; addr<0x20300; addr++) {
     printf("%c", *(char*)addr);
     if(*(char*)addr == '\0')
       break;

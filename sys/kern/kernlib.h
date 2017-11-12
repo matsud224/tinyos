@@ -1,10 +1,10 @@
 #pragma once
-
 #include <stdint.h>
 #include <stddef.h>
 #include <kern/params.h>
 #include <kern/types.h>
 #include <kern/list.h>
+#include <kern/queue.h>
 #include <kern/kernasm.h>
 
 #define INLINE __inline__

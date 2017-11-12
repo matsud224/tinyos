@@ -11,7 +11,7 @@ void icmp_rx(struct pktbuf *pkt, struct ip_hdr *iphdr){
     checksum((u16*)icmpdata, pktsize) != 0){
     goto exit;
   }
-puts("ICMP packet received.");
+
   switch(icmpdata->icmp_type){
   case ICMP_ECHO:
     icmpdata->icmp_type = ICMP_ECHOREPLY;

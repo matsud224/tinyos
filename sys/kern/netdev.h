@@ -2,7 +2,7 @@
 #include <kern/kernlib.h>
 #include <kern/netdev.h>
 #include <kern/pktbuf.h>
-#include <net/net.h>
+#include <net/socket.h>
 
 #define NDQUEUE_IS_EMPTY(b) ((b)->count == (b)->free)
 #define NDQUEUE_IS_FULL(b) ((b)->free == 0)

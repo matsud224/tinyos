@@ -40,7 +40,9 @@ void pktbuf_remove_header(struct pktbuf *pkt, size_t size) {
   pkt->head += size;
 }
 
-void pktbuf_copyin(struct pktbuf *pkt, u8 *data, size_t size, u32 offset) {
+void pktbuf_copyin(struct pktbuf *pkt, const u8 *data, size_t size, u32 offset) {
+  if(pkt->head + offset + size > pkt->tail)
+    pkt->tail = pkt->head + offset;
   memcpy(pkt->head+offset, data, size);
 }
 

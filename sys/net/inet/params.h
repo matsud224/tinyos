@@ -8,6 +8,8 @@
 #define ARBTBL_TIMEOUT_CLC 720 //10sec * 720 = 2hours
 #define IPFRAG_TIMEOUT_CLC 6 //10sec * 6 = 1min
 
+#define UDP_RECVQUEUE_LEN 32
+
 #define TCP_TIMER_UNIT 200 //最小の刻み(ミリ秒)
 #define SECOND (TCP_TIMER_UNIT*5)
 #define MINUTE (SECOND*60)

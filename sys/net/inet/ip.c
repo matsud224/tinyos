@@ -286,7 +286,7 @@ static struct netdev *ip_routing_src(in_addr_t orig_src, in_addr_t orig_dst, in_
 
 
 struct netdev *ip_routing(in_addr_t orig_src, in_addr_t orig_dst, in_addr_t *src, in_addr_t *dst) {
-  if(orig_src == INADDR_ANY)
+  if(orig_src != INADDR_ANY)
     return ip_routing_src(orig_src, orig_dst, src, dst);
 
   struct list_head *p;

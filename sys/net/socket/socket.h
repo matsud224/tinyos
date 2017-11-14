@@ -16,10 +16,13 @@ struct sockaddr {
   u8 addr[];
 };
 
+struct socket_ops;
+
 struct socket {
   struct list_head link;
   int domain;
   int type;
+  struct socket_ops *ops;
   void *pcb;
 };
 
@@ -36,15 +39,16 @@ struct socket_ops {
   int (*recv)(void *pcb, u8 *buf, size_t len, int flags);
 };
 
-void socket_add_ops(int domain, int type, struct socket_ops *ops);
+int socket_register_ops(int domain, int type, const struct socket_ops *ops);
 
-int socket(int domain, int type);
-int bind(int s, const struct sockaddr *addr);
-int close(int s);
-int sendto(int s, const char *msg, u32 len, int flags, const struct sockaddr *to_addr);
-int recvfrom(int s, char *buf, u32 len, int flags, struct sockaddr *from_addr);
-int connect(int s, const struct sockaddr *to_addr);
-int listen(int s, int backlog);
-int accept(int s, struct sockaddr *client_addr);
-int send(int s, const char *msg, u32 len, int flags);
-int recv(int s, char *buf, u32 len, int flags);
+struct socket *socket(int domain, int type);
+int bind(struct socket *s, const struct sockaddr *addr);
+int close(struct socket *s);
+int sendto(struct socket *s, const char *msg, u32 len, int flags, const struct sockaddr *to_addr);
+int recvfrom(struct socket *s, char *buf, u32 len, int flags, struct sockaddr *from_addr);
+int connect(struct socket *s, const struct sockaddr *to_addr);
+int listen(struct socket *s, int backlog);
+int accept(struct socket *s, struct sockaddr *client_addr);
+int send(struct socket *s, const char *msg, u32 len, int flags);
+int recv(struct socket *s, char *buf, u32 len, int flags);
+

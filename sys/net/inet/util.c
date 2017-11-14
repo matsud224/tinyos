@@ -30,7 +30,7 @@ u16 checksum(u16 *data, size_t len){
   while(sum>>16)
     sum=(sum&0xffff)+(sum>>16);
 
-  return ~sum;
+  return ~sum ? ~sum : 0xffff;
 }
 
 u16 checksum2(u16 *data1, u16 *data2, size_t len1, size_t len2){
@@ -61,6 +61,6 @@ u16 checksum2(u16 *data1, u16 *data2, size_t len1, size_t len2){
   while(sum>>16)
     sum=(sum&0xffff)+(sum>>16);
 
-  return ~sum;
+  return ~sum ? ~sum : 0xffff;
 }
 

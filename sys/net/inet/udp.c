@@ -3,7 +3,7 @@
 #include <net/inet/ip.h>
 #include <net/inet/util.h>
 #include <net/inet/params.h>
-#include <net/socket.h>
+#include <net/socket/socket.h>
 #include <net/util.h>
 #include <kern/kernlib.h>
 #include <kern/lock.h>
@@ -16,8 +16,8 @@ struct udpcb {
   struct list_head link;
   struct queue_head recv_queue;
   int recv_waiting;
-  struct sockaddr_in addr;
-  struct sockaddr_in partner_addr;
+  struct sockaddr_in local_addr;
+  struct sockaddr_in foreign_addr;
 };
 
 
@@ -59,14 +59,14 @@ NET_INIT void udp_init() {
   mutex_init(&udp_mtx);
   mutex_init(&udp_recv_mtx);
 
-  socket_add_ops(PF_INET, SOCK_DGRAM, &udp_sock_ops);
+  socket_register_ops(PF_INET, SOCK_DGRAM, &udp_sock_ops);
 }
 
 static int is_used_port(in_port_t port) {
   struct list_head *p;
   list_foreach(p, &udpcb_list) {
     struct udpcb *cb = list_entry(p, struct udpcb, link);
-    if(cb->addr.port == port)
+    if(cb->local_addr.port == port)
       return 1;
   }
 
@@ -90,18 +90,19 @@ static u16 udp_checksum(struct ip_hdr *iphdr, struct udp_hdr *uhdr) {
   pseudo.up_void = 0;
   pseudo.up_len = uhdr->uh_ulen; //UDPヘッダ+UDPペイロードの長さ
 
-  return checksum2((u16*)(&pseudo), (u16*)uhdr, sizeof(struct udp_pseudo_hdr), ntoh16(uhdr->uh_ulen));
+  u16 sum = checksum2((u16*)(&pseudo), (u16*)uhdr, sizeof(struct udp_pseudo_hdr), ntoh16(uhdr->uh_ulen));
+  return sum ? sum : 0xffff;
 }
 
-static void set_udpheader(struct udp_hdr *uhdr, u16 seglen, in_port_t sport, struct sockaddr_in *dest_addr){
+static void set_udpheader(struct udp_hdr *uhdr, u16 seglen, in_addr_t saddr, in_port_t sport, in_addr_t daddr, in_port_t dport){
   uhdr->uh_sport = hton16(sport);
-  uhdr->uh_dport = hton16(dest_addr->port);
+  uhdr->uh_dport = hton16(dport);
   uhdr->uh_ulen = hton16(seglen);
   uhdr->sum = 0;
 
   struct ip_hdr iphdr_tmp;
-  iphdr_tmp.ip_src = IPADDR;
-  iphdr_tmp.ip_dst = dest_addr->addr;
+  iphdr_tmp.ip_src = saddr;
+  iphdr_tmp.ip_dst = daddr;
 
   uhdr->sum = udp_checksum(&iphdr_tmp, uhdr);
 
@@ -128,10 +129,13 @@ void udp_rx(struct pktbuf *pkt, struct ip_hdr *iphdr){
   struct list_head *p;
   list_foreach(p, &udpcb_list) {
     struct udpcb *b = list_entry(p, struct udpcb, link);
-    if(b->addr.port == ntoh16(uhdr->uh_dport)) {
-      cb = b;
-      break;
-    }
+    if(b->local_addr.port != ntoh16(uhdr->uh_dport))
+      continue;
+    if(b->local_addr.addr != INADDR_ANY
+        && b->local_addr.addr != iphdr->ip_dst)
+      continue;
+
+    cb = b;
   }
   if(cb == NULL)
     goto exit;
@@ -143,7 +147,10 @@ void udp_rx(struct pktbuf *pkt, struct ip_hdr *iphdr){
   pktbuf_add_header(pkt, ip_header_len(iphdr)); //IPヘッダも含める
   queue_enqueue(&pkt->link, &cb->recv_queue);
 
-  if(cb->recv_waiting) task_wakeup(socket);
+  if(cb->recv_waiting) {
+    //TODO:
+    //task_wakeup(socket);
+  }
   mutex_unlock(&udp_recv_mtx);
   mutex_unlock(&udp_mtx);
   return;
@@ -159,8 +166,8 @@ static void *udp_sock_init() {
   struct udpcb *cb = malloc(sizeof(struct udpcb));
   queue_init(&cb->recv_queue, UDP_RECVQUEUE_LEN);
   cb->recv_waiting = 0;
-  bzero(&cb->addr, sizeof(struct sockaddr_in));
-  bzero(&cb->partner_addr, sizeof(struct sockaddr_in));
+  bzero(&cb->local_addr, sizeof(struct sockaddr_in));
+  bzero(&cb->foreign_addr, sizeof(struct sockaddr_in));
   list_pushback(&cb->link, &udpcb_list);
   return cb;
 }
@@ -176,7 +183,7 @@ static int udp_sock_bind(void *pcb, const struct sockaddr *addr) {
   else if(is_used_port(inaddr->port))
     return -1;
 
-  memcpy(&cb->addr, inaddr, sizeof(struct sockaddr_in));
+  memcpy(&cb->local_addr, inaddr, sizeof(struct sockaddr_in));
   return 0;
 }
 
@@ -194,12 +201,14 @@ static int udp_sock_connect(void *pcb, const struct sockaddr *addr) {
   struct udpcb *cb = (struct udpcb *)pcb;
   if(addr->family != PF_INET)
     return -1;
-
-  struct sockaddr_in *inaddr = (struct sockaddr_in *)addr;
-  if(inaddr->port == NEED_PORT_ALLOC);
+  if(addr->addr == INADDR_ANY)
     return -1;
 
-  memcpy(&cb->partner_addr, inaddr, sizeof(struct sockaddr_in));
+  struct sockaddr_in *inaddr = (struct sockaddr_in *)addr;
+  if(inaddr->port == NEED_PORT_ALLOC)
+    return -1;
+
+  memcpy(&cb->foreign_addr, inaddr, sizeof(struct sockaddr_in));
   return 0;
 }
 
@@ -208,18 +217,24 @@ static int udp_sock_sendto(void *pcb, const u8 *msg, size_t len, int flags UNUSE
 
   if(dest_addr->family != PF_INET)
     return -1;
+  if(dest_addr->addr == INADDR_ANY)
+    return -1;
   if(0xffff-sizeof(struct udp_hdr) < len)
     return -1;
 
+  if(cb->local_addr.port == NEED_PORT_ALLOC)
+    cb->local_addr.port = get_unused_port();
+
+  in_addr_t r_src, r_dst;
+  struct netdev *dev = ip_routing(cb->local_addr.addr, ((struct sockaddr_in *)dest_addr)->addr, &r_src, &r_dst);
+  if(dev == NULL)
+    return -1; //no interface to send
+  
   struct pktbuf *udpseg = pktbuf_alloc(sizeof(struct udp_hdr) + len);
   pktbuf_copyin(udpseg, msg, len, sizeof(struct udp_hdr));
+  set_udpheader((struct udp_hdr *)udpseg->head, pktbuf_get_size(udpseg), r_src, cb->local_addr.port, r_dst, ((struct sockaddr_in *)dest_addr)->port);
 
-  if(cb->addr.port == NEED_PORT_ALLOC)
-    cb->addr.port = get_unused_port();
-
-  set_udpheader((struct udp_hdr *)udpseg->head, pktbuf_get_size(udpseg), cb->addr.port, (struct sockaddr_in *)dest_addr);
-
-  ip_tx(udpseg, ((struct sockaddr_in *)dest_addr)->addr, IPTYPE_UDP);
+  ip_tx(udpseg, r_src, r_dst, IPTYPE_UDP);
 
   return len;
 }
@@ -241,7 +256,7 @@ static int udp_sock_recvfrom(void *pcb, u8 *buf, size_t len, int flags UNUSED, s
   while(1) {
     if(queue_is_empty(&cb->recv_queue)) {
       mutex_unlock(&udp_recv_mtx);
-      task_sleep();
+      task_sleep(pcb);
     } else {
       struct pktbuf *pkt = list_entry(queue_dequeue(&cb->recv_queue), struct pktbuf, link);
       udp_analyze(pkt, (struct sockaddr_in *)from_addr); //FIXME: check size of from_addr.
@@ -260,7 +275,7 @@ static int udp_sock_recvfrom(void *pcb, u8 *buf, size_t len, int flags UNUSED, s
 
 static int udp_sock_send(void *pcb, const u8 *msg, size_t len, int flags) {
   struct udpcb *cb = (struct udpcb *)pcb;
-  return udp_sock_sendto(pcb, msg, len, flags, (struct sockaddr *)(&cb->partner_addr));
+  return udp_sock_sendto(pcb, msg, len, flags, (struct sockaddr *)(&cb->foreign_addr));
 }
 
 static int udp_sock_recv(void *pcb, u8 *buf, size_t len, int flags) {

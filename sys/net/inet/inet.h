@@ -1,6 +1,6 @@
 #pragma once
 #include <kern/machine.h>
-#include <net/socket.h>
+#include <net/socket/socket.h>
 #include <kern/netdev.h>
 #include <kern/kernlib.h>
 

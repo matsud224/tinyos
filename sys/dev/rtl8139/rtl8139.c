@@ -4,7 +4,6 @@
 #include <kern/kernlib.h>
 #include <kern/pci.h>
 #include <kern/params.h>
-#include <net/net.h>
 #include <net/ether/ether.h>
 #include <net/inet/inet.h>
 #include <kern/task.h>

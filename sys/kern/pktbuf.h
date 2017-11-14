@@ -12,7 +12,7 @@ struct pktbuf {
   void (*freefunc)(u8 *);
 };
 
-#define pktbuf_get_size(pkt) ((pkt)->tail - (pkt)->head)
+#define pktbuf_get_size(pkt) ((size_t)((pkt)->tail - (pkt)->head))
 
 struct pktbuf *pktbuf_create(u8 *buf, size_t size, void (*freefunc)(u8 *));
 struct pktbuf *pktbuf_alloc(size_t size);

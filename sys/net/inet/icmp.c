@@ -17,7 +17,7 @@ void icmp_rx(struct pktbuf *pkt, struct ip_hdr *iphdr){
     icmpdata->icmp_type = ICMP_ECHOREPLY;
     icmpdata->icmp_cksum = 0;
     icmpdata->icmp_cksum = checksum((u16*)icmpdata, pktsize);
-    ip_tx(pkt, iphdr->ip_src, IPTYPE_ICMP);
+    ip_tx(pkt, INADDR_ANY, iphdr->ip_src, IPTYPE_ICMP);
     break;
   }
   return;

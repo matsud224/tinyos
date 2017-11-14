@@ -1,5 +1,6 @@
 #include <net/inet/udp.h>
 #include <net/inet/protohdr.h>
+#include <net/ether/protohdr.h>
 #include <net/inet/ip.h>
 #include <net/inet/util.h>
 #include <net/inet/params.h>
@@ -15,7 +16,6 @@
 struct udpcb {
   struct list_head link;
   struct queue_head recv_queue;
-  int recv_waiting;
   struct sockaddr_in local_addr;
   struct sockaddr_in foreign_addr;
 };
@@ -26,7 +26,7 @@ static int udp_sock_bind(void *pcb, const struct sockaddr *addr);
 static int udp_sock_close(void *pcb);
 static int udp_sock_connect(void *pcb, const struct sockaddr *addr);
 static int udp_sock_sendto(void *pcb, const u8 *msg, size_t len, int flags, struct sockaddr *dest_addr);
-static void udp_analyze(struct pktbuf *pkt, struct sockaddr_in *addr);
+static size_t udp_analyze(struct pktbuf *pkt, struct sockaddr_in *addr);
 static int udp_sock_recvfrom(void *pcb, u8 *buf, size_t len, int flags, struct sockaddr *from_addr);
 static int udp_sock_send(void *pcb, const u8 *msg, size_t len, int flags);
 static int udp_sock_recv(void *pcb, u8 *buf, size_t len, int flags);
@@ -91,13 +91,13 @@ static u16 udp_checksum(struct ip_hdr *iphdr, struct udp_hdr *uhdr) {
   pseudo.up_len = uhdr->uh_ulen; //UDPヘッダ+UDPペイロードの長さ
 
   u16 sum = checksum2((u16*)(&pseudo), (u16*)uhdr, sizeof(struct udp_pseudo_hdr), ntoh16(uhdr->uh_ulen));
-  return sum ? sum : 0xffff;
+  return sum;
 }
 
-static void set_udpheader(struct udp_hdr *uhdr, u16 seglen, in_addr_t saddr, in_port_t sport, in_addr_t daddr, in_port_t dport){
-  uhdr->uh_sport = hton16(sport);
-  uhdr->uh_dport = hton16(dport);
-  uhdr->uh_ulen = hton16(seglen);
+static void set_udpheader(struct udp_hdr *uhdr, u16 datalen, in_addr_t saddr, in_port_t sport, in_addr_t daddr, in_port_t dport){
+  uhdr->uh_sport = sport;
+  uhdr->uh_dport = dport;
+  uhdr->uh_ulen = hton16(sizeof(struct udp_hdr) + datalen);
   uhdr->sum = 0;
 
   struct ip_hdr iphdr_tmp;
@@ -105,15 +105,16 @@ static void set_udpheader(struct udp_hdr *uhdr, u16 seglen, in_addr_t saddr, in_
   iphdr_tmp.ip_dst = daddr;
 
   uhdr->sum = udp_checksum(&iphdr_tmp, uhdr);
+  if(uhdr->sum == 0)
+    uhdr->sum = 0xffff;
 
   return;
 }
 
 void udp_rx(struct pktbuf *pkt, struct ip_hdr *iphdr){
   struct udp_hdr *uhdr = (struct udp_hdr *)pkt->head;
-
   if(pktbuf_get_size(pkt) < sizeof(struct udp_hdr) ||
-    pktbuf_get_size(pkt) != ntoh16(uhdr->uh_ulen)){
+    pktbuf_get_size(pkt) < ntoh16(uhdr->uh_ulen)) {
     goto exit;
   }
 
@@ -124,12 +125,11 @@ void udp_rx(struct pktbuf *pkt, struct ip_hdr *iphdr){
     goto exit;
 
   mutex_lock(&udp_mtx);
-
   struct udpcb *cb = NULL;
   struct list_head *p;
   list_foreach(p, &udpcb_list) {
     struct udpcb *b = list_entry(p, struct udpcb, link);
-    if(b->local_addr.port != ntoh16(uhdr->uh_dport))
+    if(b->local_addr.port != uhdr->uh_dport)
       continue;
     if(b->local_addr.addr != INADDR_ANY
         && b->local_addr.addr != iphdr->ip_dst)
@@ -146,11 +146,7 @@ void udp_rx(struct pktbuf *pkt, struct ip_hdr *iphdr){
   }
   pktbuf_add_header(pkt, ip_header_len(iphdr)); //IPヘッダも含める
   queue_enqueue(&pkt->link, &cb->recv_queue);
-
-  if(cb->recv_waiting) {
-    //TODO:
-    //task_wakeup(socket);
-  }
+  task_wakeup(cb);
   mutex_unlock(&udp_recv_mtx);
   mutex_unlock(&udp_mtx);
   return;
@@ -165,7 +161,6 @@ exit:
 static void *udp_sock_init() {
   struct udpcb *cb = malloc(sizeof(struct udpcb));
   queue_init(&cb->recv_queue, UDP_RECVQUEUE_LEN);
-  cb->recv_waiting = 0;
   bzero(&cb->local_addr, sizeof(struct sockaddr_in));
   bzero(&cb->foreign_addr, sizeof(struct sockaddr_in));
   list_pushback(&cb->link, &udpcb_list);
@@ -229,42 +224,45 @@ static int udp_sock_sendto(void *pcb, const u8 *msg, size_t len, int flags UNUSE
   struct netdev *dev = ip_routing(cb->local_addr.addr, ((struct sockaddr_in *)dest_addr)->addr, &r_src, &r_dst);
   if(dev == NULL)
     return -1; //no interface to send
-  
-  struct pktbuf *udpseg = pktbuf_alloc(sizeof(struct udp_hdr) + len);
-  pktbuf_copyin(udpseg, msg, len, sizeof(struct udp_hdr));
-  set_udpheader((struct udp_hdr *)udpseg->head, pktbuf_get_size(udpseg), r_src, cb->local_addr.port, r_dst, ((struct sockaddr_in *)dest_addr)->port);
+
+  //TODO: ヘッダのために必要なサイズを別途定義（IPヘッダはオプションも考慮すべき）
+  struct pktbuf *udpseg = pktbuf_alloc(sizeof(struct ether_hdr) + sizeof(struct ip_hdr) + sizeof(struct udp_hdr) + len);
+  pktbuf_reserve_headroom(udpseg, sizeof(struct ether_hdr) + sizeof(struct ip_hdr) + sizeof(struct udp_hdr));
+
+  pktbuf_copyin(udpseg, msg, len, 0);
+  set_udpheader((struct udp_hdr *)pktbuf_add_header(udpseg, sizeof(struct udp_hdr)), len,
+    r_src, cb->local_addr.port, r_dst, ((struct sockaddr_in *)dest_addr)->port);
 
   ip_tx(udpseg, r_src, r_dst, IPTYPE_UDP);
 
   return len;
 }
 
-static void udp_analyze(struct pktbuf *pkt, struct sockaddr_in *addr) {
-  struct ip_hdr *iphdr=(struct ip_hdr *)pkt->head;
+static size_t udp_analyze(struct pktbuf *pkt, struct sockaddr_in *addr) {
+  struct ip_hdr *iphdr = (struct ip_hdr *)pkt->head;
   struct udp_hdr *udphdr = (struct udp_hdr *)(((u8 *)iphdr)+ip_header_len(iphdr));
   if(addr != NULL) {
     addr->addr = iphdr->ip_src;
     addr->port = ntoh16(udphdr->uh_sport);
   }
-  return;
+  return ntoh16(udphdr->uh_ulen) - sizeof(struct udp_hdr);
 }
 
 static int udp_sock_recvfrom(void *pcb, u8 *buf, size_t len, int flags UNUSED, struct sockaddr *from_addr) {
   struct udpcb *cb = (struct udpcb *)pcb;
   mutex_lock(&udp_recv_mtx);
-  cb->recv_waiting = 1;
   while(1) {
     if(queue_is_empty(&cb->recv_queue)) {
       mutex_unlock(&udp_recv_mtx);
       task_sleep(pcb);
     } else {
       struct pktbuf *pkt = list_entry(queue_dequeue(&cb->recv_queue), struct pktbuf, link);
-      udp_analyze(pkt, (struct sockaddr_in *)from_addr); //FIXME: check size of from_addr.
+      size_t datalen = udp_analyze(pkt, (struct sockaddr_in *)from_addr); //FIXME: check size of from_addr.
+      pktbuf_remove_header(pkt, ip_header_len((struct ip_hdr *)pkt->head));
       pktbuf_remove_header(pkt, sizeof(struct udp_hdr));
-      size_t copied = MIN(len, pktbuf_get_size(pkt));
+      size_t copied = MIN(len, datalen);
       memcpy(buf, pkt->head, copied);
       pktbuf_free(pkt);
-      cb->recv_waiting = 0;
       mutex_unlock(&udp_recv_mtx);
       return copied;
     }

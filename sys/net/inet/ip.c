@@ -1,5 +1,6 @@
 #include <net/inet/ip.h>
 #include <net/inet/arp.h>
+#include <net/inet/udp.h>
 #include <net/inet/icmp.h>
 #include <net/inet/util.h>
 #include <net/util.h>
@@ -196,7 +197,7 @@ void ip_rx(struct pktbuf *pkt) {
       //はじまりのフラグメント
       if(ffirst == 0) {
         info->head_frame = pkt;
-        info->headerlen = sizeof(struct ether_hdr) + ip_header_len(iphdr);
+        info->headerlen = ip_header_len(iphdr);
       }
 
       pktbuf_remove_header(pkt, ip_header_len(iphdr));
@@ -204,6 +205,7 @@ void ip_rx(struct pktbuf *pkt) {
 
     if(list_is_empty(&info->holelist)) {
       //フラグメントが揃った
+printf("fragmented packet (%dbytes)\n", info->headerlen + info->datalen);
       pkt = pktbuf_alloc(info->headerlen + info->datalen);
       pktbuf_copyin(pkt, info->head_frame->head - info->headerlen, info->headerlen, 0);
       iphdr = (struct ip_hdr *)pkt->head;
@@ -214,7 +216,6 @@ void ip_rx(struct pktbuf *pkt) {
         struct fragment *f = list_entry(p, struct fragment, link);
         pktbuf_copyin(pkt, f->pkt->head, f->last - f->first +1, f->first);
       }
-
       info->timeout = 0;
     } else {
       mutex_unlock(&reasm_ongoing_mtx);
@@ -233,8 +234,10 @@ void ip_rx(struct pktbuf *pkt) {
     //tcp_rx(pkt, iphdr);
     break;
   case IPTYPE_UDP:
-    //udp_rx(pkt, iphdr);
+    udp_rx(pkt, iphdr);
     break;
+  default:
+    goto exit;
   }
 
   return;
@@ -274,7 +277,7 @@ static struct netdev *ip_routing_src(in_addr_t orig_src, in_addr_t orig_dst, in_
   struct list_head *p;
   list_foreach(p, &ifaddr_tbl[PF_INET]) {
     struct ifaddr_in *inaddr = list_entry(p, struct ifaddr_in, family_link);
-    if(inaddr->addr == src) {
+    if(inaddr->addr == orig_src) {
       *src = orig_src;
       *dst = orig_dst;
       return inaddr->dev;
@@ -319,7 +322,6 @@ void ip_tx(struct pktbuf *data, in_addr_t srcaddr, in_addr_t dstaddr, u8 proto) 
   u16 currentid = ip_getid();
   struct netdev *dev = NULL;
   in_addr_t r_src, r_dst;
-
   dev = ip_routing(srcaddr, dstaddr, &r_src, &r_dst);
   if(dev == NULL) {
     //no interface available

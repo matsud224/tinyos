@@ -5,8 +5,8 @@
 #include <kern/params.h>
 
 #define SIZE_BASE 8 
-#define MAX_BIN 512 
-
+#define MAX_BIN 256 
+// TODO: SIZE_BASE*MAX_BIN以上のアロケーションに対応する
 // chunk = 1page
 // chunk consists of objects
 struct chunkhdr {
@@ -24,8 +24,9 @@ void malloc_init() {
 }
 
 static struct chunkhdr *getnewchunk(size_t objsize) {
-  if(objsize < 4 || objsize > PAGESIZE-sizeof(struct chunkhdr))
+  if(objsize < 4 || objsize > PAGESIZE-sizeof(struct chunkhdr)) {
     return NULL;
+  }
 
   struct chunkhdr *newchunk = (struct chunkhdr *)page_alloc();
   newchunk->next_chunk = NULL;
@@ -67,8 +68,10 @@ retry:
 
 void *malloc(size_t request) {
   size_t size = (request + (SIZE_BASE-1)) & ~(SIZE_BASE-1);
-  if(size > SIZE_BASE * MAX_BIN)
+  if(size > SIZE_BASE * MAX_BIN) {
+    printf("malloc: objsize=%d byte is not supported.", size);
     return NULL;
+  }
 
   return getobj(size/SIZE_BASE);
 }

@@ -11,6 +11,10 @@
 #include <kern/timer.h>
 #include <kern/lock.h>
 
+#include <net/socket/socket.h>
+#include <net/inet/inet.h>
+#include <net/util.h>
+
 static struct tss tss;
 
 struct task *current = NULL;
@@ -50,13 +54,58 @@ void task_idle() {
     cpu_halt();
 }
 
+void task_test() {
+  struct socket *sock;
+  struct sockaddr_in addr;
+
+  char buf[2048];
+
+  sock = socket(PF_INET, SOCK_DGRAM);
+  if(sock == NULL) {
+    puts("failed to open socket");
+    return;
+  }
+
+  addr.family = PF_INET;
+  addr.port = hton16(12345);
+  addr.addr = INADDR_ANY;
+
+  bind(sock, (struct sockaddr *)&addr);
+
+  memset(buf, 0, sizeof(buf));
+  while(1) {
+    int len = recv(sock, buf, sizeof(buf), 0);
+    buf[len] = '\0';
+    printf("%s\n", buf);
+  }
+
+  close(sock);
+}
+
 void task_echo() {
+  struct socket *sock;
+  struct sockaddr_in addr;
+
+  sock = socket(PF_INET, SOCK_DGRAM);
+  if(sock == NULL) {
+    puts("failed to open socket");
+    return;
+  }
+
+  addr.family = PF_INET;
+  addr.port = hton16(54321);
+  addr.addr = IPADDR(192,168,4,1);
+
   u8 data;
   while(1) {
     if(chardev_read(0, &data, 1) == 1) {
       chardev_write(0, &data, 1);
+      if(sendto(sock, &data, 1, 0, (struct sockaddr *)&addr) < 0)
+        puts("sendto failed");
     }
   }
+
+  close(sock);
 }
 
 struct deferred_func {
@@ -127,6 +176,7 @@ void task_init() {
   task_run(kernel_task_new(task_idle, 1));
   task_run(kernel_task_new(task_deferred, 1));
   task_run(kernel_task_new(task_echo, 1));
+  task_run(kernel_task_new(task_test, 1));
   jmpto_current();
 }
 

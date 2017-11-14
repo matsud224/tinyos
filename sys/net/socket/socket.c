@@ -1,4 +1,4 @@
-#include <net/params.h>
+#include <net/socket/params.h>
 #include <net/socket/socket.h>
 #include <kern/lock.h>
 #include <kern/kernlib.h>
@@ -37,9 +37,8 @@ struct socket *socket(int domain, int type) {
   struct socket *s = malloc(sizeof(struct socket));
   s->domain = domain;
   s->type = type;
-  s->pcb = s->ops->init();
   s->ops = sock_ops[domain][type];
-
+  s->pcb = s->ops->init();
   mutex_lock(&socklist_mtx);
   list_pushback(&s->link, &socket_list);
   mutex_unlock(&socklist_mtx);
@@ -47,11 +46,11 @@ struct socket *socket(int domain, int type) {
 }
 
 int bind(struct socket *s, const struct sockaddr *addr) {
-  return s->ops->bind(s, addr);
+  return s->ops->bind(s->pcb, addr);
 }
 
 int close(struct socket *s) {
-  int retval = s->ops->close(s);
+  int retval = s->ops->close(s->pcb);
 
   mutex_lock(&socklist_mtx);
   list_remove(&s->link);
@@ -61,30 +60,30 @@ int close(struct socket *s) {
 }
 
 int sendto(struct socket *s, const char *msg, u32 len, int flags, const struct sockaddr *to_addr) {
-  return s->ops->sendto(s, msg, len, flags, to_addr);
+  return s->ops->sendto(s->pcb, msg, len, flags, to_addr);
 }
 
 int recvfrom(struct socket *s, char *buf, u32 len, int flags, struct sockaddr *from_addr) {
-  return s->ops->recvfrom(s, buf, len, flags, from_addr);
+  return s->ops->recvfrom(s->pcb, buf, len, flags, from_addr);
 }
 
 int connect(struct socket *s, const struct sockaddr *to_addr) {
-  return s->ops->connect(s, to_addr);
+  return s->ops->connect(s->pcb, to_addr);
 }
 
 int listen(struct socket *s, int backlog){
-  return s->ops->listen(s, backlog);
+  return s->ops->listen(s->pcb, backlog);
 }
 
 int accept(struct socket *s, struct sockaddr *client_addr) {
-  return s->ops->accept(s, client_addr);
+  return s->ops->accept(s->pcb, client_addr);
 }
 
 int send(struct socket *s, const char *msg, u32 len, int flags) {
-  return s->ops->send(s, msg, len, flags);
+  return s->ops->send(s->pcb, msg, len, flags);
 }
 
 int recv(struct socket *s, char *buf, u32 len, int flags) {
-  return s->ops->recv(s, buf, len, flags);
+  return s->ops->recv(s->pcb, buf, len, flags);
 }
 

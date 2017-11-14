@@ -1,6 +1,5 @@
 #pragma once
 #include <kern/kernlib.h>
-#include <net/params.h>
 
 #define PF_LINK			0
 #define PF_INET			1

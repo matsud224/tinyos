@@ -43,6 +43,11 @@ static struct fragment *fragment_new(u16 first, u16 last, struct pktbuf *pkt) {
   return frag;
 }
 
+static void fragment_free(struct fragment *f) {
+  pktbuf_free(f->pkt);
+  free(f);
+}
+
 struct reasminfo{
   struct list_head link;
   struct{
@@ -60,16 +65,8 @@ struct reasminfo{
 };
 
 static void reasminfo_free(struct reasminfo *ri) {
-  struct list_head *p, *tmp;
-  list_foreach_safe(p, tmp, &ri->holelist) {
-    struct hole *h = list_entry(p, struct hole, link);
-    free(h);
-  }
-  list_foreach_safe(p, tmp, &ri->holelist) {
-    struct fragment *f = list_entry(p, struct fragment, link);
-    pktbuf_free(f->pkt);
-    free(f);
-  }
+  list_free_all(&ri->holelist, struct hole, link, free);
+  list_free_all(&ri->fraglist, struct fragment, link, fragment_free);
   free(ri);
 }
 

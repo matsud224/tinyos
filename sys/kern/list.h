@@ -19,3 +19,12 @@ struct list_head *list_pop(struct list_head *list);
 #define list_foreach(p, lst) for((p)=(lst)->next; (p)!=(lst); (p)=(p)->next)
 #define list_foreach_safe(p, tmp, lst) for((p)=(lst)->next, (tmp)=(p)->next; (p)!=(lst); (p)=(tmp), (tmp)=(p)->next)
 #define list_entry container_of
+
+#define list_free_all(list, type, memb, func) do { \
+    struct list_head *_p, *_tmp; \
+    list_foreach_safe(_p, _tmp, (list)) { \
+      list_remove(_p); \
+      (func)(list_entry(_p, type, memb)); \
+    } \
+  } while(0)
+

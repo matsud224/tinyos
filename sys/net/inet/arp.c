@@ -62,12 +62,7 @@ static void pending_frame_free(struct pending_frame *p) {
 }
 
 static void pending_remove_all(struct list_head *pending) {
-  struct list_head *p, *tmp;
-  list_foreach_safe(p, tmp, pending) {
-    struct pending_frame *frm = list_entry(p, struct pending_frame, link);
-    list_remove(p);
-    pending_frame_free(frm);
-  }
+  list_free_all(pending, struct pending_frame, link, pending_frame_free);
 }
 
 static int arp_resolve(in_addr_t ipaddr, struct etheraddr *macaddr, struct pktbuf *frm, u16 proto, struct netdev *dev) {
@@ -210,14 +205,8 @@ static void arp_10sec(void *arg UNUSED) {
       arptable[i].timeout--;
     }
     if(arptable[i].timeout == 0) {
-      if(!list_is_empty(&arptable[i].pending)) {
-        struct list_head *p, *tmp;
-        list_foreach_safe(p, tmp, &arptable[i].pending) {
-          struct pktbuf *pkt = list_entry(p, struct pktbuf, link);
-          pktbuf_free(pkt);
-          list_remove(p);
-        }
-      }
+      if(!list_is_empty(&arptable[i].pending))
+        list_free_all(&arptable[i].pending, struct pktbuf, link, pktbuf_free);
     } else {
       if(!list_is_empty(&arptable[i].pending)) {
         // TODO リスト先頭要素の取り出し関数:

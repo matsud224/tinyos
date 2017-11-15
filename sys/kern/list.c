@@ -53,4 +53,3 @@ struct list_head *list_pop(struct list_head *list) {
   return first;
 }
 
-

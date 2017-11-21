@@ -43,6 +43,7 @@ void list_rotete_backward(struct list_head *list) {
 void list_remove(struct list_head *item) {
   item->prev->next = item->next;
   item->next->prev = item->prev;
+  list_init(item);
 }
 
 struct list_head *list_pop(struct list_head *list) {

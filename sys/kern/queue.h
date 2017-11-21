@@ -10,4 +10,5 @@ void queue_init(struct queue_head *hdr, int len);
 int queue_enqueue(struct list_head *item, struct queue_head *q);
 #define queue_dequeue(q) list_pop(&(q)->list)
 #define queue_is_full(q) ((q)->free == 0)
-#define queue_is_empty(q) list_is_empty(&(q)->list)
+#define queue_is_empty(q) (list_is_empty(&(q)->list))
+#define queue_free_all(a,b,c,d) list_free_all(a,b,c,d)

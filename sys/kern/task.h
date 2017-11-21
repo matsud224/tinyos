@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <stddef.h>
 
+struct deferred_func;
+
 extern struct task *current;
 
 struct tss {
@@ -64,4 +66,5 @@ void task_run(struct task *t);
 void task_sched(void);
 void task_sleep(void *cause);
 void task_wakeup(void *cause);
-void defer_exec(void (*func)(void *), void *arg, int priority, int delay);
+struct deferred_func *defer_exec(void (*func)(void *), void *arg, int priority, int delay);
+void *defer_cancel(struct deferred_func *f);

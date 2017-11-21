@@ -127,7 +127,7 @@ IRQ_ENABLE
   task_wakeup(&deferred_list);
 }
 
-void defer_exec(void (*func)(void *), void *arg, int priority, int delay) {
+struct deferred_func *defer_exec(void (*func)(void *), void *arg, int priority, int delay) {
   struct deferred_func *f = malloc(sizeof(struct deferred_func));
   f->func = func;
   f->arg = arg;
@@ -137,6 +137,13 @@ void defer_exec(void (*func)(void *), void *arg, int priority, int delay) {
     timer_start(delay, _defer_exec, f);
   else
     _defer_exec(f);
+}
+
+void *defer_cancel(struct deferred_func *f) {
+IRQ_DISABLE
+  list_remove(&f->link);
+  return f->arg;
+IRQ_ENABLE
 }
 
 void task_deferred() {

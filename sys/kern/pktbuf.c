@@ -5,7 +5,6 @@ struct pktbuf *pktbuf_create(u8 *buf, size_t size, void (*freefunc)(u8 *)) {
   pkt->begin = pkt->head = buf;
   pkt->end = pkt->tail = buf + size;
   pkt->freefunc = freefunc;
-  list_init(&pkt->fraglist);
   return pkt;
 }
 

@@ -26,7 +26,7 @@ void list_pushback(struct list_head *item, struct list_head *list) {
 
 void list_append_front(struct list_head *dst, struct list_head *src) {
   if(list_is_empty(src))
-    break;
+    return;
   src->prev->next = dst->next;
   dst->next->prev = src->prev;
   dst->next = src->next;
@@ -36,7 +36,7 @@ void list_append_front(struct list_head *dst, struct list_head *src) {
 
 void list_append_back(struct list_head *dst, struct list_head *src) {
   if(list_is_empty(src))
-    break;
+    return;
   src->next->prev = dst->prev;
   dst->prev->next = src->next;
   dst->prev = src->prev;

@@ -4,6 +4,7 @@
 #include <kern/vmem.h>
 #include <kern/fs.h>
 
+
 int elf32_is_valid_exec(struct elf32_hdr *hdr) {
   if(strncmp(hdr->e_ident, ELFMAG, 4) != 0)
     return 0;
@@ -19,6 +20,10 @@ int elf32_is_valid_exec(struct elf32_hdr *hdr) {
 
 void elf32_load(struct inode *ino, u8 *head) {
   struct elf32_hdr *ehdr = (struct elf32_hdr *)head;
+  u32 phdr_table_size = ehdr->e_phentsize * ehdr->e_phnum;
+  struct elf32_phdr *phdr_table = malloc(phdr_table_size);
+  fs_read(ino, phdr_table, ehdr->e_phoff, phdr_table_size);
+
   for(int i=0; i < ehdr->e_phnum; i++) {
     struct elf32_phdr *phdr = (struct elf32_phdr *)(head + ehdr->e_phoff + ehdr->e_phentsize*i);
     switch(phdr->p_type) {
@@ -30,5 +35,7 @@ void elf32_load(struct inode *ino, u8 *head) {
     }
 
   }
+
+  free(phdr_table);
 }
 

@@ -24,6 +24,26 @@ void list_pushback(struct list_head *item, struct list_head *list) {
   list->prev = item;
 }
 
+void list_append_front(struct list_head *dst, struct list_head *src) {
+  if(list_is_empty(src))
+    break;
+  src->prev->next = dst->next;
+  dst->next->prev = src->prev;
+  dst->next = src->next;
+  src->next->prev = dst;
+  list_init(src);
+}
+
+void list_append_back(struct list_head *dst, struct list_head *src) {
+  if(list_is_empty(src))
+    break;
+  src->next->prev = dst->prev;
+  dst->prev->next = src->next;
+  dst->prev = src->prev;
+  src->prev->next = dst;
+  list_init(src);
+}
+
 void list_rotate_forward(struct list_head *list) {
   if(list_is_empty(list))
     return;

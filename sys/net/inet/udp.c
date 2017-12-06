@@ -1,6 +1,5 @@
 #include <net/inet/udp.h>
 #include <net/inet/protohdr.h>
-#include <net/ether/protohdr.h>
 #include <net/inet/ip.h>
 #include <net/inet/util.h>
 #include <net/inet/params.h>
@@ -225,9 +224,8 @@ static int udp_sock_sendto(void *pcb, const u8 *msg, size_t len, int flags UNUSE
   if(dev == NULL)
     return -1; //no interface to send
 
-  //TODO: ヘッダのために必要なサイズを別途定義（IPヘッダはオプションも考慮すべき）
-  struct pktbuf *udpseg = pktbuf_alloc(sizeof(struct ether_hdr) + sizeof(struct ip_hdr) + sizeof(struct udp_hdr) + len);
-  pktbuf_reserve_headroom(udpseg, sizeof(struct ether_hdr) + sizeof(struct ip_hdr) + sizeof(struct udp_hdr));
+  struct pktbuf *udpseg = pktbuf_alloc(MAX_HDRLEN_UDP + len);
+  pktbuf_reserve_headroom(udpseg, MAX_HDRLEN_UDP);
 
   pktbuf_copyin(udpseg, msg, len, 0);
   set_udpheader((struct udp_hdr *)pktbuf_add_header(udpseg, sizeof(struct udp_hdr)), len,

@@ -1,5 +1,7 @@
 #pragma once
 #include <kern/types.h>
+#include <net/ether/protohdr.h>
+#include <net/inet/protohdr.h>
 
 #define MTU 1500
 #define MSS (MTU-40)
@@ -23,3 +25,9 @@
 #define TCP_TIMEWAIT_TIME (10*SECOND)
 #define TCP_DELAYACK_TIME (TCP_TIMER_UNIT)
 
+#define MAX_OPTLEN_IP 40
+
+#define MAX_HDRLEN_ETHER (sizeof(struct ether_hdr))
+#define MAX_HDRLEN_IP (MAX_HDRLEN_ETHER+sizeof(struct ip_hdr)+MAX_OPTLEN_IP)
+#define MAX_HDRLEN_UDP (MAX_HDRLEN_ETHER+MAX_HDRLEN_IP+sizeof(struct udp_hdr))
+#define MAX_HDRLEN_TCP (MAX_HDRLEN_ETHER+MAX_HDRLEN_IP+sizeof(struct tcp_hdr))

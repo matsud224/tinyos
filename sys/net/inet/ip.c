@@ -9,7 +9,7 @@
 #include <kern/lock.h>
 #include <kern/kernlib.h>
 #include <kern/pktbuf.h>
-#include <kern/task.h>
+#include <kern/thread.h>
 #include <kern/timer.h>
 
 #define INF 0xffff
@@ -73,27 +73,30 @@ static void reasminfo_free(struct reasminfo *ri) {
 static struct list_head reasm_ongoing;
 static mutex reasm_ongoing_mtx;
 
-static void ip_10sec(void);
+static void ip_10sec_thread(void *);
 
 NET_INIT void ip_init(){
   list_init(&reasm_ongoing);
   mutex_init(&reasm_ongoing_mtx);
-  defer_exec(ip_10sec, NULL, 0, 10*SEC);
+  thread_run(kthread_new(ip_10sec_thread, NULL));
 }
 
-static void ip_10sec() {
-  mutex_lock(&reasm_ongoing_mtx);
-  struct list_head *p, *tmp;
-  list_foreach_safe(p, tmp, &reasm_ongoing) {
-    struct reasminfo *info = list_entry(p, struct reasminfo, link);
-    if(--(info->timeout) <= 0 || list_is_empty(&info->holelist)){
-      list_remove(p);
-      reasminfo_free(info);
+static void ip_10sec_thread(void *arg UNUSED) {
+  while(1) {
+    thread_start_alarm(ip_10sec_thread, 10*SEC);
+    thread_sleep(ip_10sec_thread);
+
+    mutex_lock(&reasm_ongoing_mtx);
+    struct list_head *p, *tmp;
+    list_foreach_safe(p, tmp, &reasm_ongoing) {
+      struct reasminfo *info = list_entry(p, struct reasminfo, link);
+      if(--(info->timeout) <= 0 || list_is_empty(&info->holelist)){
+        list_remove(p);
+        reasminfo_free(info);
+      }
     }
+    mutex_unlock(&reasm_ongoing_mtx);
   }
-  mutex_unlock(&reasm_ongoing_mtx);
-  
-  defer_exec(ip_10sec, NULL, 0, 10*SEC);
 }
 
 static struct reasminfo *get_reasminfo(in_addr_t ip_src, in_addr_t ip_dst, u8 ip_pro, u16 ip_id){

@@ -1,7 +1,7 @@
 #include <kern/page.h>
 #include <kern/chardev.h>
 #include <kern/kernlib.h>
-#include <kern/task.h>
+#include <kern/thread.h>
 
 struct chardev *chardev_tbl[MAX_CHARDEV];
 static u16 nchardev;
@@ -62,7 +62,7 @@ u32 chardev_read(u16 devno, u8 *dest, u32 count) {
     remain -= n;
     dest += n;
     if(remain > 0)
-      task_sleep(dev);
+      thread_sleep(dev);
     sti();
   }
   return count;
@@ -77,7 +77,7 @@ u32 chardev_write(u16 devno, u8 *src, u32 count) {
     remain -= n;
     src += n;
     if(remain > 0)
-      task_sleep(dev);
+      thread_sleep(dev);
     sti();
   }
   return count;

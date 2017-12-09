@@ -24,7 +24,7 @@
 #define MIN(a, b) ((a)<(b)?(a):(b))
 
 #define IRQ_DISABLE do{ int __ie = geteflags()&0x200; cli();
-#define IRQ_ENABLE if(__ie) sti(); }while(0);
+#define IRQ_RESTORE if(__ie) sti(); }while(0);
 
 int abs(int n);
 char *strncpy(char *dest, const char *src, size_t n);

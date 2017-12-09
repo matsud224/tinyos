@@ -3,7 +3,7 @@
 section .text
 
 extern kernstack_setaddr
-extern task_sched
+extern thread_sched
 
 %macro handler_enter 0
   push eax

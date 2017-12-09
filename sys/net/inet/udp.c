@@ -7,7 +7,7 @@
 #include <net/util.h>
 #include <kern/kernlib.h>
 #include <kern/lock.h>
-#include <kern/task.h>
+#include <kern/thread.h>
 
 
 #define NEED_PORT_ALLOC 0
@@ -145,7 +145,7 @@ void udp_rx(struct pktbuf *pkt, struct ip_hdr *iphdr){
   }
   pktbuf_add_header(pkt, ip_header_len(iphdr)); //IPヘッダも含める
   queue_enqueue(&pkt->link, &cb->recv_queue);
-  task_wakeup(cb);
+  thread_wakeup(cb);
   mutex_unlock(&udp_recv_mtx);
   mutex_unlock(&udp_mtx);
   return;
@@ -159,9 +159,8 @@ exit:
 
 static void *udp_sock_init() {
   struct udpcb *cb = malloc(sizeof(struct udpcb));
+  bzero(cb, sizeof(struct udpcb));
   queue_init(&cb->recv_queue, UDP_RECVQUEUE_LEN);
-  bzero(&cb->local_addr, sizeof(struct sockaddr_in));
-  bzero(&cb->foreign_addr, sizeof(struct sockaddr_in));
   list_pushback(&cb->link, &udpcb_list);
   return cb;
 }
@@ -252,7 +251,7 @@ static int udp_sock_recvfrom(void *pcb, u8 *buf, size_t len, int flags UNUSED, s
   while(1) {
     if(queue_is_empty(&cb->recv_queue)) {
       mutex_unlock(&udp_recv_mtx);
-      task_sleep(pcb);
+      thread_sleep(pcb);
     } else {
       struct pktbuf *pkt = list_entry(queue_dequeue(&cb->recv_queue), struct pktbuf, link);
       size_t datalen = udp_analyze(pkt, (struct sockaddr_in *)from_addr); //FIXME: check size of from_addr.

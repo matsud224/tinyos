@@ -3,7 +3,7 @@
 #include <kern/kernasm.h>
 #include <kern/idt.h>
 #include <kern/kernlib.h>
-#include <kern/task.h>
+#include <kern/thread.h>
 
 #define COMPORT_NUM 2
 
@@ -87,7 +87,7 @@ static void serial_send(int port) {
   u16 base = comport[port].base;
   u8 data;
   if(CDBUF_IS_FULL(comport[port].txbuf))
-    task_wakeup(&comport[port].chardev_info);
+    thread_wakeup(&comport[port].chardev_info);
   if(cdbuf_read(comport[port].txbuf, &data, 1) == 1)
     out8(base+DATA, data);
 }
@@ -110,7 +110,7 @@ void serial_isr_common(int port) {
       //受信
       data = in8(base+DATA);
       if(CDBUF_IS_EMPTY(comport[port].rxbuf))
-        task_wakeup(&comport[port].chardev_info);
+        thread_wakeup(&comport[port].chardev_info);
       if(!CDBUF_IS_FULL(comport[port].rxbuf))
         cdbuf_write(comport[port].rxbuf, &data, 1);
       break;
@@ -121,7 +121,7 @@ void serial_isr_common(int port) {
   }
   
   pic_sendeoi();
-  task_yield();
+  thread_yield();
 }
 
 void com1_isr() {

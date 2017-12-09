@@ -1,5 +1,5 @@
 #include <kern/gdt.h>
-#include <kern/task.h>
+#include <kern/thread.h>
 #include <kern/kernasm.h>
 #include <kern/kernlib.h>
 

@@ -8,7 +8,7 @@
 #include <kern/kernlib.h>
 #include <kern/pktbuf.h>
 #include <kern/netdev.h>
-#include <kern/task.h>
+#include <kern/thread.h>
 #include <kern/timer.h>
 
 struct pending_frame {
@@ -37,7 +37,7 @@ enum arpresult {
 
 static mutex arptbl_mtx;
 
-static void arp_10sec(void *);
+static void arp_10sec_thread(void *);
 
 NET_INIT void arp_init() {
   mutex_init(&arptbl_mtx);
@@ -45,7 +45,7 @@ NET_INIT void arp_init() {
   for(int i=0;i<MAX_ARPTABLE;i++)
     list_init(&arptable[i].pending);
 
-  defer_exec(arp_10sec, NULL, 0, 10*SEC);
+  thread_run(kthread_new(arp_10sec_thread, NULL));
 }
 
 static struct pending_frame *pending_frame_new(struct pktbuf *frm, u16 proto, struct netdev *dev) {
@@ -197,25 +197,28 @@ static void send_arprequest(in_addr_t dstaddr, struct netdev *dev){
   ether_tx(req, ETHER_ADDR_BROADCAST, ETHERTYPE_ARP, dev);
 }
 
-static void arp_10sec(void *arg UNUSED) {
-  mutex_lock(&arptbl_mtx);
-  for(int i=0; i<MAX_ARPTABLE; i++) {
-    if(arptable[i].timeout > 0 && 
-       arptable[i].timeout != ARPTBL_PERMANENT) {
-      arptable[i].timeout--;
-    }
-    if(arptable[i].timeout == 0) {
-      if(!list_is_empty(&arptable[i].pending))
-        list_free_all(&arptable[i].pending, struct pktbuf, link, pktbuf_free);
-    } else {
-      if(!list_is_empty(&arptable[i].pending)) {
-        // TODO リスト先頭要素の取り出し関数:
-        send_arprequest(arptable[i].ipaddr, list_entry(arptable[i].pending.next, struct pending_frame, link)->dev);
+static void arp_10sec_thread(void *arg UNUSED) {
+  while(1) {
+    thread_start_alarm(arp_10sec_thread, 10*SEC);
+    thread_sleep(arp_10sec_thread);
+    
+    mutex_lock(&arptbl_mtx);
+    for(int i=0; i<MAX_ARPTABLE; i++) {
+      if(arptable[i].timeout > 0 && 
+         arptable[i].timeout != ARPTBL_PERMANENT) {
+        arptable[i].timeout--;
+      }
+      if(arptable[i].timeout == 0) {
+        if(!list_is_empty(&arptable[i].pending))
+          list_free_all(&arptable[i].pending, struct pktbuf, link, pktbuf_free);
+      } else {
+        if(!list_is_empty(&arptable[i].pending)) {
+          send_arprequest(arptable[i].ipaddr, list_entry(list_first(&arptable[i].pending), struct pending_frame, link)->dev);
+        }
       }
     }
+    mutex_unlock(&arptbl_mtx);
   }
-  mutex_unlock(&arptbl_mtx);
-  defer_exec(arp_10sec, NULL, 0, 10*SEC);
 }
 
 void arp_tx(struct pktbuf *pkt, in_addr_t dstaddr, u16 proto, struct netdev *dev){

@@ -13,3 +13,4 @@
 #define EFAIL -11
 #define ESIGNATURE -12
 #define ETLS -13
+#define EAFNOSUPPORT -14

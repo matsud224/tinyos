@@ -1,4 +1,4 @@
-#include <kern/task.h>
+#include <kern/thread.h>
 #include <kern/pit.h>
 #include <kern/page.h>
 #include <kern/pagetbl.h>
@@ -17,17 +17,17 @@
 
 static struct tss tss;
 
-struct task *current = NULL;
+struct thread *current = NULL;
 static u32 pid_next = 0; 
 
 static struct list_head run_queue;
 static struct list_head wait_queue;
 
-void task_a() {
-  printf("%d pages free\n", page_getnfree());
+void thread_a(void *arg) {
+  printf("arg = %d\n", (int)arg);
 }
 
-void task_b() {
+void thread_b(void *arg) {
   if(fs_mountroot("fat32", (void *)0) < 0) {
     puts("mountroot failed.");
     while(1);
@@ -49,12 +49,12 @@ void task_b() {
   }
 }
 
-void task_idle() {
+void thread_idle(void *arg) {
   while(1)
     cpu_halt();
 }
 
-void task_test() {
+void thread_test(void *arg) {
   struct socket *sock;
   struct sockaddr_in addr;
 
@@ -82,7 +82,7 @@ void task_test() {
   close(sock);
 }
 
-void task_echo() {
+void thread_echo(void *arg) {
   struct socket *sock;
   struct sockaddr_in addr;
 
@@ -108,65 +108,10 @@ void task_echo() {
   close(sock);
 }
 
-struct deferred_func {
-  struct list_head link;
-  void (*func)(void *);
-  void *arg;
-  int priority;
-};
-
-static struct list_head deferred_list;
-static void _defer_exec(struct deferred_func *f) {
-IRQ_DISABLE
-  if(f->priority == 0)
-    list_pushfront(f, &deferred_list);
-  else
-    list_pushback(f, &deferred_list);
-IRQ_ENABLE
-
-  task_wakeup(&deferred_list);
-}
-
-struct deferred_func *defer_exec(void (*func)(void *), void *arg, int priority, int delay) {
-  struct deferred_func *f = malloc(sizeof(struct deferred_func));
-  f->func = func;
-  f->arg = arg;
-  f->priority = priority;
-
-  if(delay > 0)
-    timer_start(delay, _defer_exec, f);
-  else
-    _defer_exec(f);
-}
-
-void *defer_cancel(struct deferred_func *f) {
-IRQ_DISABLE
-  list_remove(&f->link);
-  return f->arg;
-IRQ_ENABLE
-}
-
-void task_deferred() {
-  while(1) {
-    struct list_head *item;
-    while((item=list_pop(&deferred_list)) == NULL)
-      task_sleep(&deferred_list);
-    struct deferred_func *f = container_of(item, struct deferred_func, link);
-    (f->func)(f->arg);
-    free(f);
-  }
-}
-
-void timer_call(void *arg ) {
-  //printf("%d sec!\n", (u32)arg/100);
-  timer_start((u32)arg, timer_call, arg);
-}
-
-void task_init() {
+void dispatcher_init() {
   current = NULL;
   list_init(&run_queue);
   list_init(&wait_queue);
-  list_init(&deferred_list);
 
   bzero(&tss, sizeof(struct tss));
   tss.ss0 = GDT_SEL_DATASEG_0;
@@ -175,46 +120,47 @@ void task_init() {
   gdt_settssbase(&tss);
   ltr(GDT_SEL_TSS);
 
-  timer_start(2*SEC, timer_call, 2*SEC);
-  timer_start(3*SEC, timer_call, 3*SEC);
+  thread_run(kthread_new(thread_a, 3));
+  thread_run(kthread_new(thread_b, NULL));
+  thread_run(kthread_new(thread_idle, NULL));
+  thread_run(kthread_new(thread_echo, NULL));
+  thread_run(kthread_new(thread_test, NULL));
+}
 
-  task_run(kernel_task_new(task_a, 1));
-  task_run(kernel_task_new(task_b, 1));
-  task_run(kernel_task_new(task_idle, 1));
-  task_run(kernel_task_new(task_deferred, 1));
-  task_run(kernel_task_new(task_echo, 1));
-  task_run(kernel_task_new(task_test, 1));
+void dispatcher_run() {
   jmpto_current();
 }
 
-void kernstack_setaddr() {
-  tss.esp0 = (u32)((u8 *)(current->kernstack) + current->kernstacksize);
+void kstack_setaddr() {
+  tss.esp0 = (u32)((u8 *)(current->kstack) + current->kstacksize);
 }
 
 
-void task_exit(void);
+void thread_exit(void);
 
-struct task *kernel_task_new(void *eip, int intenable) {
-  struct task *t = malloc(sizeof(struct task));
-  bzero(t, sizeof(struct task));
+struct thread *kthread_new(void (*func)(void *), void *arg) {
+  struct thread *t = malloc(sizeof(struct thread));
+  bzero(t, sizeof(struct thread));
   t->vmmap = vm_map_new();
   t->state = TASK_STATE_RUNNING;
   t->pid = pid_next++;
-  t->regs.cr3 = new_procpdt();
+  t->regs.cr3 = procpdt_new();
   //prepare kernel stack
-  t->kernstack = page_alloc();
-  bzero(t->kernstack, PAGESIZE);
-  t->kernstacksize = PAGESIZE;
-  t->regs.esp = (u32)((u8 *)(t->kernstack) + t->kernstacksize - 4);
-  *(u32 *)t->regs.esp = (u32)task_exit;
+  t->kstack = page_alloc();
+  bzero(t->kstack, PAGESIZE);
+  t->kstacksize = PAGESIZE;
+  t->regs.esp = (u32)((u8 *)(t->kstack) + t->kstacksize - 4);
+  *(u32 *)t->regs.esp = arg;
   t->regs.esp -= 4;
-  *(u32 *)t->regs.esp = eip;
+  *(u32 *)t->regs.esp = (u32)thread_exit;
+  t->regs.esp -= 4;
+  *(u32 *)t->regs.esp = func;
   t->regs.esp -= 4*5;
-  *(u32 *)t->regs.esp = intenable?0x200:0; //initial eflags(IF=1)
+  *(u32 *)t->regs.esp = 0x200; //initial eflags(IF=1)
   return t;
 }
 
-void task_run(struct task *t) {
+void thread_run(struct thread *t) {
   t->state = TASK_STATE_RUNNING;
   if(current == NULL)
     current = t;
@@ -222,12 +168,12 @@ void task_run(struct task *t) {
     list_pushback(&(t->link), &run_queue);
 }
 
-void freetask(struct task *t) {
-  page_free(t->kernstack);
+static void thread_free(struct thread *t) {
+  page_free(t->kstack);
   free(t);
 }
 
-void task_sched() {
+void thread_sched() {
   //printf("sched: nextpid=%d esp=%x\n", current->pid, current->regs.esp);
   switch(current->state) {
   case TASK_STATE_RUNNING:
@@ -237,32 +183,38 @@ void task_sched() {
     list_pushback(&(current->link), &wait_queue);
     break;
   case TASK_STATE_EXITED:
-    freetask(current);
+    thread_free(current);
     break;
   }
   struct list_head *next = list_pop(&run_queue);
   if(next == NULL) {
-    puts("no task!");
+    puts("no thread!");
     while(1)
       cpu_halt();
   }
-  current = container_of(next, struct task, link);
+  current = container_of(next, struct thread, link);
 }
 
-void task_sleep(void *cause) {
-  //printf("task#%d sleep\n", current->pid);
+void thread_yield() {
+  IRQ_DISABLE 
+  _thread_yield();
+  IRQ_RESTORE
+}
+
+void thread_sleep(void *cause) {
+  //printf("thread#%d sleep\n", current->pid);
   current->state = TASK_STATE_WAITING;
   current->waitcause = cause;
-  task_yield();
+  thread_yield();
 }
 
-void task_wakeup(void *cause) {
+void thread_wakeup(void *cause) {
   int wake = 0;
   struct list_head *h, *tmp;
   list_foreach_safe(h, tmp, &wait_queue) {
-    struct task *t = container_of(h, struct task, link); 
+    struct thread *t = container_of(h, struct thread, link); 
     if(t->waitcause == cause) {
-  //printf("task#%d wakeup\n", t->pid);
+      //printf("thread#%d wakeup\n", t->pid);
       wake = 1;
       t->state = TASK_STATE_RUNNING;
       list_remove(h);
@@ -271,8 +223,12 @@ void task_wakeup(void *cause) {
   }
 }
 
-void task_exit() {
-  printf("task#%d exit\n", current->pid);
+void thread_start_alarm(void *cause, u32 expire) {
+  timer_start(expire, thread_wakeup, cause);
+}
+
+void thread_exit() {
+  //printf("thread#%d exit\n", current->pid);
   current->state = TASK_STATE_EXITED;
-  task_yield();
+  thread_yield();
 }

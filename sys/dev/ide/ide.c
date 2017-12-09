@@ -7,7 +7,7 @@
 #include <kern/params.h>
 #include <kern/blkdev.h>
 #include <kern/list.h>
-#include <kern/task.h>
+#include <kern/thread.h>
 #include <stdint.h>
 #include <stddef.h>
 
@@ -427,7 +427,7 @@ static void dequeue_and_next(u8 chan) {
     struct blkdev_buf *buf = container_of(head, struct request, link)->buf;
     buf->flags &= ~(BDBUF_EMPTY|BDBUF_PENDING);
     buf->flags |= BDBUF_READY;
-    task_wakeup(buf);
+    thread_wakeup(buf);
   }
   ide_procnext(chan);
 }
@@ -452,7 +452,7 @@ static void ide_isr_common(u8 chan) {
   }
   ide_in8(chan, STATUS);
   pic_sendeoi();
-  task_yield();
+  thread_yield();
 }
 
 void ide1_isr() {

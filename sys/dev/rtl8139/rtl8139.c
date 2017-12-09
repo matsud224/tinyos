@@ -6,7 +6,7 @@
 #include <kern/params.h>
 #include <net/ether/ether.h>
 #include <net/inet/inet.h>
-#include <kern/task.h>
+#include <kern/thread.h>
 
 #define RTL8139_VENDORID 0x10ec
 #define RTL8139_DEVICEID 0x8139
@@ -230,7 +230,7 @@ int rtl8139_tx_one() {
 
 int rtl8139_tx_all() {
   while(rtl8139_tx_one() == 0);
-  task_wakeup(&rtldev.netdev_info);
+  thread_wakeup(&rtldev.netdev_info);
 }
 
 int rtl8139_rx_one() {
@@ -270,8 +270,8 @@ out:
 
 int rtl8139_rx_all() {
   while(rtl8139_rx_one() == 0);
-  defer_exec(ether_rx, &rtldev.netdev_info, 1, 0);
-  task_wakeup(&rtldev.netdev_info);
+  workqueue_add(ether_wq, ether_rx, &rtldev.netdev_info);
+  thread_wakeup(&rtldev.netdev_info);
 }
 
 void rtl8139_isr() {

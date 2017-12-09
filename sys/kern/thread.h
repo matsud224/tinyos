@@ -7,7 +7,7 @@
 
 struct deferred_func;
 
-extern struct task *current;
+extern struct thread *current;
 
 struct tss {
   u16 backlink;	u16 f1;
@@ -38,7 +38,7 @@ struct tss {
   u16 t;					u16 iobase;
 };
 
-struct task_state {
+struct thread_state {
   u32 esp;
   u32 cr3;
 };
@@ -47,11 +47,11 @@ struct task_state {
 #define TASK_STATE_WAITING	1
 #define TASK_STATE_EXITED		2
 
-struct task {
-  struct task_state regs;
+struct thread {
+  struct thread_state regs;
   struct list_head link;
-  void *kernstack;
-  u32 kernstacksize;
+  void *kstack;
+  u32 kstacksize;
   struct vm_map *vmmap;
   u8 state;
   u32 flags;
@@ -59,12 +59,15 @@ struct task {
   void *waitcause;
 };
 
-void task_init(void);
-void kernstack_setaddr(void);
-struct task *kernel_task_new(void *eip, int intenable);
-void task_run(struct task *t);
-void task_sched(void);
-void task_sleep(void *cause);
-void task_wakeup(void *cause);
+void dispatcher_init(void);
+void dispatcher_run(void);
+void kstack_setaddr(void);
+struct thread *kthread_new(void (*func)(void *), void *arg);
+void thread_run(struct thread *t);
+void thread_sched(void);
+void thread_sleep(void *cause);
+void thread_wakeup(void *cause);
+void thread_yield(void);
+void thread_start_alarm(void *cause, u32 expire);
 struct deferred_func *defer_exec(void (*func)(void *), void *arg, int priority, int delay);
 void *defer_cancel(struct deferred_func *f);

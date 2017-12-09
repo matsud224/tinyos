@@ -19,7 +19,7 @@ u32 geteflags(void);
 void flushtlb(void *addr);
 void a20_enable(void);
 void saveesp(void);
-void task_yield(void);
+void _thread_yield(void);
 void cpu_halt(void);
 u32 xchg(u32 value, void *mem);
 void jmpto_current(void);

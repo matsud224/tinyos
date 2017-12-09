@@ -4,7 +4,8 @@
 #include <net/inet/ip.h>
 #include <net/util.h>
 #include <kern/pktbuf.h>
-#include <kern/task.h>
+#include <kern/thread.h>
+#include <kern/workqueue.h>
 
 #define ETHER_RX_MAX 16 //一度に処理するフレーム数
 
@@ -14,6 +15,13 @@ const struct etheraddr ETHER_ADDR_BROADCAST = {
 
 static void ether_rx_one(struct pktbuf *frame);
 
+struct workqueue *ether_wq;
+
+
+NET_INIT void ether_init() {
+  ether_wq = workqueue_new();
+}
+
 void ether_rx(void *ndev) {
   int remain = ETHER_RX_MAX;
   struct netdev *dev = (struct netdev *)ndev;
@@ -21,7 +29,7 @@ void ether_rx(void *ndev) {
   while(--remain && (frame = netdev_rx_nowait(dev)) != NULL)
     ether_rx_one(frame);
   if(remain == 0)
-    defer_exec(ether_rx, (void *)dev, 0, 1);
+    workqueue_add(ether_wq, ether_rx, (void *)dev);
 }
 
 static void ether_rx_one(struct pktbuf *frame) {

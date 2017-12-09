@@ -2,7 +2,7 @@
 #include <kern/kernasm.h>
 #include <kern/blkdev.h>
 #include <kern/kernlib.h>
-#include <kern/task.h>
+#include <kern/thread.h>
 
 struct blkdev *blkdev_tbl[MAX_BLKDEV];
 static u16 nblkdev;
@@ -92,7 +92,7 @@ void blkdev_releasebuf(struct blkdev_buf *buf) {
 static void waitbuf(struct blkdev_buf *buf) {
   cli();
   while((buf->flags & BDBUF_READY) == 0) {
-    task_sleep(buf);
+    thread_sleep(buf);
   }
   sti();
 }

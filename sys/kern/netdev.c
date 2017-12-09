@@ -1,5 +1,5 @@
 #include <kern/netdev.h>
-#include <kern/task.h>
+#include <kern/thread.h>
 
 struct netdev *netdev_tbl[MAX_NETDEV];
 struct list_head ifaddr_tbl[MAX_PF];
@@ -57,7 +57,7 @@ int netdev_tx(struct netdev *dev, struct pktbuf *pkt) {
     cli();
     res = dev->ops->tx(dev, pkt);
     if(res < 0)
-      task_sleep(dev);
+      thread_sleep(dev);
     sti();
   }
   return 0;
@@ -76,7 +76,7 @@ struct pktbuf *netdev_rx(struct netdev *dev) {
     cli();
     pkt = dev->ops->rx(dev);
     if(pkt == NULL)
-      task_sleep(dev);
+      thread_sleep(dev);
     sti();
   }
   return pkt;

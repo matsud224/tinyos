@@ -1,4 +1,3 @@
-#include <net/inet/tcp.h>
 #include <net/inet/ip.h>
 #include <net/inet/protohdr.h>
 #include <net/inet/util.h>
@@ -6,12 +5,15 @@
 #include <net/util.h>
 #include <kern/kernlib.h>
 #include <kern/lock.h>
-#include <kern/task.h>
+#include <kern/thread.h>
+#include <kern/workqueue.h>
 #include <net/inet/errno.h>
 
 #define MOD(x,y) ((x) % (y))
 
 #define tcp_header_len(th) ((th)->th_off*4)
+
+#define NEED_PORT_ALLOC 0
 
 #define STREAM_SEND_BUF 1024
 #define STREAM_RECV_BUF 1024
@@ -23,8 +25,9 @@ typedef int bool;
 #define false 0
 
 static mutex tcp_mtx;
-
-struct list_head tcpcb_list;
+static struct list_head tcpcb_list;
+static struct workqueue *tcp_tx_wq;
+static struct workqueue *tcp_timer_wq;
 
 struct tcp_arrival {
   struct list_head link;
@@ -108,12 +111,13 @@ struct tcpcb {
 #define TCP_OPT_TIMESTAMP 6
 
 
-struct timerinfo {
+struct timinfo {
   union{
     struct{
       u32 start_seq;
       u32 end_seq;
       u32 is_zerownd_probe;
+      struct pktbuf *pkt;
     } resend;
     struct{
       u32 seq;
@@ -122,8 +126,10 @@ struct timerinfo {
 #define resend_start_seq option.resend.start_seq
 #define resend_end_seq option.resend.end_seq
 #define resend_is_zerownd_probe option.resend.is_zerownd_probe
+#define resend_pkt option.resend.pkt
 #define delayack_seq option.delayack.seq
   int type;
+#define TCP_TIMER_TYPE_REMOVED 0
 #define TCP_TIMER_TYPE_FINACK 1
 #define TCP_TIMER_TYPE_RESEND 2
 #define TCP_TIMER_TYPE_TIMEWAIT 3
@@ -131,50 +137,67 @@ struct timerinfo {
   int msec;
   struct tcpcb *cb;
   struct list_head link;
-  struct deferred_func *defer;
-  struct pktbuf *pkt;
 };
 
-static void tcp_timer_add(struct tcpcb *cb, u32 sec, struct timerinfo *opt);
-static void tcp_timer_remove_all(struct tcpcb *cb);
+static struct timinfo *timinfo_new(int type);
+static void timinfo_free(struct timinfo *tinfo);
+static void tcp_timer_do(void *arg);
+
 static bool LE_LT(u32 a, u32 b, u32 c);
 static bool LT_LE(u32 a, u32 b, u32 c);
 static bool LE_LE(u32 a, u32 b, u32 c);
 static bool LT_LT(u32 a, u32 b, u32 c);
-static void tcpcb_abort(struct tcpcb *cb);
-void tcpcb_init(struct tcpcb *cb);
-static void tcpcb_reset(struct tcpcb *cb);
+
+static int is_used_port(in_port_t port);
+static in_port_t get_unused_port(void);
+
 struct tcpcb *tcpcb_new(void);
+static void tcpcb_abort(struct tcpcb *cb);
+static void tcpcb_init(struct tcpcb *cb);
+static int tcpcb_get_prev_error(struct tcpcb *cb, int errno);
+static void tcpcb_reset(struct tcpcb *cb);
 static void tcpcb_alloc_buf(struct tcpcb *cb);
+static int tcpcb_has_arrival(struct tcpcb *cb);
+static void tcpcb_timer_add(struct tcpcb *cb, u32 msec, struct timinfo *tinfo);
+static void tcpcb_timer_remove_all(struct tcpcb *cb);
+
 static u32 tcp_geninitseq(void);
 static u16 tcp_checksum_recv(struct ip_hdr *ih, struct tcp_hdr *th);
 static u16 tcp_checksum_send(struct pktbuf *seg, in_addr_t ip_src, in_addr_t ip_dst);
+
 static void tcp_ctl_tx(u32 seq, u32 ack, u16 win, u8 flags, in_addr_t to_addr, in_port_t to_port, in_port_t my_port, bool use_resend, struct tcpcb *cb);
-static void tcp_arrival_add(struct pktbuf *pkt, struct tcpcb *cb, u32 start_seq, u32 end_seq);
+static void tcp_tx(void *arg UNUSED);
+static void tcp_tx_request(void);
 static struct pktbuf *sendbuf_to_pktbuf(struct tcpcb *cb, u32 from_index, u32 len);
 static void tcp_tx_from_buf(struct tcpcb *cb);
-static bool tcp_resend_from_buf(struct tcpcb *cb, struct timerinfo *opt);
+static bool tcp_resend_from_buf(struct tcpcb *cb, struct timinfo *tinfo);
 static int tcp_write_to_sendbuf(struct tcpcb *cb, const u8 *data, u32 len);
-static int tcp_read_from_arrival(struct tcpcb *cb, char *data, u32 len);
+
+void tcp_rx(struct pktbuf *pkt, struct ip_hdr *ih);
 static void tcp_rx_closed(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th, u16 payload_len);
 static void tcp_rx_listen(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th, struct tcpcb *cb);
 static void tcp_rx_synsent(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th, struct tcpcb *cb);
 static void tcp_rx_otherwise(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th, u16 payload_len, struct tcpcb *cb);
-void tcp_rx(struct pktbuf *pkt, struct ip_hdr *ih);
-void tcp_timer_do(void *arg);
-void tcp_tx_task(void *arg UNUSED);
-void tcp_tx_request(void);
+
+static void tcp_arrival_free(struct tcp_arrival *a);
+static struct list_head arrival_pick_head(struct tcp_arrival *a, u32 len);
+static u32 arrival_copy_head(struct tcp_arrival *a, u8 *base, u32 len);
+static struct list_head arrival_pick_tail(struct tcp_arrival *a, u32 len);
+static void arrival_merge(struct tcp_arrival *to, struct tcp_arrival *from);
+static void tcp_arrival_add(struct pktbuf *pkt, struct tcpcb *cb, u32 start_seq, u32 end_seq);
+static int tcp_read_from_arrival(struct tcpcb *cb, u8 *data, u32 len);
 
 static void *tcp_sock_init(void);
-static int tcp_sock_bind(void *pcb, const struct sockaddr *addr);
-static int tcp_sock_close(void *pcb);
 static int tcp_sock_connect(void *pcb, const struct sockaddr *addr);
-static int tcp_sock_sendto(void *pcb, const u8 *msg, size_t len, int flags, struct sockaddr *dest_addr);
-static int tcp_sock_recvfrom(void *pcb, u8 *buf, size_t len, int flags, struct sockaddr *from_addr);
-static int tcp_sock_send(void *pcb, const u8 *msg, size_t len, int flags);
-static int tcp_sock_recv(void *pcb, u8 *buf, size_t len, int flags);
 static int tcp_sock_listen(void *pcb, int backlog);
 static int tcp_sock_accept(void *pcb, struct sockaddr *client_addr);
+static int tcp_sock_send(void *pcb, const u8 *msg, size_t len, int flags UNUSED);
+static int tcp_sock_recv(void *pcb, u8 *buf, size_t len, int flags UNUSED);
+static int tcp_sock_close(void *pcb);
+static int tcp_sock_bind(void *pcb, const struct sockaddr *addr);
+static int tcp_sock_sendto(void *pcb UNUSED, const u8 *msg UNUSED, size_t len UNUSED, int flags UNUSED, struct sockaddr *dest_addr UNUSED);
+static int tcp_sock_recvfrom(void *pcb UNUSED, u8 *buf UNUSED, size_t len UNUSED, int flags UNUSED, struct sockaddr *from_addr UNUSED);
+
 
 static const struct socket_ops tcp_sock_ops = {
   .init = tcp_sock_init,
@@ -191,32 +214,33 @@ static const struct socket_ops tcp_sock_ops = {
 
 
 NET_INIT void tcp_init() {
+  tcp_tx_wq = workqueue_new();
+  tcp_timer_wq = workqueue_new();
   socket_register_ops(PF_INET, SOCK_STREAM, &tcp_sock_ops);
 }
 
-static struct timerinfo *make_timerinfo(int type) {
-  struct timerinfo *ti = malloc(sizeof(struct timerinfo));
-  bzero(ti, sizeof(struct timerinfo));
+static struct timinfo *timinfo_new(int type) {
+  struct timinfo *ti = malloc(sizeof(struct timinfo));
+  bzero(ti, sizeof(struct timinfo));
   ti->type = type;
   return ti;
 }
 
-static void tcp_timer_add(struct tcpcb *cb, u32 msec, struct timerinfo *tinfo) {
-  //already locked.
+static void tcpcb_timer_add(struct tcpcb *cb, u32 msec, struct timinfo *tinfo) {
   tinfo->cb = cb;
   tinfo->msec = msec;
   list_pushback(&tinfo->link, &cb->timer_list);
-  tinfo->defer = defer_exec(tcp_timer_do, tinfo, 0, msec);
+  workqueue_add_delayed(tcp_timer_wq, tcp_timer_do, tinfo, msec);
 }
 
-static void tcp_timer_remove_all(struct tcpcb *cb) {
+static void tcpcb_timer_remove_all(struct tcpcb *cb) {
   struct list_head *p, *tmp;
+  mutex_lock(&tcp_mtx);
   list_foreach_safe(p, tmp, &cb->timer_list) {
-    struct timerinfo *tinfo = list_entry(p, struct timerinfo, link);
-    defer_cancel(tinfo->defer);
-    list_remove(&tinfo->link);
-    free(tinfo);
+    struct timinfo *tinfo = list_entry(p, struct timinfo, link);
+    tinfo->type = TCP_TIMER_TYPE_REMOVED;
   }
+  mutex_unlock(&tcp_mtx);
 }
 
 
@@ -257,8 +281,27 @@ static bool LT_LT(u32 a, u32 b, u32 c) {
     return false;
 }
 
+static int is_used_port(in_port_t port) {
+  struct list_head *p;
+  list_foreach(p, &tcpcb_list) {
+    struct tcpcb *cb = list_entry(p, struct tcpcb, link);
+    if(cb->local_addr.port == port)
+      return 1;
+  }
+
+  return 0;
+}
+
+static in_port_t get_unused_port() {
+	for(in_port_t p=49152; p<65535; p++)
+		if(!is_used_port(p))
+			return p;
+
+	return 0;
+}
+
+
 static void tcpcb_abort(struct tcpcb *cb) {
-  //already locked.
   switch(cb->state){
   case TCP_STATE_SYN_RCVD:
   case TCP_STATE_ESTABLISHED:
@@ -271,7 +314,7 @@ static void tcpcb_abort(struct tcpcb *cb) {
   tcpcb_reset(cb);
 }
 
-void tcpcb_init(struct tcpcb *cb) {
+static void tcpcb_init(struct tcpcb *cb) {
   int errno = cb->errno;
   memset(cb, 0, sizeof(struct tcpcb));
 
@@ -292,6 +335,10 @@ void tcpcb_init(struct tcpcb *cb) {
   list_init(&cb->timer_list);
 }
 
+static int tcpcb_get_prev_error(struct tcpcb *cb, int errno) {
+  return (cb->errno < 0) ? cb->errno : errno;
+}
+
 static void tcp_arrival_free(struct tcp_arrival *a) {
   list_free_all(&a->pkt_list, struct pktbuf, link, pktbuf_free);
   free(a);
@@ -309,7 +356,7 @@ static void tcpcb_reset(struct tcpcb *cb) {
     free(cb->snd_buf);
 
   list_free_all(&cb->arrival_list, struct tcp_arrival, link, tcp_arrival_free);
-  tcp_timer_remove_all(cb);
+  tcpcb_timer_remove_all(cb);
   list_remove(&cb->link);
 
   if(cb->is_userclosed)
@@ -322,6 +369,7 @@ static void tcpcb_reset(struct tcpcb *cb) {
 
 struct tcpcb *tcpcb_new() {
   struct tcpcb *cb = malloc(sizeof(struct tcpcb));
+  bzero(cb, sizeof(struct tcpcb));
   tcpcb_init(cb);
   return cb;
 }
@@ -389,18 +437,19 @@ static void tcp_ctl_tx(u32 seq, u32 ack, u16 win, u8 flags, in_addr_t to_addr, i
   if(flags & TH_ACK)
     cb->rcv_ack_cnt++;
 
-  struct timerinfo *tinfo;
+  struct timinfo *tinfo;
   if(use_resend){
-    tinfo = make_timerinfo(TCP_TIMER_TYPE_RESEND);
+    tinfo = timinfo_new(TCP_TIMER_TYPE_RESEND);
     tinfo->resend_start_seq = seq;
     tinfo->resend_end_seq = seq;
+    tinfo->resend_pkt = tcpseg;
   }
 
   ip_tx(tcpseg, r_src, r_dst, IPTYPE_TCP);
   
 
   if(use_resend)
-    tcp_timer_add(cb, cb->rtt*TCP_TIMER_UNIT, tinfo);
+    tcpcb_timer_add(cb, cb->rtt*TCP_TIMER_UNIT, tinfo);
 }
 
 
@@ -447,7 +496,7 @@ static void tcp_rx_listen(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr 
 
     newcb->mss = MSS;
     list_pushback(&newcb->link, &tcpcb_list);
-    task_wakeup(cb);
+    thread_wakeup(cb);
   }
 
 exit:
@@ -469,7 +518,7 @@ static void tcp_rx_synsent(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr
   if(th->th_flags & TH_RST){
     if(LE_LE(cb->snd_unack, ntoh32(th->th_ack), cb->snd_nxt)){
       tcpcb_reset(cb);
-      task_wakeup(cb);
+      thread_wakeup(cb);
     }
     goto exit;
   }
@@ -490,7 +539,7 @@ static void tcp_rx_synsent(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr
       tcpcb_alloc_buf(cb);
       cb->state = TCP_STATE_ESTABLISHED;
       tcp_ctl_tx(cb->snd_nxt, cb->rcv_nxt, cb->rcv_wnd, TH_ACK, ih->ip_src, ntoh16(th->th_sport), ntoh16(th->th_dport), false, NULL);
-      task_wakeup(cb);
+      thread_wakeup(cb);
     }
   }
 
@@ -520,7 +569,7 @@ static struct list_head arrival_pick_head(struct tcp_arrival *a, u32 len) {
   return saved;
 }
 
-static u32 arrival_copy_head(struct tcp_arrival *a, char *base, u32 len) {
+static u32 arrival_copy_head(struct tcp_arrival *a, u8 *base, u32 len) {
   u32 copied = 0;
   struct list_head pkts = arrival_pick_head(a, len);
   struct list_head *p;
@@ -600,7 +649,7 @@ static void tcp_arrival_add(struct pktbuf *pkt, struct tcpcb *cb, u32 start_seq,
   list_pushfront(&newa->link, p);
 
   if(cb->rcv_nxt == start_seq){
-    task_wakeup(cb);
+    thread_wakeup(cb);
   }
 }
 
@@ -664,12 +713,13 @@ static void tcp_tx_from_buf(struct tcpcb *cb) {
     if(is_zerownd_probe) payload_len = 1;
     if(payload_len == 0) break;
 
-    struct timerinfo *tinfo = make_timerinfo(TCP_TIMER_TYPE_RESEND);
+    struct timinfo *tinfo = timinfo_new(TCP_TIMER_TYPE_RESEND);
     tinfo->resend_start_seq = cb->snd_nxt;
     tinfo->resend_end_seq = cb->snd_nxt + payload_len -1;
     tinfo->resend_is_zerownd_probe = is_zerownd_probe;
 
     struct pktbuf *tcpseg = sendbuf_to_pktbuf(cb, SEQ2IDX_SEND(cb->snd_nxt, cb), payload_len);
+    tinfo->resend_pkt = tcpseg;
     pktbuf_add_header(tcpseg, sizeof(struct tcp_hdr));
     pktbuf_copyin(tcpseg, (u8*)&th_base, sizeof(struct tcp_hdr), 0);
 
@@ -688,7 +738,7 @@ static void tcp_tx_from_buf(struct tcpcb *cb) {
 
     ip_tx(tcpseg, r_src, r_dst, IPTYPE_TCP);
 
-    tcp_timer_add(cb, cb->rtt*TCP_TIMER_UNIT, tinfo);
+    tcpcb_timer_add(cb, cb->rtt*TCP_TIMER_UNIT, tinfo);
 
     is_zerownd_probe = false;
   }
@@ -708,7 +758,7 @@ static void tcp_tx_from_buf(struct tcpcb *cb) {
   return;
 }
 
-static bool tcp_resend_from_buf(struct tcpcb *cb, struct timerinfo *tinfo) {
+static bool tcp_resend_from_buf(struct tcpcb *cb, struct timinfo *tinfo) {
   if(!LE_LT(cb->snd_unack, tinfo->resend_end_seq, cb->snd_nxt+cb->snd_wnd))
     return false; //送信可能なものはない
 
@@ -717,7 +767,7 @@ static bool tcp_resend_from_buf(struct tcpcb *cb, struct timerinfo *tinfo) {
   if(dev == NULL)
     return false; //no interface to send
 
-  struct pktbuf *pkt = tinfo->pkt;
+  struct pktbuf *pkt = tinfo->resend_pkt;
   struct tcp_hdr *th = (struct tcp_hdr *)pkt->head;
   th->th_sum = 0;
   th->th_ack = hton32(cb->rcv_nxt);
@@ -733,7 +783,6 @@ static bool tcp_resend_from_buf(struct tcpcb *cb, struct timerinfo *tinfo) {
 }
 
 static int tcp_write_to_sendbuf(struct tcpcb *cb, const u8 *data, u32 len) {
-  //already locked.
   u32 remain = len;
 
   while(remain > 0) {
@@ -745,31 +794,29 @@ static int tcp_write_to_sendbuf(struct tcpcb *cb, const u8 *data, u32 len) {
       cb->snd_buf_used += write_len;
       data += write_len;
     }else{
-      //already locked.
       tcp_tx_request();
       mutex_unlock(&tcp_mtx);
-      task_sleep(cb);
+      thread_sleep(cb);
       mutex_lock(&tcp_mtx);
       switch(cb->state){
       case TCP_STATE_CLOSED:
       case TCP_STATE_LISTEN:
       case TCP_STATE_SYN_SENT:
       case TCP_STATE_SYN_RCVD:
-        return ECONNNOTEXIST;
+        return tcpcb_get_prev_error(cb, ECONNNOTEXIST);
       case TCP_STATE_FIN_WAIT_1:
       case TCP_STATE_FIN_WAIT_2:
       case TCP_STATE_CLOSING:
       case TCP_STATE_LAST_ACK:
       case TCP_STATE_TIME_WAIT:
-        return ECONNCLOSING;
+        return tcpcb_get_prev_error(cb, ECONNCLOSING);
       }
     }
   }
   return len - remain;
 }
 
-static int tcp_read_from_arrival(struct tcpcb *cb, char *data, u32 len) {
-  //already locked.
+static int tcp_read_from_arrival(struct tcpcb *cb, u8 *data, u32 len) {
   u32 copied = 0;
 
   while(copied == 0) {
@@ -780,7 +827,7 @@ static int tcp_read_from_arrival(struct tcpcb *cb, char *data, u32 len) {
       case TCP_STATE_FIN_WAIT_2:
         break;
       default:
-        return ECONNCLOSING;
+        return tcpcb_get_prev_error(cb, ECONNCLOSING);
       }
     } else {
       struct tcp_arrival *a = list_entry(list_first(&cb->arrival_list), struct tcp_arrival, link);
@@ -793,9 +840,8 @@ static int tcp_read_from_arrival(struct tcpcb *cb, char *data, u32 len) {
       break;
     }
 
-    //already locked.
     mutex_unlock(&tcp_mtx);
-    task_sleep(cb);
+    thread_sleep(cb);
     mutex_lock(&tcp_mtx);
 
     switch(cb->state){
@@ -803,11 +849,11 @@ static int tcp_read_from_arrival(struct tcpcb *cb, char *data, u32 len) {
     case TCP_STATE_LISTEN:
     case TCP_STATE_SYN_SENT:
     case TCP_STATE_SYN_RCVD:
-      return ECONNNOTEXIST;
+      return tcpcb_get_prev_error(cb, ECONNNOTEXIST);
     case TCP_STATE_CLOSING:
     case TCP_STATE_LAST_ACK:
     case TCP_STATE_TIME_WAIT:
-      return ECONNCLOSING;
+      return tcpcb_get_prev_error(cb, ECONNCLOSING);
     }
   }
 
@@ -838,7 +884,7 @@ static void tcp_rx_otherwise(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_h
       }else{
         tcpcb_reset(cb);
         cb->errno = ECONNREFUSED;
-        task_wakeup(cb);
+        thread_wakeup(cb);
       }
       goto exit;
       break;
@@ -848,7 +894,7 @@ static void tcp_rx_otherwise(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_h
     case TCP_STATE_CLOSE_WAIT:
       tcpcb_reset(cb);
       cb->errno = ECONNRESET;
-      task_wakeup(cb);
+      thread_wakeup(cb);
       goto exit;
       break;
     case TCP_STATE_CLOSING:
@@ -876,7 +922,7 @@ static void tcp_rx_otherwise(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_h
     case TCP_STATE_TIME_WAIT:
       tcpcb_reset(cb);
       cb->errno = ECONNRESET;
-      task_wakeup(cb);
+      thread_wakeup(cb);
       tcp_ctl_tx(ntoh32(th->th_ack), cb->rcv_nxt, 0, TH_RST, ih->ip_src, ntoh16(th->th_sport), ntoh16(th->th_dport), false, NULL);
       goto exit;
       break;
@@ -895,7 +941,7 @@ static void tcp_rx_otherwise(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_h
         tcpcb_alloc_buf(cb);
 
         cb->state = TCP_STATE_ESTABLISHED;
-        task_wakeup(cb);
+        thread_wakeup(cb);
       }else{
         tcp_ctl_tx(ntoh32(th->th_ack), cb->rcv_nxt, 0, TH_RST, ih->ip_src, ntoh16(th->th_sport), ntoh16(th->th_dport), false, NULL);
         goto exit;
@@ -967,9 +1013,9 @@ static void tcp_rx_otherwise(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_h
       pktbuf_remove_header(pkt, tcp_header_len(th));
       tcp_arrival_add(pkt, cb, ntoh32(th->th_seq), ntoh32(th->th_seq) + payload_len);
       //遅延ACKタイマ開始
-      struct timerinfo *tinfo = make_timerinfo(TCP_TIMER_TYPE_DELAYACK);
+      struct timinfo *tinfo = timinfo_new(TCP_TIMER_TYPE_DELAYACK);
       tinfo->delayack_seq = cb->rcv_ack_cnt;
-      tcp_timer_add(cb, TCP_DELAYACK_TIME, tinfo);
+      tcpcb_timer_add(cb, TCP_DELAYACK_TIME, tinfo);
       break;
     }
   }
@@ -998,26 +1044,26 @@ static void tcp_rx_otherwise(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_h
     case TCP_STATE_SYN_RCVD:
     case TCP_STATE_ESTABLISHED:
       cb->state = TCP_STATE_CLOSE_WAIT;
-      task_wakeup(cb);
+      thread_wakeup(cb);
       break;
     case TCP_STATE_FIN_WAIT_1:
       if(cb->myfin_state== FIN_ACKED || (cb->myfin_state == FIN_SENT && ntoh32(th->th_ack)-1 == cb->myfin_seq)){
         cb->state = TCP_STATE_TIME_WAIT;
         cb->myfin_state = FIN_ACKED;
-        tcp_timer_remove_all(cb);
-        tcp_timer_add(cb, TCP_TIMEWAIT_TIME, make_timerinfo(TCP_TIMER_TYPE_TIMEWAIT));
+        tcpcb_timer_remove_all(cb);
+        tcpcb_timer_add(cb, TCP_TIMEWAIT_TIME, timinfo_new(TCP_TIMER_TYPE_TIMEWAIT));
       }else{
         cb->state = TCP_STATE_CLOSING;
       }
       break;
     case TCP_STATE_FIN_WAIT_2:
       cb->state = TCP_STATE_TIME_WAIT;
-      tcp_timer_remove_all(cb);
-      tcp_timer_add(cb, TCP_TIMEWAIT_TIME, make_timerinfo(TCP_TIMER_TYPE_TIMEWAIT));
+      tcpcb_timer_remove_all(cb);
+      tcpcb_timer_add(cb, TCP_TIMEWAIT_TIME, timinfo_new(TCP_TIMER_TYPE_TIMEWAIT));
       break;
     case TCP_STATE_TIME_WAIT:
-      tcp_timer_remove_all(cb);
-      tcp_timer_add(cb, TCP_TIMEWAIT_TIME, make_timerinfo(TCP_TIMER_TYPE_TIMEWAIT));
+      tcpcb_timer_remove_all(cb);
+      tcpcb_timer_add(cb, TCP_TIMEWAIT_TIME, timinfo_new(TCP_TIMER_TYPE_TIMEWAIT));
       break;
     }
   }
@@ -1095,8 +1141,12 @@ exit:
   return;
 }
 
-int tcp_sock_connect(void *pcb, const struct sockaddr *addr UNUSED) {
+static int tcp_sock_connect(void *pcb, const struct sockaddr *addr) {
   struct tcpcb *cb = (struct tcpcb *)pcb;
+
+  if(addr->family != PF_INET)
+    return EAFNOSUPPORT;
+
   switch(cb->state){
   case TCP_STATE_CLOSED:
     break;
@@ -1104,8 +1154,11 @@ int tcp_sock_connect(void *pcb, const struct sockaddr *addr UNUSED) {
     queue_free_all(&cb->cbqueue, struct tcpcb, qlink, tcpcb_abort);
     break;
   default:
-    return ECONNEXIST;
+    return tcpcb_get_prev_error(cb, ECONNEXIST);
   }
+
+  cb->lport = ((struct sockaddr_in *)addr)->port;
+  cb->laddr = ((struct sockaddr_in *)addr)->addr;
 
   cb->iss = tcp_geninitseq();
   tcp_ctl_tx(cb->iss, 0, STREAM_RECV_BUF, TH_SYN, cb->faddr, cb->fport, cb->lport, true, cb);
@@ -1123,23 +1176,23 @@ int tcp_sock_connect(void *pcb, const struct sockaddr *addr UNUSED) {
       return 0;
     }else if(cb->state == TCP_STATE_CLOSED){
       mutex_unlock(&tcp_mtx);
-      return EAGAIN;
+      return tcpcb_get_prev_error(cb, EAGAIN);
     }else{
       mutex_unlock(&tcp_mtx);
-      task_sleep(cb);
+      thread_sleep(cb);
       mutex_lock(&tcp_mtx);
     }
   }
 }
 
-int tcp_sock_listen(void *pcb, int backlog){
+static int tcp_sock_listen(void *pcb, int backlog){
   struct tcpcb *cb = (struct tcpcb *)pcb;
   switch(cb->state){
   case TCP_STATE_CLOSED:
   case TCP_STATE_LISTEN:
     break;
   default:
-    return ECONNEXIST;
+    return tcpcb_get_prev_error(cb, ECONNEXIST);
   }
 
   queue_free_all(&cb->cbqueue, struct tcpcb, qlink, tcpcb_abort);
@@ -1180,9 +1233,8 @@ retry:
 
         break;
       }else{
-        //already locked.
         mutex_unlock(&tcp_mtx);
-        task_sleep(cb);
+        thread_sleep(cb);
         mutex_lock(&tcp_mtx);
       }
     }
@@ -1197,20 +1249,19 @@ retry:
         goto retry;
       }
 
-      //already locked.
       mutex_unlock(&tcp_mtx);
 
-      task_sleep(cb);
+      thread_sleep(cb);
       mutex_lock(&tcp_mtx);
     }
     break;
   default:
     mutex_unlock(&tcp_mtx);
-    return ENOTLISTENING;
+    return tcpcb_get_prev_error(cb, ENOTLISTENING);
   }
 }
 
-int tcp_sock_send(void *pcb, const u8 *msg, size_t len, int flags UNUSED) {
+static int tcp_sock_send(void *pcb, const u8 *msg, size_t len, int flags UNUSED) {
   struct tcpcb *cb = (struct tcpcb *)pcb;
   mutex_lock(&tcp_mtx);
   switch(cb->state){
@@ -1219,7 +1270,7 @@ int tcp_sock_send(void *pcb, const u8 *msg, size_t len, int flags UNUSED) {
   case TCP_STATE_SYN_SENT:
   case TCP_STATE_SYN_RCVD:
     mutex_unlock(&tcp_mtx);
-    return ECONNNOTEXIST;
+    return tcpcb_get_prev_error(cb, ECONNNOTEXIST);
   case TCP_STATE_ESTABLISHED:
   case TCP_STATE_CLOSE_WAIT:
     {
@@ -1234,13 +1285,13 @@ int tcp_sock_send(void *pcb, const u8 *msg, size_t len, int flags UNUSED) {
   case TCP_STATE_LAST_ACK:
   case TCP_STATE_TIME_WAIT:
     mutex_unlock(&tcp_mtx);
-    return ECONNCLOSING;
+    return tcpcb_get_prev_error(cb, ECONNCLOSING);
   default:
     return -1;
   }
 }
 
-int tcp_sock_receive(void *pcb, char *buf, u32 len) {
+static int tcp_sock_recv(void *pcb, u8 *buf, size_t len, int flags UNUSED) {
   struct tcpcb *cb = (struct tcpcb *)pcb;
   int result;
   mutex_lock(&tcp_mtx);
@@ -1250,7 +1301,7 @@ int tcp_sock_receive(void *pcb, char *buf, u32 len) {
   case TCP_STATE_SYN_SENT:
   case TCP_STATE_SYN_RCVD:
     mutex_unlock(&tcp_mtx);
-    return ECONNNOTEXIST;
+    return tcpcb_get_prev_error(cb, ECONNNOTEXIST);
   case TCP_STATE_ESTABLISHED:
   case TCP_STATE_FIN_WAIT_1:
   case TCP_STATE_FIN_WAIT_2:
@@ -1262,13 +1313,13 @@ int tcp_sock_receive(void *pcb, char *buf, u32 len) {
   case TCP_STATE_LAST_ACK:
   case TCP_STATE_TIME_WAIT:
     mutex_unlock(&tcp_mtx);
-    return ECONNCLOSING;
+    return tcpcb_get_prev_error(cb, ECONNCLOSING);
   default:
     return -1;
   }
 }
 
-int tcp_sock_close(void *pcb) {
+static int tcp_sock_close(void *pcb) {
   struct tcpcb *cb = (struct tcpcb *)pcb;
   mutex_lock(&tcp_mtx);
   int result = 0;
@@ -1300,7 +1351,7 @@ int tcp_sock_close(void *pcb) {
     break;
   case TCP_STATE_CLOSE_WAIT:
     cb->myfin_state = FIN_REQUESTED;
-    tcp_timer_add(cb, TCP_FINWAIT_TIME, make_timerinfo(TCP_TIMER_TYPE_FINACK));
+    tcpcb_timer_add(cb, TCP_FINWAIT_TIME, timinfo_new(TCP_TIMER_TYPE_FINACK));
     tcp_tx_request();
     break;
   case TCP_STATE_CLOSING:
@@ -1315,43 +1366,69 @@ int tcp_sock_close(void *pcb) {
 }
 
 static void *tcp_sock_init() {
-  return NULL;
+  struct tcpcb *cb = malloc(sizeof(struct tcpcb));
+  cb->errno = 0;
+  tcpcb_init(cb);
+  list_pushback(&cb->link, &tcpcb_list);
+  return cb;
 }
 
-static int tcp_sock_bind(void *pcb UNUSED, const struct sockaddr *addr UNUSED) {
-  return -1;
+static int tcp_sock_bind(void *pcb, const struct sockaddr *addr) {
+  struct tcpcb *cb = (struct tcpcb *)pcb;
+  if(addr->family != PF_INET)
+    return EAFNOSUPPORT;
+
+  struct sockaddr_in *inaddr = (struct sockaddr_in *)addr;
+  if(inaddr->port == NEED_PORT_ALLOC)
+    inaddr->port = get_unused_port();
+  else if(is_used_port(inaddr->port))
+    return -1;
+
+  memcpy(&cb->local_addr, inaddr, sizeof(struct sockaddr_in));
+  return 0;
 }
 
 static int tcp_sock_sendto(void *pcb UNUSED, const u8 *msg UNUSED, size_t len UNUSED, int flags UNUSED, struct sockaddr *dest_addr UNUSED) {
-  return -1;
+  return EBADF;
 }
 
 static int tcp_sock_recvfrom(void *pcb UNUSED, u8 *buf UNUSED, size_t len UNUSED, int flags UNUSED, struct sockaddr *from_addr UNUSED) {
-  return -1;
+  return EBADF;
 }
 
-static int tcp_sock_recv(void *pcb UNUSED, u8 *buf UNUSED, size_t len UNUSED, int flags UNUSED) {
-  return -1;
+static void timinfo_free(struct timinfo *tinfo) {
+  if(tinfo->type == TCP_TIMER_TYPE_RESEND)
+    pktbuf_free(tinfo->resend_pkt);
+  free(tinfo);
 }
 
-void tcp_timer_do(void *arg) {
-  struct timerinfo *tinfo = (struct timerinfo *)arg;
+static void tcp_timer_do(void *arg) {
+  struct timinfo *tinfo = (struct timinfo *)arg;
   mutex_lock(&tcp_mtx);
 
   switch(tinfo->type){
+  case TCP_TIMER_TYPE_REMOVED:
+    timinfo_free(tinfo);
+    break;
   case TCP_TIMER_TYPE_FINACK:
     tcpcb_reset(tinfo->cb);
+    list_remove(&tinfo->link);
+    timinfo_free(tinfo);
     break;
   case TCP_TIMER_TYPE_RESEND:
     if(tcp_resend_from_buf(tinfo->cb, tinfo)) {
       if(tinfo->resend_is_zerownd_probe){
-        //ゼロウィンドウ・プローブ（持続タイマ）
+        //ゼロウィンドウ・プローブ(持続タイマ)
         struct tcpcb *cb = tinfo->cb;
         if(cb->snd_wnd == 0){
           tinfo->type = TCP_TIMER_TYPE_RESEND;
-          tcp_timer_add(tinfo->cb, MIN(tinfo->msec*2, TCP_PERSIST_WAIT_MAX), tinfo);
+          tcpcb_timer_add(tinfo->cb, MIN(tinfo->msec*2, TCP_PERSIST_WAIT_MAX), tinfo);
+          list_remove(&tinfo->link);
+          timinfo_free(tinfo);
         }else{
           cb->snd_persisttim_enabled = false;
+          list_remove(&tinfo->link);
+          timinfo_free(tinfo);
         }
       }else{
         //通常の再送
@@ -1360,15 +1437,20 @@ void tcp_timer_do(void *arg) {
           tcp_ctl_tx(cb->snd_nxt, cb->rcv_nxt, cb->rcv_wnd, TH_RST, 
                     cb->faddr, cb->fport, cb->lport, false, NULL);
           tcpcb_reset(cb);
+          list_remove(&tinfo->link);
+          timinfo_free(tinfo);
         }else{
           tinfo->type = TCP_TIMER_TYPE_RESEND;
-          tcp_timer_add(tinfo->cb, tinfo->msec*2, tinfo);
+          list_remove(&tinfo->link);
+          tcpcb_timer_add(tinfo->cb, tinfo->msec*2, tinfo);
         }
       }
     }
     break;
   case TCP_TIMER_TYPE_TIMEWAIT:
     tcpcb_reset(tinfo->cb);
+    list_remove(&tinfo->link);
+    timinfo_free(tinfo);
     break;
   case TCP_TIMER_TYPE_DELAYACK:
     {
@@ -1377,17 +1459,18 @@ void tcp_timer_do(void *arg) {
         tcp_ctl_tx(cb->snd_nxt, cb->rcv_nxt, cb->rcv_wnd, TH_ACK, 
                   cb->faddr, cb->fport, cb->lport, false, NULL);
       }
+      list_remove(&tinfo->link);
+      timinfo_free(tinfo);
       break;
     }
   }
 
-  //TODO: free timerinfo struct
 
   mutex_unlock(&tcp_mtx);
 }
 
 
-void tcp_tx_task(void *arg UNUSED) {
+static void tcp_tx(void *arg UNUSED) {
   mutex_lock(&tcp_mtx);
   struct list_head *p;
   list_foreach(p, &tcpcb_list){
@@ -1399,13 +1482,13 @@ void tcp_tx_task(void *arg UNUSED) {
     case TCP_STATE_CLOSING:
     case TCP_STATE_LAST_ACK:
       tcp_tx_from_buf(cb);
-      task_wakeup(cb);
+      thread_wakeup(cb);
       break;
     }
   }
   mutex_unlock(&tcp_mtx);
 }
 
-void tcp_tx_request() {
-
+static void tcp_tx_request() {
+  workqueue_add(tcp_tx_wq, tcp_tx, NULL);
 }

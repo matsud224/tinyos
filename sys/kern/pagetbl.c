@@ -27,7 +27,7 @@
 
 static u32 *kernspace_pdt; //over 0xc0000000
 
-u32 *new_procpdt() {
+u32 *procpdt_new() {
   u32 *pdt = get_zeropage();
   //fill kernel space page diectory entry
   for(int i = 0; i < 1024; i++)

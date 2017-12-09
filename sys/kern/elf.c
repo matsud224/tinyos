@@ -1,6 +1,6 @@
 #include <kern/kernlib.h>
 #include <kern/elf.h>
-#include <kern/task.h>
+#include <kern/thread.h>
 #include <kern/vmem.h>
 #include <kern/fs.h>
 

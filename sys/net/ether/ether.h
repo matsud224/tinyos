@@ -1,6 +1,7 @@
 #pragma once
 #include <kern/netdev.h>
 #include <kern/types.h>
+#include <kern/workqueue.h>
 
 #define ETHER_ADDR_LEN 6
 
@@ -9,6 +10,7 @@ struct etheraddr {
 };
 
 extern const struct etheraddr ETHER_ADDR_BROADCAST;
+extern struct workqueue *ether_wq;
 
 void ether_rx(void *_devno);
 void ether_tx(struct pktbuf *frm, struct etheraddr dest, u16 proto, struct netdev *dev);

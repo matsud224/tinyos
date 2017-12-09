@@ -12,7 +12,7 @@
 #include <kern/vmem.h>
 #include <kern/fs.h>
 #include <kern/gdt.h>
-#include <kern/task.h>
+#include <kern/thread.h>
 #include <kern/blkdev.h>
 #include <kern/chardev.h>
 #include <kern/netdev.h>
@@ -37,6 +37,7 @@ KERNENTRY void kernel_main(void) {
   pagetbl_init();
   vmem_init();
   pit_init();
+  dispatcher_init();
   pci_init();
   blkdev_init();
   chardev_init();
@@ -47,7 +48,7 @@ KERNENTRY void kernel_main(void) {
   
   ip_set_defaultgw(IPADDR(192,168,4,1));
 
-  task_init();
+  dispatcher_run();
 
   while(1);
 }

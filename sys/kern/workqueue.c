@@ -18,18 +18,21 @@ static void workqueue_thread(void *arg) {
   struct workqueue *wq = (struct workqueue *)arg;
   while(1) {
     struct list_head *item;
-    while((item = list_pop(&wq->queue)) == NULL)
+    while((cli(), (item = list_pop(&wq->queue))) == NULL) {
+      sti();
       thread_sleep(wq);
+    }
+    sti();
     struct work *w = container_of(item, struct work, link);
     (w->func)(w->arg);
     free(w);
   }
 }
 
-struct workqueue *workqueue_new() {
+struct workqueue *workqueue_new(char *name) {
   struct workqueue *wq = malloc(sizeof(struct workqueue));
   list_init(&wq->queue);
-  wq->thread = kthread_new(workqueue_thread, wq);
+  wq->thread = kthread_new(workqueue_thread, wq, "wq");
   thread_run(wq->thread);
   return wq;
 }
@@ -41,7 +44,7 @@ static void _workqueue_add(void *arg) {
   thread_wakeup(w->wq);
 }
 
-struct void workqueue_add_delayed(struct workqueue *wq, void (*func)(void *), void *arg, int delay) {
+void workqueue_add_delayed(struct workqueue *wq, void (*func)(void *), void *arg, int delay) {
   struct work *w = malloc(sizeof(struct work));
   w->func = func;
   w->arg = arg;
@@ -52,7 +55,7 @@ struct void workqueue_add_delayed(struct workqueue *wq, void (*func)(void *), vo
   return w;
 }
 
-struct void workqueue_add(struct workqueue *wq, void (*func)(void *), void *arg) {
+void workqueue_add(struct workqueue *wq, void (*func)(void *), void *arg) {
   return workqueue_add_delayed(wq, func, arg, 0);
 }
 

@@ -26,7 +26,7 @@ int socket_register_ops(int domain, int type, const struct socket_ops *ops) {
   return 0;
 }
 
-struct socket *socket(int domain, int type) {
+static struct socket *_socket(int domain, int type) {
   if(domain < 0 || domain >= MAX_PF
       || type < 0 || type >= MAX_SOCKTYPE)
     return NULL;
@@ -42,6 +42,14 @@ struct socket *socket(int domain, int type) {
   mutex_lock(&socklist_mtx);
   list_pushback(&s->link, &socket_list);
   mutex_unlock(&socklist_mtx);
+  return s;
+}
+
+struct socket *socket(int domain, int type) {
+  struct socket *s = _socket(domain, type);
+  if(s == NULL)
+    return NULL;
+  s->pcb = s->ops->init();
   return s;
 }
 
@@ -75,8 +83,10 @@ int listen(struct socket *s, int backlog){
   return s->ops->listen(s->pcb, backlog);
 }
 
-int accept(struct socket *s, struct sockaddr *client_addr) {
-  return s->ops->accept(s->pcb, client_addr);
+struct socket *accept(struct socket *s, struct sockaddr *client_addr) {
+  struct socket *s2 = _socket(s->domain, s->type);
+  s2->pcb = s->ops->accept(s->pcb, client_addr);
+  return s2;
 }
 
 int send(struct socket *s, const char *msg, u32 len, int flags) {

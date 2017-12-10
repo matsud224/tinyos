@@ -31,7 +31,7 @@ struct socket_ops {
   int (*close)(void *pcb);
   int (*connect)(void *pcb, const struct sockaddr *addr);
   int (*listen)(void *pcb, int backlog);
-  int (*accept)(void *pcb, struct sockaddr *client_addr);
+  void *(*accept)(void *pcb, struct sockaddr *client_addr);
   int (*sendto)(void *pcb, const u8 *msg, size_t len, int flags, struct sockaddr *dest_addr);
   int (*recvfrom)(void *pcb, u8 *buf, size_t len, int flags, struct sockaddr *from_addr);
   int (*send)(void *pcb, const u8 *msg, size_t len, int flags);
@@ -47,7 +47,7 @@ int sendto(struct socket *s, const char *msg, u32 len, int flags, const struct s
 int recvfrom(struct socket *s, char *buf, u32 len, int flags, struct sockaddr *from_addr);
 int connect(struct socket *s, const struct sockaddr *to_addr);
 int listen(struct socket *s, int backlog);
-int accept(struct socket *s, struct sockaddr *client_addr);
+struct socket *accept(struct socket *s, struct sockaddr *client_addr);
 int send(struct socket *s, const char *msg, u32 len, int flags);
 int recv(struct socket *s, char *buf, u32 len, int flags);
 

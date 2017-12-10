@@ -1,6 +1,7 @@
 #include <net/inet/ip.h>
 #include <net/inet/arp.h>
 #include <net/inet/udp.h>
+#include <net/inet/tcp.h>
 #include <net/inet/icmp.h>
 #include <net/inet/util.h>
 #include <net/util.h>
@@ -78,7 +79,7 @@ static void ip_10sec_thread(void *);
 NET_INIT void ip_init(){
   list_init(&reasm_ongoing);
   mutex_init(&reasm_ongoing_mtx);
-  thread_run(kthread_new(ip_10sec_thread, NULL));
+  thread_run(kthread_new(ip_10sec_thread, NULL, "ip_thread"));
 }
 
 static void ip_10sec_thread(void *arg UNUSED) {
@@ -159,6 +160,10 @@ void ip_rx(struct pktbuf *pkt) {
   if(checksum((u16*)iphdr, ip_header_len(iphdr)) != 0)
     goto exit;
 
+  //adjust pktbuf(Ethernet padding)
+  if(ntoh16(iphdr->ip_len) < pktsize)
+    pkt->tail -= pktsize - ntoh16(iphdr->ip_len);
+
   if(!((ntoh16(iphdr->ip_off) & IP_OFFMASK) == 0 && (ntoh16(iphdr->ip_off) & IP_MF) == 0)){
     //フラグメント
     mutex_lock(&reasm_ongoing_mtx);
@@ -231,7 +236,7 @@ printf("fragmented packet (%dbytes)\n", info->headerlen + info->datalen);
     icmp_rx(pkt, iphdr);
     break;
   case IPTYPE_TCP:
-    //tcp_rx(pkt, iphdr);
+    tcp_rx(pkt, iphdr);
     break;
   case IPTYPE_UDP:
     udp_rx(pkt, iphdr);

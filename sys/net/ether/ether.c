@@ -19,7 +19,7 @@ struct workqueue *ether_wq;
 
 
 NET_INIT void ether_init() {
-  ether_wq = workqueue_new();
+  ether_wq = workqueue_new("ether wq");
 }
 
 void ether_rx(void *ndev) {

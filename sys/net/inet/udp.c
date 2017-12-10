@@ -17,6 +17,7 @@ struct udpcb {
   struct queue_head recv_queue;
   struct sockaddr_in local_addr;
   struct sockaddr_in foreign_addr;
+  mutex mtx;
 };
 
 
@@ -30,7 +31,7 @@ static int udp_sock_recvfrom(void *pcb, u8 *buf, size_t len, int flags, struct s
 static int udp_sock_send(void *pcb, const u8 *msg, size_t len, int flags);
 static int udp_sock_recv(void *pcb, u8 *buf, size_t len, int flags);
 static int udp_sock_listen(void *pcb, int backlog);
-static int udp_sock_accept(void *pcb, struct sockaddr *client_addr);
+static void *udp_sock_accept(void *pcb, struct sockaddr *client_addr);
 
 static const struct socket_ops udp_sock_ops = {
   .init = udp_sock_init,
@@ -47,16 +48,14 @@ static const struct socket_ops udp_sock_ops = {
 
 static struct list_head udpcb_list;
 
-static mutex udp_mtx;
-static mutex udp_recv_mtx;
+static mutex cblist_mtx;
 
 #define UDPCB(s) (((struct udpcb *)(s))->pcb)
 
 NET_INIT void udp_init() {
   list_init(&udpcb_list);
 
-  mutex_init(&udp_mtx);
-  mutex_init(&udp_recv_mtx);
+  mutex_init(&cblist_mtx);
 
   socket_register_ops(PF_INET, SOCK_DGRAM, &udp_sock_ops);
 }
@@ -73,7 +72,6 @@ static int is_used_port(in_port_t port) {
 }
 
 static in_port_t get_unused_port() {
-	//already locked.
 	for(in_port_t p=49152; p<65535; p++)
 		if(!is_used_port(p))
 			return p;
@@ -123,9 +121,9 @@ void udp_rx(struct pktbuf *pkt, struct ip_hdr *iphdr){
   if(uhdr->uh_dport == 0)
     goto exit;
 
-  mutex_lock(&udp_mtx);
   struct udpcb *cb = NULL;
   struct list_head *p;
+  mutex_lock(&cblist_mtx);
   list_foreach(p, &udpcb_list) {
     struct udpcb *b = list_entry(p, struct udpcb, link);
     if(b->local_addr.port != uhdr->uh_dport)
@@ -136,22 +134,25 @@ void udp_rx(struct pktbuf *pkt, struct ip_hdr *iphdr){
 
     cb = b;
   }
+
   if(cb == NULL)
     goto exit;
+  else
+    mutex_lock(&cb->mtx);
 
-  mutex_lock(&udp_recv_mtx);
+  mutex_unlock(&cblist_mtx);
+
   if(queue_is_full(&cb->recv_queue)) {
     pktbuf_free(list_entry(queue_dequeue(&cb->recv_queue), struct pktbuf, link));
   }
   pktbuf_add_header(pkt, ip_header_len(iphdr)); //IPヘッダも含める
   queue_enqueue(&pkt->link, &cb->recv_queue);
+  mutex_unlock(&cb->mtx);
   thread_wakeup(cb);
-  mutex_unlock(&udp_recv_mtx);
-  mutex_unlock(&udp_mtx);
   return;
 
 exit:
-  mutex_unlock(&udp_mtx);
+  mutex_unlock(&cblist_mtx);
   pktbuf_free(pkt);
   return;
 }
@@ -160,8 +161,13 @@ exit:
 static void *udp_sock_init() {
   struct udpcb *cb = malloc(sizeof(struct udpcb));
   bzero(cb, sizeof(struct udpcb));
+  mutex_init(&cb->mtx);
   queue_init(&cb->recv_queue, UDP_RECVQUEUE_LEN);
+
+  mutex_lock(&cblist_mtx);
   list_pushback(&cb->link, &udpcb_list);
+  mutex_unlock(&cblist_mtx);
+
   return cb;
 }
 
@@ -171,22 +177,30 @@ static int udp_sock_bind(void *pcb, const struct sockaddr *addr) {
     return -1;
 
   struct sockaddr_in *inaddr = (struct sockaddr_in *)addr;
+  mutex_lock(&cblist_mtx);
   if(inaddr->port == NEED_PORT_ALLOC)
     inaddr->port = get_unused_port();
-  else if(is_used_port(inaddr->port))
+  else if(is_used_port(inaddr->port)) {
+    mutex_unlock(&cblist_mtx);
     return -1;
+  }
 
   memcpy(&cb->local_addr, inaddr, sizeof(struct sockaddr_in));
+  mutex_unlock(&cblist_mtx);
   return 0;
 }
 
 static int udp_sock_close(void *pcb) {
   struct udpcb *cb = (struct udpcb *)pcb;
-  mutex_lock(&udp_recv_mtx);
+
+  mutex_lock(&cblist_mtx);
+  list_remove(&cb->link);
+  mutex_unlock(&cblist_mtx);
+
   while(!queue_is_empty(&cb->recv_queue))
     pktbuf_free(list_entry(queue_dequeue(&cb->recv_queue), struct pktbuf, link));
-  list_remove(&cb->link);
-  mutex_unlock(&udp_recv_mtx);
+
+  free(cb);
   return 0;
 }
 
@@ -215,11 +229,15 @@ static int udp_sock_sendto(void *pcb, const u8 *msg, size_t len, int flags UNUSE
   if(0xffff-sizeof(struct udp_hdr) < len)
     return -1;
 
+  mutex_lock(&cblist_mtx);
   if(cb->local_addr.port == NEED_PORT_ALLOC)
     cb->local_addr.port = get_unused_port();
+  struct sockaddr_in local_addr;
+  memcpy(&local_addr, &cb->local_addr, sizeof(struct sockaddr_in));
+  mutex_unlock(&cblist_mtx);
 
   in_addr_t r_src, r_dst;
-  struct netdev *dev = ip_routing(cb->local_addr.addr, ((struct sockaddr_in *)dest_addr)->addr, &r_src, &r_dst);
+  struct netdev *dev = ip_routing(local_addr.addr, ((struct sockaddr_in *)dest_addr)->addr, &r_src, &r_dst);
   if(dev == NULL)
     return -1; //no interface to send
 
@@ -228,7 +246,7 @@ static int udp_sock_sendto(void *pcb, const u8 *msg, size_t len, int flags UNUSE
 
   pktbuf_copyin(udpseg, msg, len, 0);
   set_udpheader((struct udp_hdr *)pktbuf_add_header(udpseg, sizeof(struct udp_hdr)), len,
-    r_src, cb->local_addr.port, r_dst, ((struct sockaddr_in *)dest_addr)->port);
+    r_src, local_addr.port, r_dst, ((struct sockaddr_in *)dest_addr)->port);
 
   ip_tx(udpseg, r_src, r_dst, IPTYPE_UDP);
 
@@ -247,10 +265,10 @@ static size_t udp_analyze(struct pktbuf *pkt, struct sockaddr_in *addr) {
 
 static int udp_sock_recvfrom(void *pcb, u8 *buf, size_t len, int flags UNUSED, struct sockaddr *from_addr) {
   struct udpcb *cb = (struct udpcb *)pcb;
-  mutex_lock(&udp_recv_mtx);
+  mutex_lock(&cb->mtx);
   while(1) {
     if(queue_is_empty(&cb->recv_queue)) {
-      mutex_unlock(&udp_recv_mtx);
+      mutex_unlock(&cb->mtx);
       thread_sleep(pcb);
     } else {
       struct pktbuf *pkt = list_entry(queue_dequeue(&cb->recv_queue), struct pktbuf, link);
@@ -260,11 +278,11 @@ static int udp_sock_recvfrom(void *pcb, u8 *buf, size_t len, int flags UNUSED, s
       size_t copied = MIN(len, datalen);
       memcpy(buf, pkt->head, copied);
       pktbuf_free(pkt);
-      mutex_unlock(&udp_recv_mtx);
+      mutex_unlock(&cb->mtx);
       return copied;
     }
 
-    mutex_lock(&udp_recv_mtx);
+    mutex_lock(&cb->mtx);
   }
 }
 
@@ -281,6 +299,6 @@ static int udp_sock_listen(void *pcb UNUSED, int backlog UNUSED) {
   return -1;
 }
 
-static int udp_sock_accept(void *pcb UNUSED, struct sockaddr *client_addr UNUSED) {
-  return -1;
+static void *udp_sock_accept(void *pcb UNUSED, struct sockaddr *client_addr UNUSED) {
+  return NULL;
 }

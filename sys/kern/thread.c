@@ -82,6 +82,44 @@ void thread_test(void *arg) {
   close(sock);
 }
 
+void thread_test2(void *arg) {
+ struct socket *sock0;
+ struct sockaddr_in addr;
+ struct sockaddr_in client;
+ int len;
+ struct socket *sock;
+
+ /* ソケットの作成 */
+ sock0 = socket(PF_INET, SOCK_STREAM);
+ puts("socket ok");
+
+ /* ソケットの設定 */
+ addr.family = PF_INET;
+ addr.port = hton16(12345);
+ addr.addr = INADDR_ANY;
+ bind(sock0, (struct sockaddr *)&addr);
+ puts("bind ok");
+
+ /* TCPクライアントからの接続要求を待てる状態にする */
+ listen(sock0, 5);
+ puts("listening...");
+
+ /* TCPクライアントからの接続要求を受け付ける */
+ len = sizeof(client);
+ sock = accept(sock0, (struct sockaddr *)&client);
+ puts("accepted");
+
+ /* 5文字送信 */
+ send(sock, "HELLO", 5, 0);
+puts("sent");
+
+ /* TCPセッションの終了 */
+ close(sock);
+
+ /* listen するsocketの終了 */
+ close(sock0);
+}
+
 void thread_echo(void *arg) {
   struct socket *sock;
   struct sockaddr_in addr;
@@ -120,11 +158,12 @@ void dispatcher_init() {
   gdt_settssbase(&tss);
   ltr(GDT_SEL_TSS);
 
-  thread_run(kthread_new(thread_a, 3));
-  thread_run(kthread_new(thread_b, NULL));
-  thread_run(kthread_new(thread_idle, NULL));
-  thread_run(kthread_new(thread_echo, NULL));
-  thread_run(kthread_new(thread_test, NULL));
+  //thread_run(kthread_new(thread_a, 3));
+  //thread_run(kthread_new(thread_b, NULL));
+  thread_run(kthread_new(thread_idle, NULL, "idle task"));
+  thread_run(kthread_new(thread_echo, NULL, "echo task"));
+  //thread_run(kthread_new(thread_test, NULL));
+  thread_run(kthread_new(thread_test2, NULL, "tcp test task"));
 }
 
 void dispatcher_run() {
@@ -138,9 +177,10 @@ void kstack_setaddr() {
 
 void thread_exit(void);
 
-struct thread *kthread_new(void (*func)(void *), void *arg) {
+struct thread *kthread_new(void (*func)(void *), void *arg, char *name) {
   struct thread *t = malloc(sizeof(struct thread));
   bzero(t, sizeof(struct thread));
+  t->name = name;
   t->vmmap = vm_map_new();
   t->state = TASK_STATE_RUNNING;
   t->pid = pid_next++;
@@ -228,7 +268,7 @@ void thread_start_alarm(void *cause, u32 expire) {
 }
 
 void thread_exit() {
-  //printf("thread#%d exit\n", current->pid);
+  printf("thread#%d(%s) exit\n", current->pid, current->name?current->name:"");
   current->state = TASK_STATE_EXITED;
   thread_yield();
 }

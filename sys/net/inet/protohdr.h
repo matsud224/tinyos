@@ -175,8 +175,8 @@ struct tcp_pseudo_hdr{
 
 //TCP
 struct tcp_hdr{
-  in_addr_t th_sport;
-  in_addr_t th_dport;
+  in_port_t th_sport;
+  in_port_t th_dport;
   u32 th_seq;
   u32 th_ack;
 #ifdef ENDIAN_BE

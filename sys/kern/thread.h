@@ -57,12 +57,13 @@ struct thread {
   u32 flags;
   u32 pid;
   void *waitcause;
+  char *name;
 };
 
 void dispatcher_init(void);
 void dispatcher_run(void);
 void kstack_setaddr(void);
-struct thread *kthread_new(void (*func)(void *), void *arg);
+struct thread *kthread_new(void (*func)(void *), void *arg, char *name);
 void thread_run(struct thread *t);
 void thread_sched(void);
 void thread_sleep(void *cause);

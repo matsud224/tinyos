@@ -24,7 +24,7 @@ typedef int bool;
 #define true 1
 #define false 0
 
-static mutex tcp_mtx;
+static mutex cblist_mtx;
 static struct list_head tcpcb_list;
 static struct workqueue *tcp_tx_wq;
 static struct workqueue *tcp_timer_wq;
@@ -88,6 +88,7 @@ struct tcpcb {
   struct list_head link;
 
   bool is_userclosed; //close()が呼ばれたか。trueのときCLOSE状態に遷移したらソケット解放を行う
+  mutex mtx;
 };
 
 #define TCP_STATE_CLOSED 0
@@ -139,64 +140,64 @@ struct timinfo {
   struct list_head link;
 };
 
-static struct timinfo *timinfo_new(int type);
-static void timinfo_free(struct timinfo *tinfo);
-static void tcp_timer_do(void *arg);
+struct timinfo *timinfo_new(int type);
+void timinfo_free(struct timinfo *tinfo);
+void tcp_timer_do(void *arg);
 
-static bool LE_LT(u32 a, u32 b, u32 c);
-static bool LT_LE(u32 a, u32 b, u32 c);
-static bool LE_LE(u32 a, u32 b, u32 c);
-static bool LT_LT(u32 a, u32 b, u32 c);
+bool LE_LT(u32 a, u32 b, u32 c);
+bool LT_LE(u32 a, u32 b, u32 c);
+bool LE_LE(u32 a, u32 b, u32 c);
+bool LT_LT(u32 a, u32 b, u32 c);
 
-static int is_used_port(in_port_t port);
-static in_port_t get_unused_port(void);
+int is_used_port(in_port_t port);
+in_port_t get_unused_port(void);
 
 struct tcpcb *tcpcb_new(void);
-static void tcpcb_abort(struct tcpcb *cb);
-static void tcpcb_init(struct tcpcb *cb);
-static int tcpcb_get_prev_error(struct tcpcb *cb, int errno);
-static void tcpcb_reset(struct tcpcb *cb);
-static void tcpcb_alloc_buf(struct tcpcb *cb);
-static int tcpcb_has_arrival(struct tcpcb *cb);
-static void tcpcb_timer_add(struct tcpcb *cb, u32 msec, struct timinfo *tinfo);
-static void tcpcb_timer_remove_all(struct tcpcb *cb);
+void tcpcb_abort(struct tcpcb *cb);
+void tcpcb_init(struct tcpcb *cb);
+int tcpcb_get_prev_error(struct tcpcb *cb, int errno);
+void tcpcb_reset(struct tcpcb *cb);
+void tcpcb_alloc_buf(struct tcpcb *cb);
+int tcpcb_has_arrival(struct tcpcb *cb);
+void tcpcb_timer_add(struct tcpcb *cb, u32 msec, struct timinfo *tinfo);
+void tcpcb_timer_remove_all(struct tcpcb *cb);
 
-static u32 tcp_geninitseq(void);
-static u16 tcp_checksum_recv(struct ip_hdr *ih, struct tcp_hdr *th);
-static u16 tcp_checksum_send(struct pktbuf *seg, in_addr_t ip_src, in_addr_t ip_dst);
+u32 tcp_geninitseq(void);
+u16 tcp_checksum_recv(struct ip_hdr *ih, struct tcp_hdr *th);
+u16 tcp_checksum_send(struct pktbuf *seg, in_addr_t ip_src, in_addr_t ip_dst);
 
-static void tcp_ctl_tx(u32 seq, u32 ack, u16 win, u8 flags, in_addr_t to_addr, in_port_t to_port, in_port_t my_port, bool use_resend, struct tcpcb *cb);
-static void tcp_tx(void *arg UNUSED);
-static void tcp_tx_request(void);
-static struct pktbuf *sendbuf_to_pktbuf(struct tcpcb *cb, u32 from_index, u32 len);
-static void tcp_tx_from_buf(struct tcpcb *cb);
-static bool tcp_resend_from_buf(struct tcpcb *cb, struct timinfo *tinfo);
-static int tcp_write_to_sendbuf(struct tcpcb *cb, const u8 *data, u32 len);
+void tcp_ctl_tx(u32 seq, u32 ack, u16 win, u8 flags, in_addr_t to_addr, in_port_t to_port, in_port_t my_port, struct tcpcb *cb);
+void tcp_tx(void *arg UNUSED);
+void tcp_tx_request(void);
+struct pktbuf *sendbuf_to_pktbuf(struct tcpcb *cb, u32 from_index, u32 len);
+void tcp_tx_from_buf(struct tcpcb *cb);
+bool tcp_resend_from_buf(struct tcpcb *cb, struct timinfo *tinfo);
+int tcp_write_to_sendbuf(struct tcpcb *cb, const u8 *data, u32 len);
 
 void tcp_rx(struct pktbuf *pkt, struct ip_hdr *ih);
-static void tcp_rx_closed(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th, u16 payload_len);
-static void tcp_rx_listen(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th, struct tcpcb *cb);
-static void tcp_rx_synsent(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th, struct tcpcb *cb);
-static void tcp_rx_otherwise(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th, u16 payload_len, struct tcpcb *cb);
+void tcp_rx_closed(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th, u16 payload_len);
+void tcp_rx_listen(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th, struct tcpcb *cb);
+void tcp_rx_synsent(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th, struct tcpcb *cb);
+void tcp_rx_otherwise(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th, u16 payload_len, struct tcpcb *cb);
 
-static void tcp_arrival_free(struct tcp_arrival *a);
-static struct list_head arrival_pick_head(struct tcp_arrival *a, u32 len);
-static u32 arrival_copy_head(struct tcp_arrival *a, u8 *base, u32 len);
-static struct list_head arrival_pick_tail(struct tcp_arrival *a, u32 len);
-static void arrival_merge(struct tcp_arrival *to, struct tcp_arrival *from);
-static void tcp_arrival_add(struct pktbuf *pkt, struct tcpcb *cb, u32 start_seq, u32 end_seq);
-static int tcp_read_from_arrival(struct tcpcb *cb, u8 *data, u32 len);
+void tcp_arrival_free(struct tcp_arrival *a);
+struct list_head arrival_pick_head(struct tcp_arrival *a, u32 len);
+u32 arrival_copy_head(struct tcp_arrival *a, u8 *base, u32 len);
+struct list_head arrival_pick_tail(struct tcp_arrival *a, u32 len);
+void arrival_merge(struct tcp_arrival *to, struct tcp_arrival *from);
+void tcp_arrival_add(struct pktbuf *pkt, struct tcpcb *cb, u32 start_seq, u32 end_seq);
+int tcp_read_from_arrival(struct tcpcb *cb, u8 *data, u32 len);
 
-static void *tcp_sock_init(void);
-static int tcp_sock_connect(void *pcb, const struct sockaddr *addr);
-static int tcp_sock_listen(void *pcb, int backlog);
-static int tcp_sock_accept(void *pcb, struct sockaddr *client_addr);
-static int tcp_sock_send(void *pcb, const u8 *msg, size_t len, int flags UNUSED);
-static int tcp_sock_recv(void *pcb, u8 *buf, size_t len, int flags UNUSED);
-static int tcp_sock_close(void *pcb);
-static int tcp_sock_bind(void *pcb, const struct sockaddr *addr);
-static int tcp_sock_sendto(void *pcb UNUSED, const u8 *msg UNUSED, size_t len UNUSED, int flags UNUSED, struct sockaddr *dest_addr UNUSED);
-static int tcp_sock_recvfrom(void *pcb UNUSED, u8 *buf UNUSED, size_t len UNUSED, int flags UNUSED, struct sockaddr *from_addr UNUSED);
+void *tcp_sock_init(void);
+int tcp_sock_connect(void *pcb, const struct sockaddr *addr);
+int tcp_sock_listen(void *pcb, int backlog);
+void *tcp_sock_accept(void *pcb, struct sockaddr *client_addr);
+int tcp_sock_send(void *pcb, const u8 *msg, size_t len, int flags UNUSED);
+int tcp_sock_recv(void *pcb, u8 *buf, size_t len, int flags UNUSED);
+int tcp_sock_close(void *pcb);
+int tcp_sock_bind(void *pcb, const struct sockaddr *addr);
+int tcp_sock_sendto(void *pcb UNUSED, const u8 *msg UNUSED, size_t len UNUSED, int flags UNUSED, struct sockaddr *dest_addr UNUSED);
+int tcp_sock_recvfrom(void *pcb UNUSED, u8 *buf UNUSED, size_t len UNUSED, int flags UNUSED, struct sockaddr *from_addr UNUSED);
 
 
 static const struct socket_ops tcp_sock_ops = {
@@ -214,38 +215,40 @@ static const struct socket_ops tcp_sock_ops = {
 
 
 NET_INIT void tcp_init() {
-  tcp_tx_wq = workqueue_new();
-  tcp_timer_wq = workqueue_new();
+  tcp_tx_wq = workqueue_new("tcp_tx workqueue");
+  tcp_timer_wq = workqueue_new("tcp_timer workqueue");
+  list_init(&tcpcb_list);
+  mutex_init(&cblist_mtx);
   socket_register_ops(PF_INET, SOCK_STREAM, &tcp_sock_ops);
 }
 
-static struct timinfo *timinfo_new(int type) {
+struct timinfo *timinfo_new(int type) {
   struct timinfo *ti = malloc(sizeof(struct timinfo));
   bzero(ti, sizeof(struct timinfo));
   ti->type = type;
   return ti;
 }
 
-static void tcpcb_timer_add(struct tcpcb *cb, u32 msec, struct timinfo *tinfo) {
+void tcpcb_timer_add(struct tcpcb *cb, u32 msec, struct timinfo *tinfo) {
   tinfo->cb = cb;
   tinfo->msec = msec;
   list_pushback(&tinfo->link, &cb->timer_list);
   workqueue_add_delayed(tcp_timer_wq, tcp_timer_do, tinfo, msec);
 }
 
-static void tcpcb_timer_remove_all(struct tcpcb *cb) {
+void tcpcb_timer_remove_all(struct tcpcb *cb) {
   struct list_head *p, *tmp;
-  mutex_lock(&tcp_mtx);
+  mutex_lock(&cblist_mtx);
   list_foreach_safe(p, tmp, &cb->timer_list) {
     struct timinfo *tinfo = list_entry(p, struct timinfo, link);
     tinfo->type = TCP_TIMER_TYPE_REMOVED;
   }
-  mutex_unlock(&tcp_mtx);
+  mutex_unlock(&cblist_mtx);
 }
 
 
 //mod 2^32で計算
-static bool LE_LT(u32 a, u32 b, u32 c) {
+bool LE_LT(u32 a, u32 b, u32 c) {
   if(a < c)
     return (a<=b) && (b<c);
   else if(a > c)
@@ -254,7 +257,7 @@ static bool LE_LT(u32 a, u32 b, u32 c) {
     return false;
 }
 
-static bool LT_LE(u32 a, u32 b, u32 c) {
+bool LT_LE(u32 a, u32 b, u32 c) {
   if(a < c)
     return (a<b) && (b<=c);
   else if(a > c)
@@ -263,7 +266,7 @@ static bool LT_LE(u32 a, u32 b, u32 c) {
     return false;
 }
 
-static bool LE_LE(u32 a, u32 b, u32 c) {
+bool LE_LE(u32 a, u32 b, u32 c) {
   if(a < c)
     return (a<=b) && (b<=c);
   else if(a > c)
@@ -272,7 +275,7 @@ static bool LE_LE(u32 a, u32 b, u32 c) {
     return a==b;
 }
 
-static bool LT_LT(u32 a, u32 b, u32 c) {
+bool LT_LT(u32 a, u32 b, u32 c) {
   if(a < c)
     return (a<b) && (b<c);
   else if(a > c)
@@ -281,18 +284,18 @@ static bool LT_LT(u32 a, u32 b, u32 c) {
     return false;
 }
 
-static int is_used_port(in_port_t port) {
+int is_used_port(in_port_t port) {
   struct list_head *p;
   list_foreach(p, &tcpcb_list) {
     struct tcpcb *cb = list_entry(p, struct tcpcb, link);
-    if(cb->local_addr.port == port)
+    if(cb->lport == port)
       return 1;
   }
 
   return 0;
 }
 
-static in_port_t get_unused_port() {
+in_port_t get_unused_port() {
 	for(in_port_t p=49152; p<65535; p++)
 		if(!is_used_port(p))
 			return p;
@@ -301,7 +304,7 @@ static in_port_t get_unused_port() {
 }
 
 
-static void tcpcb_abort(struct tcpcb *cb) {
+void tcpcb_abort(struct tcpcb *cb) {
   switch(cb->state){
   case TCP_STATE_SYN_RCVD:
   case TCP_STATE_ESTABLISHED:
@@ -309,16 +312,18 @@ static void tcpcb_abort(struct tcpcb *cb) {
   case TCP_STATE_FIN_WAIT_2:
   case TCP_STATE_CLOSE_WAIT:
     tcp_ctl_tx(cb->snd_nxt, 0, 0, TH_RST,
-      cb->faddr, cb->fport, cb->lport, 0, NULL);
+      cb->faddr, cb->fport, cb->lport, NULL);
   }
   tcpcb_reset(cb);
 }
 
-static void tcpcb_init(struct tcpcb *cb) {
+void tcpcb_init(struct tcpcb *cb) {
   int errno = cb->errno;
   memset(cb, 0, sizeof(struct tcpcb));
 
   cb->errno = errno;
+
+  mutex_init(&cb->mtx);
 
   cb->is_userclosed = false;
   cb->snd_persisttim_enabled = false;
@@ -333,20 +338,22 @@ static void tcpcb_init(struct tcpcb *cb) {
   cb->snd_buf = NULL;
   list_init(&cb->arrival_list);
   list_init(&cb->timer_list);
+  queue_init(&cb->cbqueue, 0);
 }
 
-static int tcpcb_get_prev_error(struct tcpcb *cb, int errno) {
+int tcpcb_get_prev_error(struct tcpcb *cb, int errno) {
   return (cb->errno < 0) ? cb->errno : errno;
 }
 
-static void tcp_arrival_free(struct tcp_arrival *a) {
+void tcp_arrival_free(struct tcp_arrival *a) {
   list_free_all(&a->pkt_list, struct pktbuf, link, pktbuf_free);
   free(a);
 }
 
-static void tcpcb_reset(struct tcpcb *cb) {
+void tcpcb_reset(struct tcpcb *cb) {
   struct list_head *p;
   while((p = queue_dequeue(&cb->cbqueue)) != NULL) {
+    //FIXME: 排他制御
     struct tcpcb *b = list_entry(p, struct tcpcb, qlink);
     b->is_userclosed = true;
     tcpcb_abort(b);
@@ -374,7 +381,7 @@ struct tcpcb *tcpcb_new() {
   return cb;
 }
 
-static void tcpcb_alloc_buf(struct tcpcb *cb) {
+void tcpcb_alloc_buf(struct tcpcb *cb) {
   cb->snd_wl1 = 0;
   cb->snd_wl2 = 0;
   cb->snd_buf = malloc(cb->snd_buf_len);
@@ -382,12 +389,12 @@ static void tcpcb_alloc_buf(struct tcpcb *cb) {
   return;
 }
 
-static u32 tcp_geninitseq() {
+u32 tcp_geninitseq() {
   //return systim + 64000;
   return 64000;
 }
 
-static u16 tcp_checksum_recv(struct ip_hdr *ih, struct tcp_hdr *th) {
+u16 tcp_checksum_recv(struct ip_hdr *ih, struct tcp_hdr *th) {
   struct tcp_pseudo_hdr pseudo;
   pseudo.tp_src = ih->ip_src;
   pseudo.tp_dst = ih->ip_dst;
@@ -398,7 +405,7 @@ static u16 tcp_checksum_recv(struct ip_hdr *ih, struct tcp_hdr *th) {
   return checksum2((u16*)(&pseudo), (u16*)th, sizeof(struct tcp_pseudo_hdr), ntoh16(ih->ip_len) - ip_header_len(ih));
 }
 
-static u16 tcp_checksum_send(struct pktbuf *seg, in_addr_t ip_src, in_addr_t ip_dst) {
+u16 tcp_checksum_send(struct pktbuf *seg, in_addr_t ip_src, in_addr_t ip_dst) {
   int segsize = pktbuf_get_size(seg);
   struct tcp_pseudo_hdr pseudo;
   pseudo.tp_src = ip_src;
@@ -411,9 +418,9 @@ static u16 tcp_checksum_send(struct pktbuf *seg, in_addr_t ip_src, in_addr_t ip_
 }
 
 //制御用のセグメント（ペイロードなし）を送信
-static void tcp_ctl_tx(u32 seq, u32 ack, u16 win, u8 flags, in_addr_t to_addr, in_port_t to_port, in_port_t my_port, bool use_resend, struct tcpcb *cb) {
+void tcp_ctl_tx(u32 seq, u32 ack, u16 win, u8 flags, in_addr_t to_addr, in_port_t to_port, in_port_t my_port, struct tcpcb *cb) {
   in_addr_t r_src, r_dst;
-  struct netdev *dev = ip_routing(cb->laddr, to_addr, &r_src, &r_dst);
+  struct netdev *dev = ip_routing(cb?cb->laddr:INADDR_ANY, to_addr, &r_src, &r_dst);
   if(dev == NULL)
     return; //no interface to send
 
@@ -422,8 +429,8 @@ static void tcp_ctl_tx(u32 seq, u32 ack, u16 win, u8 flags, in_addr_t to_addr, i
   pktbuf_reserve_headroom(tcpseg, MAX_HDRLEN_TCP);
 
   struct tcp_hdr *th = (struct tcp_hdr *)pktbuf_add_header(tcpseg, sizeof(struct tcp_hdr));
-  th->th_sport = hton16(my_port);
-  th->th_dport = hton16(to_port);
+  th->th_sport = my_port;
+  th->th_dport = to_port;
   th->th_seq = hton32(seq);
   th->th_ack = hton32(ack);
   th->th_flags = flags;
@@ -434,41 +441,41 @@ static void tcp_ctl_tx(u32 seq, u32 ack, u16 win, u8 flags, in_addr_t to_addr, i
   th->th_off = (sizeof(struct tcp_hdr)) / 4;
   th->th_sum = tcp_checksum_send(tcpseg, r_src, r_dst);
 
-  if(flags & TH_ACK)
+  if(flags & TH_ACK && cb!=NULL)
     cb->rcv_ack_cnt++;
 
   struct timinfo *tinfo;
-  if(use_resend){
+  if(cb != NULL){
     tinfo = timinfo_new(TCP_TIMER_TYPE_RESEND);
     tinfo->resend_start_seq = seq;
     tinfo->resend_end_seq = seq;
     tinfo->resend_pkt = tcpseg;
   }
-
   ip_tx(tcpseg, r_src, r_dst, IPTYPE_TCP);
   
 
-  if(use_resend)
+  if(cb != NULL)
     tcpcb_timer_add(cb, cb->rtt*TCP_TIMER_UNIT, tinfo);
 }
 
 
-static void tcp_rx_closed(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th, u16 payload_len) {
+void tcp_rx_closed(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th, u16 payload_len) {
   if(!(th->th_flags & TH_RST)){
     if(th->th_flags & TH_ACK){
-      tcp_ctl_tx(0, ntoh32(th->th_seq)+payload_len, 0, TH_ACK|TH_RST, ih->ip_src, ntoh16(th->th_sport), ntoh16(th->th_dport), false, NULL);
+      tcp_ctl_tx(0, ntoh32(th->th_seq)+payload_len, 0, TH_ACK|TH_RST, ih->ip_src, th->th_sport, th->th_dport, NULL);
     }else
-      tcp_ctl_tx(ntoh32(th->th_ack), 0, 0, TH_RST, ih->ip_src, ntoh16(th->th_sport), ntoh16(th->th_dport), false, NULL);
+      tcp_ctl_tx(ntoh32(th->th_ack), 0, 0, TH_RST, ih->ip_src, th->th_sport, th->th_dport, NULL);
   }
   pktbuf_free(pkt);
 }
 
-static void tcp_rx_listen(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th, struct tcpcb *cb) {
+void tcp_rx_listen(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th, struct tcpcb *cb) {
+  //already locked
   if(th->th_flags & TH_RST){
     goto exit;
   }
   if(th->th_flags & TH_ACK){
-    tcp_ctl_tx(ntoh32(th->th_ack), 0, 0, TH_RST, ih->ip_src, ntoh16(th->th_sport), ntoh16(th->th_dport), false, NULL);
+    tcp_ctl_tx(ntoh32(th->th_ack), 0, 0, TH_RST, ih->ip_src, th->th_sport, th->th_dport, NULL);
     goto exit;
   }
   if(th->th_flags & TH_SYN){
@@ -481,9 +488,10 @@ static void tcp_rx_listen(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr 
     }
 
     newcb->laddr = cb->laddr;
+    newcb->lport = cb->lport;
 
     newcb->faddr = ih->ip_src;
-    newcb->fport = ntoh16(th->th_sport);
+    newcb->fport = th->th_sport;
 
     newcb->state = TCP_STATE_LISTEN;
 
@@ -495,7 +503,10 @@ static void tcp_rx_listen(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr 
     newcb->snd_wl2 = ntoh32(th->th_ack);
 
     newcb->mss = MSS;
+    
+    mutex_lock(&cblist_mtx);
     list_pushback(&newcb->link, &tcpcb_list);
+    mutex_unlock(&cblist_mtx);
     thread_wakeup(cb);
   }
 
@@ -504,11 +515,12 @@ exit:
   return;
 }
 
-static void tcp_rx_synsent(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th, struct tcpcb *cb) {
+void tcp_rx_synsent(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th, struct tcpcb *cb) {
+  //already locked
   if(th->th_flags & TH_ACK){
     if(ntoh32(th->th_ack) != cb->iss+1){
       if(!(th->th_flags & TH_RST)){
-        tcp_ctl_tx(ntoh32(th->th_ack), 0, 0, TH_RST, ih->ip_src, ntoh16(th->th_sport), ntoh16(th->th_dport), false, NULL);
+        tcp_ctl_tx(ntoh32(th->th_ack), 0, 0, TH_RST, ih->ip_src, th->th_sport, th->th_dport, NULL);
       }
       goto exit;
     }else{
@@ -530,7 +542,7 @@ static void tcp_rx_synsent(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr
       cb->snd_unack = ntoh32(th->th_ack);
     if(cb->snd_unack == cb->iss){
       cb->state = TCP_STATE_SYN_RCVD;
-      tcp_ctl_tx(cb->iss, cb->rcv_nxt, 0, TH_SYN|TH_ACK, ih->ip_src, ntoh16(th->th_sport), ntoh16(th->th_dport), true, cb);
+      tcp_ctl_tx(cb->iss, cb->rcv_nxt, 0, TH_SYN|TH_ACK, ih->ip_src, th->th_sport, th->th_dport, cb);
     }else{
       cb->snd_wnd = MIN(ntoh16(th->th_win), cb->snd_buf_len);
       cb->snd_wl1 = ntoh32(th->th_seq);
@@ -538,7 +550,7 @@ static void tcp_rx_synsent(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr
       cb->mss = MSS;
       tcpcb_alloc_buf(cb);
       cb->state = TCP_STATE_ESTABLISHED;
-      tcp_ctl_tx(cb->snd_nxt, cb->rcv_nxt, cb->rcv_wnd, TH_ACK, ih->ip_src, ntoh16(th->th_sport), ntoh16(th->th_dport), false, NULL);
+      tcp_ctl_tx(cb->snd_nxt, cb->rcv_nxt, cb->rcv_wnd, TH_ACK, ih->ip_src, th->th_sport, th->th_dport, NULL);
       thread_wakeup(cb);
     }
   }
@@ -548,7 +560,7 @@ exit:
   return;
 }
 
-static struct list_head arrival_pick_head(struct tcp_arrival *a, u32 len) {
+struct list_head arrival_pick_head(struct tcp_arrival *a, u32 len) {
   struct list_head saved;
   struct list_head *p, *tmp;
 
@@ -569,7 +581,7 @@ static struct list_head arrival_pick_head(struct tcp_arrival *a, u32 len) {
   return saved;
 }
 
-static u32 arrival_copy_head(struct tcp_arrival *a, u8 *base, u32 len) {
+u32 arrival_copy_head(struct tcp_arrival *a, u8 *base, u32 len) {
   u32 copied = 0;
   struct list_head pkts = arrival_pick_head(a, len);
   struct list_head *p;
@@ -586,7 +598,7 @@ static u32 arrival_copy_head(struct tcp_arrival *a, u8 *base, u32 len) {
   return copied;
 }
 
-static struct list_head arrival_pick_tail(struct tcp_arrival *a, u32 len) {
+struct list_head arrival_pick_tail(struct tcp_arrival *a, u32 len) {
   struct list_head saved;
   struct list_head *p, *tmp;
 
@@ -607,7 +619,7 @@ static struct list_head arrival_pick_tail(struct tcp_arrival *a, u32 len) {
   return saved;
 }
 
-static void arrival_merge(struct tcp_arrival *to, struct tcp_arrival *from) {
+void arrival_merge(struct tcp_arrival *to, struct tcp_arrival *from) {
   if(LT_LT(from->start_seq, to->start_seq, to->end_seq)) {
     //先頭を拡張
     u32 expand_len = to->start_seq - from->start_seq;
@@ -624,7 +636,7 @@ static void arrival_merge(struct tcp_arrival *to, struct tcp_arrival *from) {
   }
 }
 
-static void tcp_arrival_add(struct pktbuf *pkt, struct tcpcb *cb, u32 start_seq, u32 end_seq) {
+void tcp_arrival_add(struct pktbuf *pkt, struct tcpcb *cb, u32 start_seq, u32 end_seq) {
   struct tcp_arrival *newa = malloc(sizeof(struct tcp_arrival));
   newa->start_seq = start_seq;
   newa->end_seq = end_seq;
@@ -653,12 +665,12 @@ static void tcp_arrival_add(struct pktbuf *pkt, struct tcpcb *cb, u32 start_seq,
   }
 }
 
-static int tcpcb_has_arrival(struct tcpcb *cb) {
+int tcpcb_has_arrival(struct tcpcb *cb) {
   struct tcp_arrival *a = list_entry(list_first(&cb->arrival_list), struct tcp_arrival, link);
   return (!list_is_empty(&cb->arrival_list) && a->start_seq == cb->rcv_nxt);
 }
 
-static struct pktbuf *sendbuf_to_pktbuf(struct tcpcb *cb, u32 from_index, u32 len) {
+struct pktbuf *sendbuf_to_pktbuf(struct tcpcb *cb, u32 from_index, u32 len) {
   struct pktbuf *tcpseg = pktbuf_alloc(MAX_HDRLEN_TCP + len);
   pktbuf_reserve_headroom(tcpseg, MAX_HDRLEN_TCP);
 
@@ -674,7 +686,7 @@ static struct pktbuf *sendbuf_to_pktbuf(struct tcpcb *cb, u32 from_index, u32 le
 }
 
 
-static void tcp_tx_from_buf(struct tcpcb *cb) {
+void tcp_tx_from_buf(struct tcpcb *cb) {
   in_addr_t r_src, r_dst;
   struct netdev *dev = ip_routing(cb->laddr, cb->faddr, &r_src, &r_dst);
   if(dev == NULL)
@@ -683,10 +695,10 @@ static void tcp_tx_from_buf(struct tcpcb *cb) {
   bool is_zerownd_probe = false;
 
   struct tcp_hdr th_base;
-  th_base.th_dport = hton16(cb->fport);
+  th_base.th_dport = cb->fport;
   th_base.th_flags = TH_ACK;
   th_base.th_off = sizeof(struct tcp_hdr)/4;
-  th_base.th_sport = hton16(cb->lport);
+  th_base.th_sport = cb->lport;
   th_base.th_sum = 0;
   th_base.th_urp = 0;
   th_base.th_x2 = 0;
@@ -749,7 +761,7 @@ static void tcp_tx_from_buf(struct tcpcb *cb) {
     cb->myfin_seq = cb->snd_nxt;
     cb->snd_nxt++;
 
-    tcp_ctl_tx(cb->myfin_seq, cb->rcv_nxt, cb->rcv_wnd, TH_FIN|TH_ACK, cb->faddr, cb->fport, cb->lport, true, cb);
+    tcp_ctl_tx(cb->myfin_seq, cb->rcv_nxt, cb->rcv_wnd, TH_FIN|TH_ACK, cb->faddr, cb->fport, cb->lport, cb);
 
     if(cb->state == TCP_STATE_CLOSE_WAIT)
       cb->state = TCP_STATE_LAST_ACK;
@@ -758,7 +770,7 @@ static void tcp_tx_from_buf(struct tcpcb *cb) {
   return;
 }
 
-static bool tcp_resend_from_buf(struct tcpcb *cb, struct timinfo *tinfo) {
+bool tcp_resend_from_buf(struct tcpcb *cb, struct timinfo *tinfo) {
   if(!LE_LT(cb->snd_unack, tinfo->resend_end_seq, cb->snd_nxt+cb->snd_wnd))
     return false; //送信可能なものはない
 
@@ -782,22 +794,21 @@ static bool tcp_resend_from_buf(struct tcpcb *cb, struct timinfo *tinfo) {
   return true;
 }
 
-static int tcp_write_to_sendbuf(struct tcpcb *cb, const u8 *data, u32 len) {
+int tcp_write_to_sendbuf(struct tcpcb *cb, const u8 *data, u32 len) {
   u32 remain = len;
-
   while(remain > 0) {
     if(cb->snd_buf_used < cb->snd_buf_len){
       u32 write_start_index = SEQ2IDX_SEND(cb->snd_unack+cb->snd_buf_used, cb);
-      u32 write_len = cb->snd_buf_len - write_start_index;
+      u32 write_len = MIN(remain, cb->snd_buf_len - write_start_index);
       memcpy(&(cb->snd_buf[write_start_index]), data, write_len);
       remain -= write_len;
       cb->snd_buf_used += write_len;
       data += write_len;
     }else{
+      mutex_unlock(&cb->mtx);
       tcp_tx_request();
-      mutex_unlock(&tcp_mtx);
       thread_sleep(cb);
-      mutex_lock(&tcp_mtx);
+      mutex_lock(&cb->mtx);
       switch(cb->state){
       case TCP_STATE_CLOSED:
       case TCP_STATE_LISTEN:
@@ -816,7 +827,7 @@ static int tcp_write_to_sendbuf(struct tcpcb *cb, const u8 *data, u32 len) {
   return len - remain;
 }
 
-static int tcp_read_from_arrival(struct tcpcb *cb, u8 *data, u32 len) {
+int tcp_read_from_arrival(struct tcpcb *cb, u8 *data, u32 len) {
   u32 copied = 0;
 
   while(copied == 0) {
@@ -840,9 +851,9 @@ static int tcp_read_from_arrival(struct tcpcb *cb, u8 *data, u32 len) {
       break;
     }
 
-    mutex_unlock(&tcp_mtx);
+    mutex_unlock(&cb->mtx);
     thread_sleep(cb);
-    mutex_lock(&tcp_mtx);
+    mutex_lock(&cb->mtx);
 
     switch(cb->state){
     case TCP_STATE_CLOSED:
@@ -861,7 +872,8 @@ static int tcp_read_from_arrival(struct tcpcb *cb, u8 *data, u32 len) {
 }
 
 
-static void tcp_rx_otherwise(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th, u16 payload_len, struct tcpcb *cb) {
+void tcp_rx_otherwise(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th, u16 payload_len, struct tcpcb *cb) {
+  //already locked
   if(payload_len == 0 && cb->rcv_wnd == 0){
     if(ntoh32(th->th_seq) != cb->rcv_nxt)
       goto cantrecv;
@@ -923,7 +935,7 @@ static void tcp_rx_otherwise(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_h
       tcpcb_reset(cb);
       cb->errno = ECONNRESET;
       thread_wakeup(cb);
-      tcp_ctl_tx(ntoh32(th->th_ack), cb->rcv_nxt, 0, TH_RST, ih->ip_src, ntoh16(th->th_sport), ntoh16(th->th_dport), false, NULL);
+      tcp_ctl_tx(ntoh32(th->th_ack), cb->rcv_nxt, 0, TH_RST, ih->ip_src, th->th_sport, th->th_dport, NULL);
       goto exit;
       break;
     }
@@ -943,7 +955,7 @@ static void tcp_rx_otherwise(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_h
         cb->state = TCP_STATE_ESTABLISHED;
         thread_wakeup(cb);
       }else{
-        tcp_ctl_tx(ntoh32(th->th_ack), cb->rcv_nxt, 0, TH_RST, ih->ip_src, ntoh16(th->th_sport), ntoh16(th->th_dport), false, NULL);
+        tcp_ctl_tx(ntoh32(th->th_ack), cb->rcv_nxt, 0, TH_RST, ih->ip_src, th->th_sport, th->th_dport, NULL);
         goto exit;
       }
     case TCP_STATE_ESTABLISHED:
@@ -960,7 +972,7 @@ static void tcp_rx_otherwise(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_h
         else
           cb->snd_buf_used = (0xffffffff - unack_seq_before + 1) + cb->snd_unack;
       }else if(ntoh32(th->th_ack) != cb->snd_unack){
-        tcp_ctl_tx(cb->snd_nxt, cb->rcv_nxt, cb->rcv_wnd, TH_ACK, ih->ip_src, ntoh16(th->th_sport), ntoh16(th->th_dport), false, NULL);
+        tcp_ctl_tx(cb->snd_nxt, cb->rcv_nxt, cb->rcv_wnd, TH_ACK, ih->ip_src, th->th_sport, th->th_dport, NULL);
         goto exit;
       }
       if(LE_LE(cb->snd_unack, ntoh32(th->th_ack), cb->snd_nxt)){
@@ -1033,12 +1045,11 @@ static void tcp_rx_otherwise(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_h
     if(ntoh32(th->th_seq) != cb->rcv_nxt)
       goto exit;
     */
-
     //相手からFINが送られてきたということは、こちらに全てのセグメントが到着している
     cb->rcv_fin = ntoh32(th->th_seq);
     cb->rcv_nxt = cb->rcv_fin+1;
     tcp_ctl_tx(cb->snd_nxt, cb->rcv_nxt, cb->rcv_wnd, TH_ACK, 
-      ih->ip_src, ntoh16(th->th_sport), ntoh16(th->th_dport), false, NULL);
+      ih->ip_src, th->th_sport, th->th_dport, NULL);
 
     switch(cb->state){
     case TCP_STATE_SYN_RCVD:
@@ -1070,9 +1081,10 @@ static void tcp_rx_otherwise(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_h
   goto exit;
 
 cantrecv:
+printf("can't receive. %d/%d\n", payload_len, cb->rcv_wnd);
   //ACK送信
   if(!(th->th_flags & TH_RST)){
-    tcp_ctl_tx(cb->snd_nxt, cb->rcv_nxt, cb->rcv_wnd, TH_ACK, ih->ip_src, ntoh16(th->th_sport), ntoh16(th->th_dport), false, NULL);
+    tcp_ctl_tx(cb->snd_nxt, cb->rcv_nxt, cb->rcv_wnd, TH_ACK, ih->ip_src, th->th_sport, th->th_dport, NULL);
   }
 
 exit:
@@ -1085,7 +1097,6 @@ void tcp_rx(struct pktbuf *pkt, struct ip_hdr *ih) {
 
   u32 msgsize = pktbuf_get_size(pkt);
 
-  //ヘッダ検査
   if(msgsize < sizeof(struct tcp_hdr) ||
     msgsize < tcp_header_len(th)){
     goto exit;
@@ -1096,29 +1107,42 @@ void tcp_rx(struct pktbuf *pkt, struct ip_hdr *ih) {
 
   u16 payload_len = msgsize - tcp_header_len(th);
 
-  mutex_lock(&tcp_mtx);
-
   struct tcpcb *cb = NULL;
+  struct tcpcb *listener = NULL;
   struct list_head *p;
+  mutex_lock(&cblist_mtx);
+
   list_foreach(p, &tcpcb_list) {
     struct tcpcb *b = list_entry(p, struct tcpcb, link);
-    if(b->lport == ntoh16(th->th_dport)) {
-      if(b->fport == ntoh16(th->th_sport) &&
+    if(b->lport == th->th_dport) {
+      mutex_lock(&b->mtx);
+      if(b->fport == th->th_sport &&
         b->faddr == ih->ip_src) {
         cb = b;
         break;
       } else {
-        if(b->state == TCP_STATE_LISTEN)
-          cb = b;
+        if(b->state == TCP_STATE_LISTEN) {
+          listener = b;
+        } else
+          mutex_unlock(&b->mtx);
       }
     }
   }
 
+  if(cb == NULL)
+    cb = listener;
+
+  if(cb != listener && listener != NULL)
+    mutex_unlock(&listener->mtx);
+
   if(cb==NULL || cb->state == TCP_STATE_CLOSED){
+    if(cb != NULL)
+      mutex_unlock(&cb->mtx);
+    mutex_unlock(&cblist_mtx);
     tcp_rx_closed(pkt, ih, th, payload_len);
-    mutex_unlock(&tcp_mtx);
     return;
   }
+  mutex_unlock(&cblist_mtx);
 
   pktbuf_remove_header(pkt, tcp_header_len(th));
   switch(cb->state){
@@ -1132,8 +1156,7 @@ void tcp_rx(struct pktbuf *pkt, struct ip_hdr *ih) {
     tcp_rx_otherwise(pkt, ih, th, payload_len, cb);
     break;
   }
-
-  mutex_unlock(&tcp_mtx);
+  mutex_unlock(&cb->mtx);
 
   return;
 exit:
@@ -1141,12 +1164,14 @@ exit:
   return;
 }
 
-static int tcp_sock_connect(void *pcb, const struct sockaddr *addr) {
+int tcp_sock_connect(void *pcb, const struct sockaddr *addr) {
   struct tcpcb *cb = (struct tcpcb *)pcb;
+  int err;
 
   if(addr->family != PF_INET)
     return EAFNOSUPPORT;
 
+  mutex_lock(&cb->mtx);
   switch(cb->state){
   case TCP_STATE_CLOSED:
     break;
@@ -1154,45 +1179,56 @@ static int tcp_sock_connect(void *pcb, const struct sockaddr *addr) {
     queue_free_all(&cb->cbqueue, struct tcpcb, qlink, tcpcb_abort);
     break;
   default:
-    return tcpcb_get_prev_error(cb, ECONNEXIST);
+    err = tcpcb_get_prev_error(cb, ECONNEXIST);
+    mutex_unlock(&cb->mtx);
+    return err;
   }
 
   cb->lport = ((struct sockaddr_in *)addr)->port;
   cb->laddr = ((struct sockaddr_in *)addr)->addr;
 
   cb->iss = tcp_geninitseq();
-  tcp_ctl_tx(cb->iss, 0, STREAM_RECV_BUF, TH_SYN, cb->faddr, cb->fport, cb->lport, true, cb);
+  tcp_ctl_tx(cb->iss, 0, STREAM_RECV_BUF, TH_SYN, cb->faddr, cb->fport, cb->lport, cb);
   cb->snd_unack = cb->iss;
   cb->snd_nxt = cb->iss+1;
   cb->state = TCP_STATE_SYN_SENT;
   cb->opentype = ACTIVE;
+  mutex_unlock(&cb->mtx);
 
-
-  mutex_lock(&tcp_mtx);
+  mutex_lock(&cblist_mtx);
   list_pushback(&cb->link, &tcpcb_list);
+
+  mutex_unlock(&cblist_mtx);
+
   while(true){
+    mutex_lock(&cb->mtx);
     if(cb->state == TCP_STATE_ESTABLISHED){
-      mutex_unlock(&tcp_mtx);
+      mutex_unlock(&cb->mtx);
       return 0;
     }else if(cb->state == TCP_STATE_CLOSED){
-      mutex_unlock(&tcp_mtx);
-      return tcpcb_get_prev_error(cb, EAGAIN);
+      err = tcpcb_get_prev_error(cb, EAGAIN);
+      mutex_unlock(&cb->mtx);
+      return err;
     }else{
-      mutex_unlock(&tcp_mtx);
+      mutex_unlock(&cb->mtx);
       thread_sleep(cb);
-      mutex_lock(&tcp_mtx);
     }
   }
 }
 
-static int tcp_sock_listen(void *pcb, int backlog){
+int tcp_sock_listen(void *pcb, int backlog){
   struct tcpcb *cb = (struct tcpcb *)pcb;
+  int err;
+
+  mutex_lock(&cb->mtx);
   switch(cb->state){
   case TCP_STATE_CLOSED:
   case TCP_STATE_LISTEN:
     break;
   default:
-    return tcpcb_get_prev_error(cb, ECONNEXIST);
+    err = tcpcb_get_prev_error(cb, ECONNEXIST);
+    mutex_unlock(&cb->mtx);
+    return err;
   }
 
   queue_free_all(&cb->cbqueue, struct tcpcb, qlink, tcpcb_abort);
@@ -1201,31 +1237,36 @@ static int tcp_sock_listen(void *pcb, int backlog){
   cb->state = TCP_STATE_LISTEN;
   cb->opentype = PASSIVE;
 
-  mutex_lock(&tcp_mtx);
+  mutex_unlock(&cb->mtx);
+
+  mutex_lock(&cblist_mtx);
   list_pushback(&cb->link, &tcpcb_list);
-  mutex_unlock(&tcp_mtx);
+  mutex_unlock(&cblist_mtx);
 
   return 0;
 }
 
-static int tcp_sock_accept(void *pcb, struct sockaddr *client_addr){
+void *tcp_sock_accept(void *pcb, struct sockaddr *client_addr){
   struct tcpcb *cb = (struct tcpcb *)pcb;
-  mutex_lock(&tcp_mtx);
   struct tcpcb *pending;
+  int err;
 
+  mutex_lock(&cb->mtx);
   switch(cb->state){
   case TCP_STATE_LISTEN:
 retry:
     while(true){
       if(!queue_is_empty(&cb->cbqueue)) {
+        mutex_unlock(&cb->mtx);
         pending = list_entry(queue_dequeue(&cb->cbqueue), struct tcpcb, qlink);
+        mutex_lock(&pending->mtx);
 
         pending->iss = tcp_geninitseq();
         pending->snd_nxt = pending->iss+1;
         pending->snd_unack = pending->iss;
 
         tcp_ctl_tx(pending->iss, pending->rcv_nxt, STREAM_RECV_BUF, TH_SYN|TH_ACK, 
-                   pending->faddr, pending->fport, cb->lport, true, pending);
+                   pending->faddr, pending->fport, cb->lport, pending);
 
         pending->state = TCP_STATE_SYN_RCVD;
 
@@ -1233,49 +1274,51 @@ retry:
 
         break;
       }else{
-        mutex_unlock(&tcp_mtx);
+        mutex_unlock(&cb->mtx);
+        //FIXME: unlock - sleep の間でwakeupされるかもしれない
         thread_sleep(cb);
-        mutex_lock(&tcp_mtx);
+        mutex_lock(&cb->mtx);
       }
     }
 
-    while(true){
+    while(true) {
       if(pending->state == TCP_STATE_ESTABLISHED){
-        mutex_unlock(&tcp_mtx);
-        return 0;
+        mutex_unlock(&pending->mtx);
+        return pending;
       }else if(pending->state == TCP_STATE_CLOSED){
         pending->is_userclosed = true;
         tcpcb_reset(pending);
         goto retry;
       }
 
-      mutex_unlock(&tcp_mtx);
-
-      thread_sleep(cb);
-      mutex_lock(&tcp_mtx);
+      mutex_unlock(&pending->mtx);
+      thread_sleep(pending);
+      mutex_lock(&pending->mtx);
     }
     break;
   default:
-    mutex_unlock(&tcp_mtx);
-    return tcpcb_get_prev_error(cb, ENOTLISTENING);
+    err = tcpcb_get_prev_error(cb, ENOTLISTENING);
+    mutex_unlock(&cb->mtx);
+    return NULL;
   }
 }
 
-static int tcp_sock_send(void *pcb, const u8 *msg, size_t len, int flags UNUSED) {
+int tcp_sock_send(void *pcb, const u8 *msg, size_t len, int flags UNUSED) {
   struct tcpcb *cb = (struct tcpcb *)pcb;
-  mutex_lock(&tcp_mtx);
+  int err;
+  mutex_lock(&cb->mtx);
   switch(cb->state){
   case TCP_STATE_CLOSED:
   case TCP_STATE_LISTEN:
   case TCP_STATE_SYN_SENT:
   case TCP_STATE_SYN_RCVD:
-    mutex_unlock(&tcp_mtx);
+    mutex_unlock(&cb->mtx);
     return tcpcb_get_prev_error(cb, ECONNNOTEXIST);
   case TCP_STATE_ESTABLISHED:
   case TCP_STATE_CLOSE_WAIT:
     {
       int retval = tcp_write_to_sendbuf(cb, msg, len);
-      mutex_unlock(&tcp_mtx);
+      mutex_unlock(&cb->mtx);
       tcp_tx_request();
       return retval;
     }
@@ -1284,44 +1327,45 @@ static int tcp_sock_send(void *pcb, const u8 *msg, size_t len, int flags UNUSED)
   case TCP_STATE_CLOSING:
   case TCP_STATE_LAST_ACK:
   case TCP_STATE_TIME_WAIT:
-    mutex_unlock(&tcp_mtx);
-    return tcpcb_get_prev_error(cb, ECONNCLOSING);
+    err = tcpcb_get_prev_error(cb, ECONNCLOSING);
+    mutex_unlock(&cb->mtx);
+    return err;
   default:
     return -1;
   }
 }
 
-static int tcp_sock_recv(void *pcb, u8 *buf, size_t len, int flags UNUSED) {
+int tcp_sock_recv(void *pcb, u8 *buf, size_t len, int flags UNUSED) {
   struct tcpcb *cb = (struct tcpcb *)pcb;
   int result;
-  mutex_lock(&tcp_mtx);
+  mutex_lock(&cb->mtx);
   switch(cb->state){
   case TCP_STATE_CLOSED:
   case TCP_STATE_LISTEN:
   case TCP_STATE_SYN_SENT:
   case TCP_STATE_SYN_RCVD:
-    mutex_unlock(&tcp_mtx);
+    mutex_unlock(&cb->mtx);
     return tcpcb_get_prev_error(cb, ECONNNOTEXIST);
   case TCP_STATE_ESTABLISHED:
   case TCP_STATE_FIN_WAIT_1:
   case TCP_STATE_FIN_WAIT_2:
   case TCP_STATE_CLOSE_WAIT:
     result = tcp_read_from_arrival(cb, buf, len);
-    mutex_unlock(&tcp_mtx);
+    mutex_unlock(&cb->mtx);
     return result;
   case TCP_STATE_CLOSING:
   case TCP_STATE_LAST_ACK:
   case TCP_STATE_TIME_WAIT:
-    mutex_unlock(&tcp_mtx);
+    mutex_unlock(&cb->mtx);
     return tcpcb_get_prev_error(cb, ECONNCLOSING);
   default:
     return -1;
   }
 }
 
-static int tcp_sock_close(void *pcb) {
+int tcp_sock_close(void *pcb) {
   struct tcpcb *cb = (struct tcpcb *)pcb;
-  mutex_lock(&tcp_mtx);
+  mutex_lock(&cb->mtx);
   int result = 0;
   cb->is_userclosed = true;
   switch(cb->state){
@@ -1361,23 +1405,24 @@ static int tcp_sock_close(void *pcb) {
     break;
   }
 
-  mutex_unlock(&tcp_mtx);
+  mutex_unlock(&cb->mtx);
   return result;
 }
 
-static void *tcp_sock_init() {
+void *tcp_sock_init() {
   struct tcpcb *cb = malloc(sizeof(struct tcpcb));
   cb->errno = 0;
   tcpcb_init(cb);
-  list_pushback(&cb->link, &tcpcb_list);
   return cb;
 }
 
-static int tcp_sock_bind(void *pcb, const struct sockaddr *addr) {
+int tcp_sock_bind(void *pcb, const struct sockaddr *addr) {
   struct tcpcb *cb = (struct tcpcb *)pcb;
   if(addr->family != PF_INET)
     return EAFNOSUPPORT;
 
+  mutex_lock(&cblist_mtx);
+  mutex_lock(&cb->mtx);
   struct sockaddr_in *inaddr = (struct sockaddr_in *)addr;
   if(inaddr->port == NEED_PORT_ALLOC)
     inaddr->port = get_unused_port();
@@ -1385,37 +1430,41 @@ static int tcp_sock_bind(void *pcb, const struct sockaddr *addr) {
     return -1;
 
   memcpy(&cb->local_addr, inaddr, sizeof(struct sockaddr_in));
+  mutex_unlock(&cb->mtx);
+  mutex_unlock(&cblist_mtx);
   return 0;
 }
 
-static int tcp_sock_sendto(void *pcb UNUSED, const u8 *msg UNUSED, size_t len UNUSED, int flags UNUSED, struct sockaddr *dest_addr UNUSED) {
+int tcp_sock_sendto(void *pcb UNUSED, const u8 *msg UNUSED, size_t len UNUSED, int flags UNUSED, struct sockaddr *dest_addr UNUSED) {
   return EBADF;
 }
 
-static int tcp_sock_recvfrom(void *pcb UNUSED, u8 *buf UNUSED, size_t len UNUSED, int flags UNUSED, struct sockaddr *from_addr UNUSED) {
+int tcp_sock_recvfrom(void *pcb UNUSED, u8 *buf UNUSED, size_t len UNUSED, int flags UNUSED, struct sockaddr *from_addr UNUSED) {
   return EBADF;
 }
 
-static void timinfo_free(struct timinfo *tinfo) {
+void timinfo_free(struct timinfo *tinfo) {
   if(tinfo->type == TCP_TIMER_TYPE_RESEND)
     pktbuf_free(tinfo->resend_pkt);
   free(tinfo);
 }
 
-static void tcp_timer_do(void *arg) {
+void tcp_timer_do(void *arg) {
   struct timinfo *tinfo = (struct timinfo *)arg;
-  mutex_lock(&tcp_mtx);
 
   switch(tinfo->type){
   case TCP_TIMER_TYPE_REMOVED:
     timinfo_free(tinfo);
     break;
   case TCP_TIMER_TYPE_FINACK:
+    mutex_lock(&(tinfo->cb->mtx));
     tcpcb_reset(tinfo->cb);
+    mutex_unlock(&(tinfo->cb->mtx));
     list_remove(&tinfo->link);
     timinfo_free(tinfo);
     break;
   case TCP_TIMER_TYPE_RESEND:
+    mutex_lock(&(tinfo->cb->mtx));
     if(tcp_resend_from_buf(tinfo->cb, tinfo)) {
       if(tinfo->resend_is_zerownd_probe){
         //ゼロウィンドウ・プローブ(持続タイマ)
@@ -1435,7 +1484,7 @@ static void tcp_timer_do(void *arg) {
         if(tinfo->msec > TCP_RESEND_WAIT_MAX){
           struct tcpcb *cb = tinfo->cb;
           tcp_ctl_tx(cb->snd_nxt, cb->rcv_nxt, cb->rcv_wnd, TH_RST, 
-                    cb->faddr, cb->fport, cb->lport, false, NULL);
+                    cb->faddr, cb->fport, cb->lport, NULL);
           tcpcb_reset(cb);
           list_remove(&tinfo->link);
           timinfo_free(tinfo);
@@ -1446,35 +1495,38 @@ static void tcp_timer_do(void *arg) {
         }
       }
     }
+    mutex_unlock(&(tinfo->cb->mtx));
     break;
   case TCP_TIMER_TYPE_TIMEWAIT:
+    mutex_lock(&tinfo->cb->mtx);
     tcpcb_reset(tinfo->cb);
+    mutex_unlock(&tinfo->cb->mtx);
     list_remove(&tinfo->link);
     timinfo_free(tinfo);
     break;
   case TCP_TIMER_TYPE_DELAYACK:
     {
       struct tcpcb *cb = tinfo->cb;
+      mutex_lock(&cb->mtx);
       if(cb->rcv_ack_cnt == tinfo->option.delayack.seq){
         tcp_ctl_tx(cb->snd_nxt, cb->rcv_nxt, cb->rcv_wnd, TH_ACK, 
-                  cb->faddr, cb->fport, cb->lport, false, NULL);
+                  cb->faddr, cb->fport, cb->lport, NULL);
       }
+      mutex_unlock(&cb->mtx);
       list_remove(&tinfo->link);
       timinfo_free(tinfo);
       break;
     }
   }
-
-
-  mutex_unlock(&tcp_mtx);
 }
 
 
-static void tcp_tx(void *arg UNUSED) {
-  mutex_lock(&tcp_mtx);
+void tcp_tx(void *arg UNUSED) {
   struct list_head *p;
+  mutex_lock(&cblist_mtx);
   list_foreach(p, &tcpcb_list){
     struct tcpcb *cb = list_entry(p, struct tcpcb, link);
+    mutex_lock(&cb->mtx);
     switch(cb->state){
     case TCP_STATE_ESTABLISHED:
     case TCP_STATE_CLOSE_WAIT:
@@ -1485,10 +1537,11 @@ static void tcp_tx(void *arg UNUSED) {
       thread_wakeup(cb);
       break;
     }
+    mutex_unlock(&cb->mtx);
   }
-  mutex_unlock(&tcp_mtx);
+  mutex_unlock(&cblist_mtx);
 }
 
-static void tcp_tx_request() {
+void tcp_tx_request() {
   workqueue_add(tcp_tx_wq, tcp_tx, NULL);
 }

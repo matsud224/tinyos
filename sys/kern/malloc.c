@@ -5,7 +5,7 @@
 #include <kern/params.h>
 
 #define SIZE_BASE 8 
-#define MAX_BIN 256 
+#define MAX_BIN 400 
 // TODO: SIZE_BASE*MAX_BIN以上のアロケーションに対応する
 // chunk = 1page
 // chunk consists of objects

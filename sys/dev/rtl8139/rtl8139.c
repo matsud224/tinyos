@@ -260,6 +260,7 @@ int rtl8139_rx_one() {
     //printf("received %dbytes\n", rx_size-4);
 	} else {
     //printf("dropped %dbytes\n", rx_size-4);
+    error = -1;
   }
   
 out:

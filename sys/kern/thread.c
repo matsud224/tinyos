@@ -83,41 +83,43 @@ void thread_test(void *arg) {
 }
 
 void thread_test2(void *arg) {
- struct socket *sock0;
- struct sockaddr_in addr;
- struct sockaddr_in client;
- int len;
- struct socket *sock;
+  struct socket *sock0;
+  struct sockaddr_in addr;
+  struct sockaddr_in client;
+  struct socket *sock;
 
- /* ソケットの作成 */
- sock0 = socket(PF_INET, SOCK_STREAM);
- puts("socket ok");
+  /* ソケットの作成 */
+  sock0 = socket(PF_INET, SOCK_STREAM);
+  puts("socket ok");
 
- /* ソケットの設定 */
- addr.family = PF_INET;
- addr.port = hton16(12345);
- addr.addr = INADDR_ANY;
- bind(sock0, (struct sockaddr *)&addr);
- puts("bind ok");
+  /* ソケットの設定 */
+  addr.family = PF_INET;
+  addr.port = hton16(12345);
+  addr.addr = INADDR_ANY;
+  bind(sock0, (struct sockaddr *)&addr);
+  puts("bind ok");
 
- /* TCPクライアントからの接続要求を待てる状態にする */
- listen(sock0, 5);
- puts("listening...");
+  /* TCPクライアントからの接続要求を待てる状態にする */
+  listen(sock0, 5);
+  puts("listening...");
 
- /* TCPクライアントからの接続要求を受け付ける */
- len = sizeof(client);
- sock = accept(sock0, (struct sockaddr *)&client);
- puts("accepted");
+  /* TCPクライアントからの接続要求を受け付ける */
+  sock = accept(sock0, (struct sockaddr *)&client);
+  puts("accepted");
 
- /* 5文字送信 */
- send(sock, "HELLO", 5, 0);
-puts("sent");
+  u8 buf[2048];
+  int len;
+  while((len = recv(sock, buf, sizeof(buf), 0)) > 0) {
+    printf("received %d byte\n", len);
+    buf[len] = '\0';
+    puts(buf);
+  }
 
- /* TCPセッションの終了 */
- close(sock);
+  /* TCPセッションの終了 */
+  close(sock);
 
- /* listen するsocketの終了 */
- close(sock0);
+  /* listen するsocketの終了 */
+  close(sock0);
 }
 
 void thread_echo(void *arg) {
@@ -162,7 +164,7 @@ void dispatcher_init() {
   //thread_run(kthread_new(thread_b, NULL));
   thread_run(kthread_new(thread_idle, NULL, "idle task"));
   thread_run(kthread_new(thread_echo, NULL, "echo task"));
-  //thread_run(kthread_new(thread_test, NULL));
+  thread_run(kthread_new(thread_test, NULL, "udp test task"));
   thread_run(kthread_new(thread_test2, NULL, "tcp test task"));
 }
 
@@ -247,6 +249,14 @@ void thread_sleep(void *cause) {
   current->waitcause = cause;
   thread_yield();
 }
+
+void thread_sleep_after_unlock(void *cause, mutex *mtx) {
+IRQ_DISABLE
+  mutex_unlock(mtx);
+  thread_sleep(cause);
+IRQ_RESTORE
+}
+
 
 void thread_wakeup(void *cause) {
   int wake = 0;

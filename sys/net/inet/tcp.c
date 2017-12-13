@@ -182,7 +182,8 @@ void tcp_rx_otherwise(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th,
 
 void tcp_arrival_free(struct tcp_arrival *a);
 struct list_head arrival_pick_head(struct tcp_arrival *a, u32 len);
-u32 arrival_copy_head(struct tcp_arrival *a, u8 *base, u32 len);
+u32 arrival_copy_head(struct tcpcb *cb, u8 *base, u32 len);
+void arrival_show(struct tcpcb *cb);
 struct list_head arrival_pick_tail(struct tcp_arrival *a, u32 len);
 void arrival_merge(struct tcp_arrival *to, struct tcp_arrival *from);
 void tcp_arrival_add(struct pktbuf *pkt, struct tcpcb *cb, u32 start_seq, u32 end_seq);
@@ -581,21 +582,50 @@ struct list_head arrival_pick_head(struct tcp_arrival *a, u32 len) {
   return saved;
 }
 
-u32 arrival_copy_head(struct tcp_arrival *a, u8 *base, u32 len) {
-  u32 copied = 0;
-  struct list_head pkts = arrival_pick_head(a, len);
-  struct list_head *p;
+void arrival_show(struct tcpcb *cb) {
+  struct list_head *p, *q, *tmp1, *tmp2;
+puts("------------");
+  list_foreach_safe(p, tmp1, &cb->arrival_list) {
+    struct tcp_arrival *a = list_entry(p, struct tcp_arrival, link);
+    printf("arrival: %u - %u\n", a->start_seq, a->end_seq);
+    list_foreach_safe(q, tmp2, &a->pkt_list){
+      struct pktbuf *pkt = list_entry(q, struct pktbuf, link);
+      printf("\tsize: %u\n", pktbuf_get_size(pkt));
+    }
+  }
+puts("------------");
+}
 
-  list_foreach(p, &pkts){
-    struct pktbuf *pkt = list_entry(p, struct pktbuf, link);
-    memcpy(base, pkt->head, pktbuf_get_size(pkt));
-    copied += pktbuf_get_size(pkt);
-    base += pktbuf_get_size(pkt);
+u32 arrival_copy_head(struct tcpcb *cb, u8 *base, u32 len) {
+  u32 remain = len;
+  struct list_head *p, *q, *tmp1, *tmp2;
+
+  list_foreach_safe(p, tmp1, &cb->arrival_list) {
+    struct tcp_arrival *a = list_entry(p, struct tcp_arrival, link);
+    list_foreach_safe(q, tmp2, &a->pkt_list){
+      if(remain == 0)
+        goto exit;
+      struct pktbuf *pkt = list_entry(q, struct pktbuf, link);
+      u32 copied = MIN(pktbuf_get_size(pkt), remain);
+      memcpy(base, pkt->head, copied);
+      remain -= copied;
+      base += copied;
+      a->start_seq += copied;
+
+      if(copied < pktbuf_get_size(pkt)) {
+        pkt->head += copied;
+        goto exit;
+      }else {
+        list_remove(&pkt->link);
+        pktbuf_free(pkt);
+      }
+    }
+    list_remove(&a->link);
+    tcp_arrival_free(a);
   }
 
-  list_free_all(&pkts, struct pktbuf, link, pktbuf_free);
-
-  return copied;
+exit:
+  return len - remain; 
 }
 
 struct list_head arrival_pick_tail(struct tcp_arrival *a, u32 len) {
@@ -642,7 +672,7 @@ void tcp_arrival_add(struct pktbuf *pkt, struct tcpcb *cb, u32 start_seq, u32 en
   newa->end_seq = end_seq;
   list_init(&newa->pkt_list);
   list_pushfront(&pkt->link, &newa->pkt_list);
-
+printf("tcp_arrival: seq# %u to %u\n", start_seq, end_seq);
   struct list_head *p, *tmp;
   list_foreach_safe(p, tmp, &cb->arrival_list){
     struct tcp_arrival *a = list_entry(p, struct tcp_arrival, link);
@@ -651,8 +681,7 @@ void tcp_arrival_add(struct pktbuf *pkt, struct tcpcb *cb, u32 start_seq, u32 en
       //重なりあり
       list_remove(p);
       arrival_merge(newa, a);
-      list_free_all(&a->pkt_list, struct pktbuf, link, pktbuf_free);
-      free(a);
+      tcp_arrival_free(a);
     } else if(LT_LT(newa->end_seq, a->start_seq, a->end_seq)) {
       break;
     }
@@ -660,14 +689,19 @@ void tcp_arrival_add(struct pktbuf *pkt, struct tcpcb *cb, u32 start_seq, u32 en
 
   list_pushfront(&newa->link, p);
 
-  if(cb->rcv_nxt == start_seq){
+  arrival_show(cb);
+  struct tcp_arrival *head = list_entry(list_first(&cb->arrival_list), struct tcp_arrival, link);
+  if(cb->rcv_nxt == head->start_seq){
+    u32 hlen = head->end_seq - head->start_seq + 1;
+    cb->rcv_nxt = head->end_seq + 1;
+    cb->rcv_wnd = cb->rcv_buf_len - hlen;
+printf("received %d bytes\n", hlen);
     thread_wakeup(cb);
   }
 }
 
 int tcpcb_has_arrival(struct tcpcb *cb) {
-  struct tcp_arrival *a = list_entry(list_first(&cb->arrival_list), struct tcp_arrival, link);
-  return (!list_is_empty(&cb->arrival_list) && a->start_seq == cb->rcv_nxt);
+  return (cb->rcv_wnd < cb->rcv_buf_len);
 }
 
 struct pktbuf *sendbuf_to_pktbuf(struct tcpcb *cb, u32 from_index, u32 len) {
@@ -841,13 +875,8 @@ int tcp_read_from_arrival(struct tcpcb *cb, u8 *data, u32 len) {
         return tcpcb_get_prev_error(cb, ECONNCLOSING);
       }
     } else {
-      struct tcp_arrival *a = list_entry(list_first(&cb->arrival_list), struct tcp_arrival, link);
-      copied = arrival_copy_head(a, data, len);
+      copied = arrival_copy_head(cb, data, len);
       cb->rcv_wnd += copied;
-      if(arrival_is_empty(a)) {
-        list_remove(&a->link);
-        tcp_arrival_free(a);
-      }
       break;
     }
 
@@ -874,6 +903,8 @@ int tcp_read_from_arrival(struct tcpcb *cb, u8 *data, u32 len) {
 
 void tcp_rx_otherwise(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th, u16 payload_len, struct tcpcb *cb) {
   //already locked
+  int pkt_keep = 0;
+
   if(payload_len == 0 && cb->rcv_wnd == 0){
     if(ntoh32(th->th_seq) != cb->rcv_nxt)
       goto cantrecv;
@@ -1023,7 +1054,8 @@ void tcp_rx_otherwise(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th,
     case TCP_STATE_FIN_WAIT_1:
     case TCP_STATE_FIN_WAIT_2:
       pktbuf_remove_header(pkt, tcp_header_len(th));
-      tcp_arrival_add(pkt, cb, ntoh32(th->th_seq), ntoh32(th->th_seq) + payload_len);
+      tcp_arrival_add(pkt, cb, ntoh32(th->th_seq), ntoh32(th->th_seq) + payload_len - 1);
+      pkt_keep = 1;
       //遅延ACKタイマ開始
       struct timinfo *tinfo = timinfo_new(TCP_TIMER_TYPE_DELAYACK);
       tinfo->delayack_seq = cb->rcv_ack_cnt;
@@ -1088,7 +1120,8 @@ printf("can't receive. %d/%d\n", payload_len, cb->rcv_wnd);
   }
 
 exit:
-  pktbuf_free(pkt);
+  if(!pkt_keep)
+    pktbuf_free(pkt);
   return;
 }
 
@@ -1144,7 +1177,6 @@ void tcp_rx(struct pktbuf *pkt, struct ip_hdr *ih) {
   }
   mutex_unlock(&cblist_mtx);
 
-  pktbuf_remove_header(pkt, tcp_header_len(th));
   switch(cb->state){
   case TCP_STATE_LISTEN:
     tcp_rx_listen(pkt, ih, th, cb);

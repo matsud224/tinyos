@@ -76,7 +76,8 @@ void thread_test(void *arg) {
   while(1) {
     int len = recv(sock, buf, sizeof(buf), 0);
     buf[len] = '\0';
-    printf("%s\n", buf);
+    //printf("%s\n", buf);
+    printf("received %d bytes\n", len);
   }
 
   close(sock);
@@ -110,10 +111,12 @@ void thread_test2(void *arg) {
   u8 buf[2048];
   int len;
   while((len = recv(sock, buf, sizeof(buf), 0)) > 0) {
-    printf("received %d byte\n", len);
+    printf("tcp: received %d byte\n", len);
     buf[len] = '\0';
     puts(buf);
   }
+
+puts("tcp connection closed.");
 
   /* TCPセッションの終了 */
   close(sock);
@@ -139,6 +142,9 @@ void thread_echo(void *arg) {
   u8 data;
   while(1) {
     if(chardev_read(0, &data, 1) == 1) {
+      puts("--------------------------------------------");
+      tcp_stat();
+      puts("--------------------------------------------");
       chardev_write(0, &data, 1);
       if(sendto(sock, &data, 1, 0, (struct sockaddr *)&addr) < 0)
         puts("sendto failed");

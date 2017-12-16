@@ -28,8 +28,9 @@ void ether_rx(void *ndev) {
   struct pktbuf *frame = NULL;
   while(--remain && (frame = netdev_rx_nowait(dev)) != NULL)
     ether_rx_one(frame);
-  if(remain == 0)
-    workqueue_add(ether_wq, ether_rx, (void *)dev);
+  if(remain == 0) {
+    workqueue_add(ether_wq, ether_rx, ndev);
+  }
 }
 
 static void ether_rx_one(struct pktbuf *frame) {

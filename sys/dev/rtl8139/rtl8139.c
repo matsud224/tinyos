@@ -7,6 +7,8 @@
 #include <net/ether/ether.h>
 #include <net/inet/inet.h>
 #include <kern/thread.h>
+#include <kern/workqueue.h>
+#include <kern/lock.h>
 
 #define RTL8139_VENDORID 0x10ec
 #define RTL8139_DEVICEID 0x8139
@@ -90,9 +92,7 @@ enum tsd {
 #define RXBUF_TOTAL			(RXBUF_SIZE+RXBUF_PAD+RXBUF_WRAP_PAD)
 
 #define RXQUEUE_COUNT		64
-#define RXQUEUE_SIZE		(RXQUEUE_COUNT*sizeof(intptr_t))
 #define TXQUEUE_COUNT		64
-#define TXQUEUE_SIZE		(TXQUEUE_COUNT*sizeof(intptr_t))
 
 #define TXDESC_NUM				4
 
@@ -108,8 +108,10 @@ static struct {
   u8 txdesc_tail;
   u8 txdesc_free;
   struct pktbuf *txdesc_pkt[TXDESC_NUM];
-	struct netdev_queue *rxqueue;
-	struct netdev_queue *txqueue;
+	struct queue_head rxqueue;
+	struct queue_head txqueue;
+  mutex rxqueue_mtx;
+  mutex txqueue_mtx;
   struct netdev netdev_info;
 } rtldev;
 
@@ -134,10 +136,16 @@ static const struct netdev_ops rtl8139_ops = {
   .rx = rtl8139_rx
 };
 
+static struct workqueue *rx_wq;
+static struct workqueue *tx_wq;
+
 void rtl8139_isr(void);
 void rtl8139_inthandler(void);
 
 void rtl8139_init(struct pci_dev *thisdev) {
+  rx_wq = workqueue_new("rtl8139_rx_wq");
+  tx_wq = workqueue_new("rtl8139_tx_wq");
+
   rtldev.netdev_info.ops = &rtl8139_ops;
   rtldev.pci = thisdev;
   rtldev.iobase = pci_config_read32(thisdev, PCI_BAR0);
@@ -146,8 +154,10 @@ void rtl8139_init(struct pci_dev *thisdev) {
   rtldev.rxbuf_index = 0;
   rtldev.txdesc_head = rtldev.txdesc_tail = 0;
   rtldev.txdesc_free = TXDESC_NUM;
-	rtldev.rxqueue = ndqueue_create(malloc(RXQUEUE_SIZE), RXQUEUE_COUNT);
-	rtldev.txqueue = ndqueue_create(malloc(TXQUEUE_SIZE), TXQUEUE_COUNT);
+	queue_init(&rtldev.rxqueue, RXQUEUE_COUNT);
+	queue_init(&rtldev.txqueue, TXQUEUE_COUNT);
+	mutex_init(&rtldev.rxqueue_mtx);
+	mutex_init(&rtldev.txqueue_mtx);
 
 	list_init(&rtldev.netdev_info.ifaddr_list);
 
@@ -209,34 +219,46 @@ DRIVER_INIT int rtl8139_probe() {
 }
 
 int rtl8139_tx_one() {
-  struct pktbuf *pkt = NULL;
-	if(NDQUEUE_IS_EMPTY(rtldev.txqueue))
-    return -1;
-  
-  pkt = ndqueue_dequeue(rtldev.txqueue);
-  if(pkt == NULL)
-    return -1;
-
+  int error = 0;
+  mutex_lock(&rtldev.txqueue_mtx);
+IRQ_DISABLE
   if(rtldev.txdesc_free > 0) {
+    struct pktbuf *pkt = NULL;
+	  if(queue_is_empty(&rtldev.txqueue)) {
+      error = -1;
+      goto out;
+    }
+
+
+    pkt = list_entry(queue_dequeue(&rtldev.txqueue), struct pktbuf, link);
+
     out32(RTLREG(TX_TSAD[rtldev.txdesc_head]), KERN_VMEM_TO_PHYS(pkt->head));
     rtldev.txdesc_pkt[rtldev.txdesc_head] = pkt;
     out32(RTLREG(TX_TSD[rtldev.txdesc_head]), pktbuf_get_size(pkt)); 
     rtldev.txdesc_free--;
     rtldev.txdesc_head = (rtldev.txdesc_head+1) % TXDESC_NUM;
-    return 0;
+  }else {
+    error = -2;
   }
-  return -1;
+out:
+IRQ_RESTORE
+  mutex_unlock(&rtldev.txqueue_mtx);
+  return error;
 }
 
-int rtl8139_tx_all() {
+void rtl8139_tx_all(void *arg) {
   while(rtl8139_tx_one() == 0);
   thread_wakeup(&rtldev.netdev_info);
 }
 
 int rtl8139_rx_one() {
   int error = 0;
-  if((in8(RTLREG(CR)) & CR_BUFE) == 1)
-    return -1;
+  mutex_lock(&rtldev.rxqueue_mtx);
+IRQ_DISABLE
+  if((in8(RTLREG(CR)) & CR_BUFE) == 1) {
+    error = -1;
+    goto err;
+  }
 
   u32 offset = rtldev.rxbuf_index % RXBUF_SIZE;
   u32 pkt_hdr = *((u32 *)(rtldev.rxbuf+offset));
@@ -253,34 +275,35 @@ int rtl8139_rx_one() {
     goto out;
   }
 
-	if(!NDQUEUE_IS_FULL(rtldev.rxqueue)) {
+	if(!queue_is_full(&rtldev.rxqueue)) {
     u8 *buf = malloc(rx_size-4);
     memcpy(buf, rtldev.rxbuf+offset+4, rx_size-4);
-    ndqueue_enqueue(rtldev.rxqueue, pktbuf_create(buf, rx_size-4, free));
+    struct pktbuf *pkt = pktbuf_create(buf, rx_size-4, free);
+    queue_enqueue(&pkt->link, &rtldev.rxqueue);
     //printf("received %dbytes\n", rx_size-4);
 	} else {
     //printf("dropped %dbytes\n", rx_size-4);
-    error = -1;
+    error = -3;
   }
   
 out:
   rtldev.rxbuf_index = (offset + rx_size + 4 + 3) & ~3;
   out16(RTLREG(CAPR), rtldev.rxbuf_index - 16);
+err:
+IRQ_RESTORE
+  mutex_unlock(&rtldev.rxqueue_mtx);
   return error;
 }
 
-int rtl8139_rx_all() {
+void rtl8139_rx_all(void *arg) {
   while(rtl8139_rx_one() == 0);
-  workqueue_add(ether_wq, ether_rx, &rtldev.netdev_info);
+
   thread_wakeup(&rtldev.netdev_info);
+  workqueue_add(ether_wq, ether_rx, &rtldev.netdev_info);
 }
 
 void rtl8139_isr() {
   u16 isr = in16(RTLREG(ISR));
-  if(isr & ISR_TOK)
-    out16(RTLREG(ISR), ISR_TOK);
-  if(isr & (ISR_FOVW|ISR_RXOVW|ISR_ROK))
-    out16(RTLREG(ISR), ISR_FOVW|ISR_RXOVW|ISR_ROK);
 
   while(rtldev.txdesc_free < 4 &&
     (in32(RTLREG(TX_TSD[rtldev.txdesc_tail]))&(TSD_OWN|TSD_TOK)) == (TSD_OWN|TSD_TOK)) {
@@ -290,10 +313,15 @@ void rtl8139_isr() {
   }
 
   if(isr & ISR_TOK)
-    rtl8139_tx_all();
+    workqueue_add(tx_wq, rtl8139_tx_all, NULL);
   
   if(isr & ISR_ROK)
-    rtl8139_rx_all();
+    workqueue_add(rx_wq, rtl8139_rx_all, NULL);
+
+  if(isr & ISR_TOK)
+    out16(RTLREG(ISR), ISR_TOK);
+  if(isr & (ISR_FOVW|ISR_RXOVW|ISR_ROK))
+    out16(RTLREG(ISR), ISR_FOVW|ISR_RXOVW|ISR_ROK);
 
   pic_sendeoi();
 }
@@ -308,14 +336,24 @@ void rtl8139_close(struct netdev *dev UNUSED) {
 }
 
 int rtl8139_tx(struct netdev *dev UNUSED, struct pktbuf *pkt) {
-  if(ndqueue_enqueue(rtldev.txqueue, pkt) == 0)
-    return -1;
-  rtl8139_tx_all();
-  return 0;
+  mutex_lock(&rtldev.txqueue_mtx);
+  int result = queue_enqueue(&pkt->link, &rtldev.txqueue);
+  if(result == 0)
+    workqueue_add(tx_wq, rtl8139_tx_all, NULL);
+  mutex_unlock(&rtldev.txqueue_mtx);
+  return result;
 }
 
 struct pktbuf *rtl8139_rx(struct netdev *dev UNUSED) {
-  return ndqueue_dequeue(rtldev.rxqueue);
+  mutex_lock(&rtldev.rxqueue_mtx);
+  if(queue_is_empty(&rtldev.rxqueue)) {
+    workqueue_add(rx_wq, rtl8139_rx_all, NULL);
+    mutex_unlock(&rtldev.rxqueue_mtx);
+    return NULL;
+  }
+  struct pktbuf *pkt = list_entry(queue_dequeue(&rtldev.rxqueue), struct pktbuf, link);
+  mutex_unlock(&rtldev.rxqueue_mtx);
+  return pkt;
 }
 
 

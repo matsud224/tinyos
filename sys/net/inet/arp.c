@@ -65,6 +65,10 @@ static void pending_remove_all(struct list_head *pending) {
   list_free_all(pending, struct pending_frame, link, pending_frame_free);
 }
 
+static void pending_remove_all_preserve_pkts(struct list_head *pending) {
+  list_free_all(pending, struct pending_frame, link, free);
+}
+
 static int arp_resolve(in_addr_t ipaddr, struct etheraddr *macaddr, struct pktbuf *frm, u16 proto, struct netdev *dev) {
   mutex_lock(&arptbl_mtx);
 
@@ -113,7 +117,7 @@ void register_arptable(in_addr_t ipaddr, struct etheraddr macaddr, int is_perman
           struct pending_frame *pending = list_entry(p, struct pending_frame, link);
           ether_tx(pending->frm, macaddr, pending->proto, pending->dev);
         }
-        pending_remove_all(&arptable[i].pending);
+        pending_remove_all_preserve_pkts(&arptable[i].pending);
       }
       mutex_unlock(&arptbl_mtx);
       return;

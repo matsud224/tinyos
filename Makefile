@@ -5,7 +5,7 @@ OBJCOPY		= i686-elf-objcopy
 QEMU			= qemu-system-i386 
 SUDO			= sudo
 QEMUFLAGS			= -m 512 -hda disk/fat32disk -hdb disk/sample -boot a -serial stdio
-QEMUNETFLAGS	= -net nic,vlan=0,model=rtl8139 -net tap,vlan=0,ifname=tap0
+QEMUNETFLAGS	= -net nic,model=rtl8139 -net tap,ifname=tap0,script=ifup.sh
 RM						= rm -f
 
 BINDIR				= bin

@@ -103,6 +103,20 @@ struct tcpcb {
 #define TCP_STATE_CLOSE_WAIT 9
 #define TCP_STATE_LAST_ACK 10
 
+static const char *TCP_STATE_STR[] = {
+  "CLOSED",
+  "LISTEN",
+  "SYN_RCVD",
+  "SYN_SENT",
+  "ESTABLISHED",
+  "FIN_WAIT_1",
+  "FIN_WAIT_2",
+  "CLOSING",
+  "TIME_WAIT",
+  "CLOSE_WAIT",
+  "LAST_ACK",
+};
+
 #define TCP_OPT_END_OF_LIST 0
 #define TCP_OPT_NOP 1
 #define TCP_OPT_MSS 2
@@ -221,6 +235,22 @@ NET_INIT void tcp_init() {
   list_init(&tcpcb_list);
   mutex_init(&cblist_mtx);
   socket_register_ops(PF_INET, SOCK_STREAM, &tcp_sock_ops);
+}
+
+void tcp_stat(void) {
+  struct list_head *p;
+  mutex_lock(&cblist_mtx);
+
+  puts("proto, local, foreign, state, sndwnd, rcvwnd");
+  list_foreach(p, &tcpcb_list) {
+    struct tcpcb *cb = list_entry(p, struct tcpcb, link);
+    printf("tcp, %x:%u, %x:%u, %s, %u, %u\n", 
+      cb->laddr, cb->lport, cb->faddr, cb->fport, 
+      TCP_STATE_STR[cb->state], cb->snd_wnd, cb->rcv_wnd);
+  }
+
+  mutex_unlock(&cblist_mtx);
+  return;
 }
 
 struct timinfo *timinfo_new(int type) {
@@ -672,13 +702,12 @@ void tcp_arrival_add(struct pktbuf *pkt, struct tcpcb *cb, u32 start_seq, u32 en
   newa->end_seq = end_seq;
   list_init(&newa->pkt_list);
   list_pushfront(&pkt->link, &newa->pkt_list);
-printf("tcp_arrival: seq# %u to %u\n", start_seq, end_seq);
+printf("tcp_arrival: seq# %u to %u  rcv_nxt=%u\n", start_seq, end_seq, cb->rcv_nxt);
   struct list_head *p, *tmp;
   list_foreach_safe(p, tmp, &cb->arrival_list){
     struct tcp_arrival *a = list_entry(p, struct tcp_arrival, link);
-    if(LT_LE(newa->start_seq, a->start_seq, newa->end_seq) 
-         || LE_LT(newa->start_seq, a->end_seq, newa->end_seq)) {
-      //重なりあり
+    if(LE_LE(newa->start_seq, a->start_seq, newa->end_seq+1) 
+         || LE_LE(newa->start_seq-1, a->end_seq, newa->end_seq)) {
       list_remove(p);
       arrival_merge(newa, a);
       tcp_arrival_free(a);
@@ -695,7 +724,6 @@ printf("tcp_arrival: seq# %u to %u\n", start_seq, end_seq);
     u32 hlen = head->end_seq - head->start_seq + 1;
     cb->rcv_nxt = head->end_seq + 1;
     cb->rcv_wnd = cb->rcv_buf_len - hlen;
-printf("received %d bytes\n", hlen);
     thread_wakeup(cb);
   }
 }
@@ -1309,6 +1337,7 @@ retry:
         mutex_unlock(&cb->mtx);
         //FIXME: unlock - sleep の間でwakeupされるかもしれない
         thread_sleep(cb);
+        //thread_sleep_after_unlock(cb, &cb->mtx);
         mutex_lock(&cb->mtx);
       }
     }
@@ -1324,7 +1353,9 @@ retry:
       }
 
       mutex_unlock(&pending->mtx);
+puts("sleeping...");
       thread_sleep(pending);
+puts("wakeup...");
       mutex_lock(&pending->mtx);
     }
     break;
@@ -1483,7 +1514,6 @@ void timinfo_free(struct timinfo *tinfo) {
 
 void tcp_timer_do(void *arg) {
   struct timinfo *tinfo = (struct timinfo *)arg;
-
   switch(tinfo->type){
   case TCP_TIMER_TYPE_REMOVED:
     timinfo_free(tinfo);

@@ -247,7 +247,6 @@ static int udp_sock_sendto(void *pcb, const u8 *msg, size_t len, int flags UNUSE
   pktbuf_copyin(udpseg, msg, len, 0);
   set_udpheader((struct udp_hdr *)pktbuf_add_header(udpseg, sizeof(struct udp_hdr)), len,
     r_src, local_addr.port, r_dst, ((struct sockaddr_in *)dest_addr)->port);
-
   ip_tx(udpseg, r_src, r_dst, IPTYPE_UDP);
 
   return len;

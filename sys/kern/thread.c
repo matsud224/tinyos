@@ -42,7 +42,7 @@ void thread_b(void *arg) {
   printf("file found inode=%x\n", ino);
   vm_add_area(current->vmmap, 0x20000, PAGESIZE*2, inode_mapper_new(ino, 0), 0);
 
-  for(u32 addr=0x20200; addr<0x20300; addr++) {
+  for(u32 addr=0x20100; addr<0x20200; addr++) {
     printf("%c", *(char*)addr);
     if(*(char*)addr == '\0')
       break;
@@ -114,6 +114,7 @@ void thread_test2(void *arg) {
     //printf("tcp: received %d byte\n", len);
     buf[len] = '\0';
     puts(buf);
+    send(sock, "ok. ", 4, 0);
   }
 
 puts("tcp connection closed.");
@@ -145,7 +146,7 @@ void thread_echo(void *arg) {
       puts("--------------------------------------------");
       tcp_stat();
       puts("--------------------------------------------");
-      timer_start(0, puts, "hello, world!");
+      timer_start(msecs_to_ticks(3000), puts, "hello, world!");
       chardev_write(0, &data, 1);
       if(sendto(sock, &data, 1, 0, (struct sockaddr *)&addr) < 0)
         puts("sendto failed");
@@ -168,11 +169,11 @@ void dispatcher_init() {
   ltr(GDT_SEL_TSS);
 
   //thread_run(kthread_new(thread_a, 3));
-  //thread_run(kthread_new(thread_b, NULL));
+  thread_run(kthread_new(thread_b, NULL, "fs test thread"));
   thread_run(kthread_new(thread_idle, NULL, "idle task"));
-  thread_run(kthread_new(thread_echo, NULL, "echo task"));
-  thread_run(kthread_new(thread_test, NULL, "udp test task"));
-  thread_run(kthread_new(thread_test2, NULL, "tcp test task"));
+  //thread_run(kthread_new(thread_echo, NULL, "echo task"));
+  //thread_run(kthread_new(thread_test, NULL, "udp test task"));
+  //thread_run(kthread_new(thread_test2, NULL, "tcp test task"));
 }
 
 void dispatcher_run() {

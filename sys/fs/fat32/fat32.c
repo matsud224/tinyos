@@ -8,6 +8,7 @@
 static struct fs *fat32_mount(void *source);
 static struct inode *fat32_getroot(struct fs *fs);
 static int fat32_inode_read(struct inode *inode, u8 *base, u32 offset, u32 count);
+static int fat32_inode_write(struct inode *inode, u8 *base, u32 offset, u32 count);
 static struct inode *fat32_inode_opdent(struct inode *inode, const char *name, int op);
 
 
@@ -116,8 +117,7 @@ struct fat32_fs {
 
 static const struct inode_ops fat32_inode_ops = {
   .read = fat32_inode_read,
-  .write = NULL,
-  .resize = NULL,
+  .write = fat32_inode_write,
   .opdent = fat32_inode_opdent
 };
 
@@ -125,6 +125,12 @@ struct fat32_inode {
   u32 cluster;
   struct inode inode;
 };
+
+#define is_active_cluster(c)  ((c) >= 0x2 && (c) <= 0x0ffffff6)
+#define is_terminal_cluster(c) ((c) >= 0x0ffffff8 && (c) <= 0x0fffffff)
+#define UNUSED_CLUSTER 0
+#define RESERVED_CLUSTER 1
+#define BAD_CLUSTER 	0x0FFFFFF7
 
 
 FS_INIT void fat32_init() {
@@ -188,41 +194,62 @@ static u32 fat32_fat_at(struct fat32_fs *f, u32 index) {
   return entry;
 }
 
+static u32 walk_cluster_chain(struct fat32_fs *f, u32 offset, u32 cluster) {
+  int nlook = offset / (f->boot.BPB_SecPerClus * f->boot.BPB_BytsPerSec);
+  for(int i=0; i<nlook; i++) {
+    cluster = fat32_fat_at(f, cluster);
+    if(!is_active_cluster(cluster))
+      return cluster;
+  }
+  return cluster;
+}
+
 static u32 cluster_to_sector(struct fat32_fs *f, u32 cluster);
 
 static int fat32_inode_read(struct inode *inode, u8 *base, u32 offset, u32 count) {
-  u32 tail = count + offset;
-  tail = (tail > inode->size) ? inode->size : tail;
+  if(inode->mode & INODE_DIR)
+    return 0;
+
+  u32 tail = MIN(count + offset, inode->size);
+  u32 remain = tail - offset;
 
   struct fat32_fs *f = container_of(inode->fs, struct fat32_fs, fs);
   devno_t devno = f->devno;
   struct fat32_inode *fatino = container_of(inode, struct fat32_inode, inode);
   struct blkdev_buf *buf = NULL;
-  u32 current_cluster = fatino->cluster;
-  
-  if(inode->mode & INODE_DIR)
-    return 0;
 
-  for(u32 i=offset; i<tail; i++) {
-    if(buf == NULL || i%BLOCKSIZE == 0) {
+  u32 current_cluster = walk_cluster_chain(f, offset, fatino->cluster);
+  u32 blks_per_sec = f->boot.BPB_BytsPerSec / BLOCKSIZE;
+  u32 in_clus_off = offset % (f->boot.BPB_SecPerClus * f->boot.BPB_BytsPerSec);
+  
+  while(remain > 0) {
+    if(!is_active_cluster(current_cluster))
+      break;
+
+    u32 in_blk_off = in_clus_off % BLOCKSIZE;
+    for(int sec = in_clus_off / BLOCKSIZE; remain > 0 && sec < blks_per_sec; sec++) {
       if(buf != NULL)
-        blkdev_releasebuf(buf);
-      if(current_cluster == 0)
-        break;
-      if(current_cluster >= 0x0ffffff8
-           && current_cluster <= 0x0fffffff)
-        break;
-      buf = blkdev_getbuf(devno, cluster_to_sector(f, current_cluster) + i/BLOCKSIZE);
+       blkdev_releasebuf(buf);
+      buf = blkdev_getbuf(devno, cluster_to_sector(f, current_cluster) + sec);
       blkdev_buf_sync(buf);
-      if(i/BLOCKSIZE == f->boot.BPB_SecPerClus-1)
-        current_cluster = fat32_fat_at(f, current_cluster);
+      u32 copylen = MIN(BLOCKSIZE - in_blk_off, remain);
+      memcpy(base, buf->addr + in_blk_off, copylen);
+      base += copylen;
+      in_blk_off = 0;
     }
 
-    *base++ = buf->addr[i%BLOCKSIZE];
+    current_cluster = fat32_fat_at(f, current_cluster);
+    in_clus_off = 0;
   }
+  
   if(buf != NULL)
     blkdev_releasebuf(buf);
-  return tail-offset;
+
+  return (tail - offset) - remain;
+}
+
+static int fat32_inode_write(struct inode *inode, u8 *base, u32 offset, u32 count) {
+  return 0;
 }
 
 static int strcmp_dent(const char *path, const char *name) {
@@ -298,58 +325,62 @@ static char *get_lfn(struct fat32_dent *sfnent) {
 }
 
 static struct inode *fat32_inode_opdent(struct inode *inode, const char *name, int op) {
+  if(inode->mode & INODE_DIR == 0)
+    return 0;
+
   struct fat32_fs *f = container_of(inode->fs, struct fat32_fs, fs);
   devno_t devno = f->devno;
   struct fat32_inode *fatino = container_of(inode, struct fat32_inode, inode);
   struct blkdev_buf *buf = NULL;
-  u32 current_cluster = fatino->cluster;
+
   int found = 0;
   struct fat32_dent found_dent;
-  if((inode->mode & INODE_DIR) == 0)
-    goto exit;
-  for(u32 i=0; ; i+=sizeof(struct fat32_dent)) {
-    if(i%BLOCKSIZE == 0) {
+
+  u32 current_cluster = fatino->cluster;
+  u32 blks_per_sec = f->boot.BPB_BytsPerSec / BLOCKSIZE;
+  
+  while(1) {
+    if(!is_active_cluster(current_cluster))
+      break;
+
+    for(int sec = 0; sec < blks_per_sec; sec++) {
       if(buf != NULL)
-        blkdev_releasebuf(buf);
-      if(current_cluster == 0)
-        break;
-      if(current_cluster >= 0x0ffffff8
-           && current_cluster <= 0x0fffffff)
-        break;
-      buf = blkdev_getbuf(devno, cluster_to_sector(f, current_cluster) + i/BLOCKSIZE);
+       blkdev_releasebuf(buf);
+      buf = blkdev_getbuf(devno, cluster_to_sector(f, current_cluster) + sec);
       blkdev_buf_sync(buf);
-      if(i/BLOCKSIZE == f->boot.BPB_SecPerClus-1)
-        current_cluster = fat32_fat_at(f, current_cluster);
-    }
 
-    struct fat32_dent *dent = (struct fat32_dent*)((u8 *)(buf->addr)+(i%512));
-    if(dent->DIR_Name[0] == 0x00)
-      break;
-    if(dent->DIR_Name[0] == 0xe5)
-      continue;
-    if(dent->DIR_Attr & ATTR_VOLUME_ID)
-      continue;
-    if(dent->DIR_Attr & ATTR_LONG_NAME)
-      continue;
-    char *dent_name = NULL;
-    if(i%BLOCKSIZE != 0)
-      dent_name = get_lfn(dent);
-    if(dent_name == NULL)
-      dent_name = get_sfn(dent);
-    switch(op) {
-    case DENTOP_GET:
-      if(strcmp_dent(name, dent_name) == 0) {
-        found = 1;
-        found_dent = *dent;
-        goto exit;
+      for(u32 i=0; i<BLOCKSIZE; i+=sizeof(struct fat32_dent)) {
+        struct fat32_dent *dent = (struct fat32_dent*)(buf->addr + i);
+        if(dent->DIR_Name[0] == 0x00)
+          break;
+        if(dent->DIR_Name[0] == 0xe5)
+          continue;
+        if(dent->DIR_Attr & (ATTR_VOLUME_ID|ATTR_LONG_NAME))
+          continue;
+
+        char *dent_name = NULL;
+        if(i%BLOCKSIZE != 0)
+          dent_name = get_lfn(dent);
+        if(dent_name == NULL)
+          dent_name = get_sfn(dent);
+
+        switch(op) {
+        case DENTOP_GET:
+          if(strcmp_dent(name, dent_name) == 0) {
+            found = 1;
+            found_dent = *dent;
+            goto exit;
+          }
+          break;
+        case DENTOP_REMOVE:
+          break;
+        }
       }
-      break;
-    default:
-      // not implemented
-      break;
     }
-  }
 
+    current_cluster = fat32_fat_at(f, current_cluster);
+  }
+  
 exit:
   if(buf != NULL)
     blkdev_releasebuf(buf);
@@ -373,8 +404,13 @@ exit:
       return &(ino->inode);
     }
     break;
+  case DENTOP_REMOVE:
+    break;
+  case DENTOP_CREATE:
+    break;
   }
 
   return NULL;
 }
+
 

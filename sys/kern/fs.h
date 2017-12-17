@@ -20,7 +20,6 @@ enum dent_op {
 struct inode_ops {
   int (*read)(struct inode *inode, u8 *base, u32 offset, size_t count);
   int (*write)(struct inode *inode, u8 *base, u32 offset, size_t count);
-  void (*resize)(struct inode *inode, u32 newsize);
   struct inode *(*opdent)(struct inode *inode, const char *name, int op);
 };
 

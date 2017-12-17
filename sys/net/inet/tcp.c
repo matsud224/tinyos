@@ -5,6 +5,7 @@
 #include <net/util.h>
 #include <kern/kernlib.h>
 #include <kern/lock.h>
+#include <kern/timer.h>
 #include <kern/thread.h>
 #include <kern/workqueue.h>
 #include <net/inet/errno.h>
@@ -264,7 +265,7 @@ void tcpcb_timer_add(struct tcpcb *cb, u32 msec, struct timinfo *tinfo) {
   tinfo->cb = cb;
   tinfo->msec = msec;
   list_pushback(&tinfo->link, &cb->timer_list);
-  workqueue_add_delayed(tcp_timer_wq, tcp_timer_do, tinfo, msec);
+  workqueue_add_delayed(tcp_timer_wq, tcp_timer_do, tinfo, msecs_to_ticks(msec));
 }
 
 void tcpcb_timer_remove_all(struct tcpcb *cb) {
@@ -718,11 +719,12 @@ printf("tcp_arrival: seq# %u to %u  rcv_nxt=%u\n", start_seq, end_seq, cb->rcv_n
 
   list_pushfront(&newa->link, p);
 
-  arrival_show(cb);
+  //arrival_show(cb);
   struct tcp_arrival *head = list_entry(list_first(&cb->arrival_list), struct tcp_arrival, link);
-  if(cb->rcv_nxt == head->start_seq){
+  if(LE_LE(head->start_seq, cb->rcv_nxt, head->end_seq)) {
     u32 hlen = head->end_seq - head->start_seq + 1;
     cb->rcv_nxt = head->end_seq + 1;
+printf("tcp_arrival: rcv_nxt=%u\n", cb->rcv_nxt);
     cb->rcv_wnd = cb->rcv_buf_len - hlen;
     thread_wakeup(cb);
   }
@@ -1343,7 +1345,7 @@ retry:
     }
 
     while(true) {
-      if(pending->state == TCP_STATE_ESTABLISHED){
+      if(pending->state == TCP_STATE_ESTABLISHED || pending->state == TCP_STATE_CLOSE_WAIT){
         mutex_unlock(&pending->mtx);
         return pending;
       }else if(pending->state == TCP_STATE_CLOSED){
@@ -1353,9 +1355,7 @@ retry:
       }
 
       mutex_unlock(&pending->mtx);
-puts("sleeping...");
       thread_sleep(pending);
-puts("wakeup...");
       mutex_lock(&pending->mtx);
     }
     break;

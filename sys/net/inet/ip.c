@@ -84,7 +84,7 @@ NET_INIT void ip_init(){
 
 static void ip_10sec_thread(void *arg UNUSED) {
   while(1) {
-    thread_start_alarm(ip_10sec_thread, 10*SEC);
+    thread_set_alarm(ip_10sec_thread, msecs_to_ticks(10000));
     thread_sleep(ip_10sec_thread);
 
     mutex_lock(&reasm_ongoing_mtx);
@@ -210,7 +210,7 @@ void ip_rx(struct pktbuf *pkt) {
 
     if(list_is_empty(&info->holelist)) {
       //フラグメントが揃った
-printf("fragmented packet (%dbytes)\n", info->headerlen + info->datalen);
+      //printf("fragmented packet (%dbytes)\n", info->headerlen + info->datalen);
       pkt = pktbuf_alloc(info->headerlen + info->datalen);
       pktbuf_copyin(pkt, info->head_frame->head - info->headerlen, info->headerlen, 0);
       iphdr = (struct ip_hdr *)pkt->head;

@@ -203,7 +203,7 @@ static void send_arprequest(in_addr_t dstaddr, struct netdev *dev){
 
 static void arp_10sec_thread(void *arg UNUSED) {
   while(1) {
-    thread_start_alarm(arp_10sec_thread, 10*SEC);
+    thread_set_alarm(arp_10sec_thread, msecs_to_ticks(10000));
     thread_sleep(arp_10sec_thread);
     
     mutex_lock(&arptbl_mtx);

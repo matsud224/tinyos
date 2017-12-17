@@ -39,20 +39,22 @@ struct workqueue *workqueue_new(char *name) {
 
 static void _workqueue_add(void *arg) {
   struct work *w = (struct work *)arg;
-  list_pushback(&w->link, &w->wq->queue);
-
+IRQ_DISABLE
+  list_pushfront(&w->link, &w->wq->queue);
+IRQ_RESTORE
   thread_wakeup(w->wq);
 }
 
-void workqueue_add_delayed(struct workqueue *wq, void (*func)(void *), void *arg, int delay) {
+void workqueue_add_delayed(struct workqueue *wq, void (*func)(void *), void *arg, int ticks) {
   struct work *w = malloc(sizeof(struct work));
   w->func = func;
   w->arg = arg;
   w->wq = wq;
 
-  timer_start(delay, _workqueue_add, w);
-
-  return w;
+  if(ticks == 0)
+    _workqueue_add(w);
+  else
+    timer_start(ticks, _workqueue_add, w);
 }
 
 void workqueue_add(struct workqueue *wq, void (*func)(void *), void *arg) {

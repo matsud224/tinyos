@@ -296,10 +296,14 @@ IRQ_RESTORE
 }
 
 void rtl8139_rx_all(void *arg) {
-  while(rtl8139_rx_one() == 0);
+  int rx_count = 0;
+  while(rtl8139_rx_one() == 0)
+    rx_count++;
 
-  thread_wakeup(&rtldev.netdev_info);
-  workqueue_add(ether_wq, ether_rx, &rtldev.netdev_info);
+  if(rx_count > 0) {
+    thread_wakeup(&rtldev.netdev_info);
+    workqueue_add(ether_wq, ether_rx, &rtldev.netdev_info);
+  }
 }
 
 void rtl8139_isr() {
@@ -347,7 +351,6 @@ int rtl8139_tx(struct netdev *dev UNUSED, struct pktbuf *pkt) {
 struct pktbuf *rtl8139_rx(struct netdev *dev UNUSED) {
   mutex_lock(&rtldev.rxqueue_mtx);
   if(queue_is_empty(&rtldev.rxqueue)) {
-    workqueue_add(rx_wq, rtl8139_rx_all, NULL);
     mutex_unlock(&rtldev.rxqueue_mtx);
     return NULL;
   }

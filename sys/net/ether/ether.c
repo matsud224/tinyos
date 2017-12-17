@@ -7,8 +7,6 @@
 #include <kern/thread.h>
 #include <kern/workqueue.h>
 
-#define ETHER_RX_MAX 16 //一度に処理するフレーム数
-
 const struct etheraddr ETHER_ADDR_BROADCAST = {
   .addr = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
 };
@@ -23,14 +21,10 @@ NET_INIT void ether_init() {
 }
 
 void ether_rx(void *ndev) {
-  int remain = ETHER_RX_MAX;
   struct netdev *dev = (struct netdev *)ndev;
   struct pktbuf *frame = NULL;
-  while(--remain && (frame = netdev_rx_nowait(dev)) != NULL)
+  while((frame = netdev_rx_nowait(dev)) != NULL)
     ether_rx_one(frame);
-  if(remain == 0) {
-    workqueue_add(ether_wq, ether_rx, ndev);
-  }
 }
 
 static void ether_rx_one(struct pktbuf *frame) {

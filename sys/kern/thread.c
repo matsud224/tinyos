@@ -111,7 +111,7 @@ void thread_test2(void *arg) {
   u8 buf[2048];
   int len;
   while((len = recv(sock, buf, sizeof(buf), 0)) > 0) {
-    printf("tcp: received %d byte\n", len);
+    //printf("tcp: received %d byte\n", len);
     buf[len] = '\0';
     puts(buf);
   }
@@ -145,6 +145,7 @@ void thread_echo(void *arg) {
       puts("--------------------------------------------");
       tcp_stat();
       puts("--------------------------------------------");
+      timer_start(0, puts, "hello, world!");
       chardev_write(0, &data, 1);
       if(sendto(sock, &data, 1, 0, (struct sockaddr *)&addr) < 0)
         puts("sendto failed");
@@ -279,7 +280,7 @@ void thread_wakeup(void *cause) {
   }
 }
 
-void thread_start_alarm(void *cause, u32 expire) {
+void thread_set_alarm(void *cause, u32 expire) {
   timer_start(expire, thread_wakeup, cause);
 }
 

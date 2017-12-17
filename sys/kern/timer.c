@@ -12,9 +12,9 @@ struct timer_entry {
 static struct timer_entry *timer_head = NULL;
 static mutex timer_mtx;
 
-void timer_start(u32 expire, void (*func)(void *), void *arg) {
+void timer_start(u32 ticks, void (*func)(void *), void *arg) {
   struct timer_entry *t = malloc(sizeof(struct timer_entry));
-  t->expire = expire;
+  t->expire = ticks;
   t->func = func;
   t->arg = arg;
   t->next = NULL;

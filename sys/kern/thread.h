@@ -69,6 +69,6 @@ void thread_sched(void);
 void thread_sleep(void *cause);
 void thread_wakeup(void *cause);
 void thread_yield(void);
-void thread_start_alarm(void *cause, u32 expire);
+void thread_set_alarm(void *cause, u32 expire);
 struct deferred_func *defer_exec(void (*func)(void *), void *arg, int priority, int delay);
 void *defer_cancel(struct deferred_func *f);

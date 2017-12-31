@@ -66,7 +66,6 @@ struct v6fs_phyinode {
 static const struct inode_ops v6fs_inode_ops = {
   .read = v6fs_inode_read,
   .write = NULL,
-  .resize = NULL,
   .opdent = v6fs_inode_opdent
 };
 

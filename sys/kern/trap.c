@@ -12,8 +12,8 @@ struct trap_stack {
   u32 eflags;
 };
 
-void gpe_isr() {
-  printf("General Protection Exception in thread#%d\n", current->pid);
+void gpe_isr(int errcode) {
+  printf("General Protection Exception in thread#%d, errorcode = %d\n", current->pid, errcode);
   thread_exit();
 }
 

@@ -63,9 +63,11 @@ rtl8139_inthandler:
 extern gpe_isr
 global gpe_inthandler
 gpe_inthandler:
-  add esp, 4 ; pop error code
+  pop ebx ; pop error code
   handler_enter
+  push ebx
   call gpe_isr
+  pop ebx
   handler_leave
 
 extern pf_isr

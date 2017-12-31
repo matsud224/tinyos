@@ -2,7 +2,7 @@
 #include <kern/types.h>
 
 void gpe_inthandler(void);
-void gpe_isr(void);
+void gpe_isr(int errcode);
 
 void pf_inthandler(void);
 void pf_isr(u32 addr, u32 eip);

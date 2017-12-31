@@ -48,7 +48,7 @@ struct thread_state {
 #define TASK_STATE_EXITED		2
 
 struct thread {
-  struct thread_state regs;
+  struct thread_state regs; //do not move
   struct list_head link;
   void *kstack;
   u32 kstacksize;
@@ -64,6 +64,7 @@ void dispatcher_init(void);
 void dispatcher_run(void);
 void kstack_setaddr(void);
 struct thread *kthread_new(void (*func)(void *), void *arg, char *name);
+int thread_exec(struct inode *ino);
 void thread_run(struct thread *t);
 void thread_sched(void);
 void thread_sleep(void *cause);

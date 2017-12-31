@@ -34,19 +34,14 @@ void thread_b(void *arg) {
   } else {
     puts("mount ok");
   }
-  struct inode *ino = fs_nametoi("/foo/../foo/rfc3514.txt");
+  struct inode *ino = fs_nametoi("/hello/hello");
   if(ino == NULL) {
     puts("nametoi failed.");
     while(1);
   }
-  printf("file found inode=%x\n", ino);
-  vm_add_area(current->vmmap, 0x20000, PAGESIZE*2, inode_mapper_new(ino, 0), 0);
-
-  for(u32 addr=0x20100; addr<0x20200; addr++) {
-    printf("%c", *(char*)addr);
-    if(*(char*)addr == '\0')
-      break;
-  }
+  printf("file found\n");
+  
+  thread_exec(ino);
 }
 
 void thread_idle(void *arg) {
@@ -143,13 +138,9 @@ void thread_echo(void *arg) {
   u8 data;
   while(1) {
     if(chardev_read(0, &data, 1) == 1) {
-      puts("--------------------------------------------");
-      tcp_stat();
-      puts("--------------------------------------------");
-      timer_start(msecs_to_ticks(3000), puts, "hello, world!");
       chardev_write(0, &data, 1);
-      if(sendto(sock, &data, 1, 0, (struct sockaddr *)&addr) < 0)
-        puts("sendto failed");
+      //if(sendto(sock, &data, 1, 0, (struct sockaddr *)&addr) < 0)
+        //puts("sendto failed");
     }
   }
 
@@ -171,7 +162,7 @@ void dispatcher_init() {
   //thread_run(kthread_new(thread_a, 3));
   thread_run(kthread_new(thread_b, NULL, "fs test thread"));
   thread_run(kthread_new(thread_idle, NULL, "idle task"));
-  //thread_run(kthread_new(thread_echo, NULL, "echo task"));
+  thread_run(kthread_new(thread_echo, NULL, "echo task"));
   //thread_run(kthread_new(thread_test, NULL, "udp test task"));
   //thread_run(kthread_new(thread_test2, NULL, "tcp test task"));
 }
@@ -209,6 +200,22 @@ struct thread *kthread_new(void (*func)(void *), void *arg, char *name) {
   *(u32 *)t->regs.esp = 0x200; //initial eflags(IF=1)
   return t;
 }
+
+#define USER_STACK_BOTTOM 0xc0000000
+#define USER_STACK_SIZE 0x1000
+int thread_exec(struct inode *ino) {
+  int (*entrypoint)(void) = elf32_load(ino);
+  if(entrypoint == NULL)
+    return -1;
+
+  //prepare user space stack
+  vm_add_area(current->vmmap, USER_STACK_BOTTOM-USER_STACK_SIZE, USER_STACK_SIZE, anon_mapper_new(USER_STACK_SIZE), 0);
+
+  jmpto_userspace(entrypoint, USER_STACK_BOTTOM - 4);
+
+  return 0;
+}
+
 
 void thread_run(struct thread *t) {
   t->state = TASK_STATE_RUNNING;

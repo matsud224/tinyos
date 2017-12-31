@@ -183,7 +183,6 @@ saveesp:
 
 extern thread_sched
 extern kstack_setaddr
-extern print_stack
 
 global _thread_yield
 _thread_yield:
@@ -243,4 +242,23 @@ int80:
   mov eax, 3
   int 0x80
   ret
+
+
+global jmpto_userspace
+jmpto_userspace:
+  cli
+  mov eax, [esp+4]
+  mov ecx, [esp+8]
+  mov dx, 0x1b ;RPL
+  mov ds, edx
+  mov es, edx
+  mov fs, edx
+  mov gs, edx
+  push dword 0x23
+  push ecx
+  push 0x200
+  push dword 0x1b
+  push eax
+  iretd
+
 

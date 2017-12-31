@@ -23,3 +23,4 @@ void _thread_yield(void);
 void cpu_halt(void);
 u32 xchg(u32 value, void *mem);
 void jmpto_current(void);
+void jmpto_userspace(void *entrypoint, void *userstack);

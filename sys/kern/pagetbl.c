@@ -44,12 +44,12 @@ void pagetbl_init() {
   u32 addr = 0x0; 
   for(int i = st_start_index; i < st_end_index;
         i++, addr += 0x400000){
-    kernspace_pdt[i] = addr | PDE_PRESENT | PDE_RW | PDE_SIZE_4MB;
+    kernspace_pdt[i] = addr | PDE_PRESENT | PDE_RW | PDE_SIZE_4MB | PDE_USER;
   }
   //kernel space virtual area
   for(int i = st_end_index; i < 1024; i++) {
     u32 *pt = get_zeropage();
-    kernspace_pdt[i] = KERN_VMEM_TO_PHYS((u32)pt) | PDE_PRESENT | PDE_RW;
+    kernspace_pdt[i] = KERN_VMEM_TO_PHYS((u32)pt) | PDE_PRESENT | PDE_RW | PDE_USER;
   }
 
   flushtlb(kernspace_pdt);
@@ -59,9 +59,9 @@ void pagetbl_add_mapping(u32 *pdt, u32 vaddr, u32 paddr) {
   int pdtindex = vaddr>>22;
   int ptindex = (vaddr>>12) & 0x3ff;
   if((pdt[pdtindex] & PDE_PRESENT) == 0) {
-    pdt[pdtindex] = KERN_VMEM_TO_PHYS((u32)get_zeropage()) | PDE_PRESENT | PDE_RW;
+    pdt[pdtindex] = KERN_VMEM_TO_PHYS((u32)get_zeropage()) | PDE_PRESENT | PDE_RW | PDE_USER;
   }
 
   u32 *pt = (u32 *)(PHYS_TO_KERN_VMEM(pdt[pdtindex] & ~0xfff));
-  pt[ptindex] = (KERN_VMEM_TO_PHYS(paddr) & ~0xfff) | PTE_PRESENT | PTE_RW;
+  pt[ptindex] = (KERN_VMEM_TO_PHYS(paddr) & ~0xfff) | PTE_PRESENT | PTE_RW | PTE_USER;
 }

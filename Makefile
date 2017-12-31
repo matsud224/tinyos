@@ -11,6 +11,7 @@ RM						= rm -f
 BINDIR				= bin
 BOOTDIR				= boot
 SYSDIR				= sys
+USRDIR				= usr
 
 CRTI_OBJ		 	= crti.o
 CRTBEGIN_OBJ	:= $(shell $(CC) $(CFLAGS) -print-file-name=crtbegin.o)
@@ -22,6 +23,7 @@ all:
 	-mkdir -p $(BINDIR)
 	$(MAKE) -C $(BOOTDIR)
 	$(MAKE) -C $(SYSDIR)
+	$(MAKE) -C $(USRDIR) install
 	cat $(BINDIR)/boot.bin $(BINDIR)/kernel.bin > $(BINDIR)/kernel
   
 .PHONY: clean

@@ -4,6 +4,7 @@
 #include <kern/pagetbl.h>
 #include <kern/thread.h>
 #include <kern/kernlib.h>
+#include <kern/syscall.h>
 
 struct trap_stack {
   u32 errcode;
@@ -31,5 +32,9 @@ void pf_isr(u32 addr, u32 eip) {
 
 void syscall_isr(u32 eax, u32 ebx, u32 ecx, u32 edx, u32 esi, u32 edi) {
   printf("syscall: %x,%x,%x,%x,%x,%x\n", eax, ebx, ecx, edx, esi, edi);
-  thread_yield();
+  if(eax >= NSYSCALLS) {
+    printf("syscall#%d is invalid.\n", eax);
+    thread_exit();
+  }
+  syscall_table[eax](ebx, ecx, edx, esi, edi);
 }

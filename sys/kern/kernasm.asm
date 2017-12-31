@@ -256,7 +256,7 @@ jmpto_userspace:
   mov gs, edx
   push dword 0x23
   push ecx
-  push 0x200
+  push dword 0x200
   push dword 0x1b
   push eax
   iretd

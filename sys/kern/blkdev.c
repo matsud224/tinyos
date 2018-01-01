@@ -3,6 +3,7 @@
 #include <kern/blkdev.h>
 #include <kern/kernlib.h>
 #include <kern/thread.h>
+#include <kern/lock.h>
 
 struct blkdev *blkdev_tbl[MAX_BLKDEV];
 static u16 nblkdev;
@@ -18,8 +19,9 @@ struct chunk {
 static struct chunk *chunklist;
 
 void blkdev_init() {
-  for(int i=0; i<MAX_BLKDEV; i++)
+  for(int i=0; i<MAX_BLKDEV; i++) {
     blkdev_tbl[i] = NULL;
+  }
   nblkdev = 0;
 }
 
@@ -62,9 +64,14 @@ static void bufallocator_free(void *addr) {
 }
 
 struct blkdev_buf *blkdev_getbuf(devno_t devno, blkno_t blockno) {
+printf("dev %d block %d\n", devno, blockno);
   struct blkdev *dev = blkdev_tbl[devno];
   if(dev == NULL)
     return NULL;
+
+  for(struct blkdev_buf *p=dev->buf_list; p!=NULL; p=p->next) {
+    //printf("\tblockno: %d(%x)\n", p->blockno, p);
+  }
 
   for(struct blkdev_buf *p=dev->buf_list; p!=NULL; p=p->next) {
     if(p->blockno == blockno) {
@@ -90,11 +97,11 @@ void blkdev_releasebuf(struct blkdev_buf *buf) {
 }
 
 static void waitbuf(struct blkdev_buf *buf) {
-  cli();
+IRQ_DISABLE
   while((buf->flags & BDBUF_READY) == 0) {
     thread_sleep(buf);
   }
-  sti();
+IRQ_RESTORE
 }
 
 void blkdev_buf_sync_nowait(struct blkdev_buf *buf) {

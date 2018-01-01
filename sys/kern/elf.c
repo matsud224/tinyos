@@ -26,7 +26,7 @@ void *elf32_load(struct inode *ino) {
     free(ehdr);
     return NULL;
   }
-
+  puts("valid elf32 executable.");
   u32 phdr_table_size = ehdr->e_phentsize * ehdr->e_phnum;
   struct elf32_phdr *phdr_table = malloc(phdr_table_size);
   fs_read(ino, phdr_table, ehdr->e_phoff, phdr_table_size);

@@ -1,5 +1,6 @@
 #pragma once
 #include <kern/kernlib.h>
+#include <kern/lock.h>
 
 #define BLOCKSIZE 512
 

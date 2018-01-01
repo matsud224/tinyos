@@ -229,12 +229,13 @@ static int fat32_inode_read(struct inode *inode, u8 *base, u32 offset, u32 count
     u32 in_blk_off = in_clus_off % BLOCKSIZE;
     for(int sec = in_clus_off / BLOCKSIZE; remain > 0 && sec < blks_per_sec; sec++) {
       if(buf != NULL)
-       blkdev_releasebuf(buf);
+        blkdev_releasebuf(buf);
       buf = blkdev_getbuf(devno, cluster_to_sector(f, current_cluster) + sec);
       blkdev_buf_sync(buf);
       u32 copylen = MIN(BLOCKSIZE - in_blk_off, remain);
       memcpy(base, buf->addr + in_blk_off, copylen);
       base += copylen;
+      remain -= copylen;
       in_blk_off = 0;
     }
 

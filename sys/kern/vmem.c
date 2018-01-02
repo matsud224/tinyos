@@ -17,7 +17,7 @@ struct inode_mapper {
 };
 
 u32 anon_mapper_request(struct mapper *m UNUSED, u32 offset UNUSED) {
-  return (u32)page_alloc();
+  return (u32)get_zeropage();
 }
 
 static const struct mapper_ops anon_mapper_ops = {

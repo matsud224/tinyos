@@ -64,14 +64,9 @@ static void bufallocator_free(void *addr) {
 }
 
 struct blkdev_buf *blkdev_getbuf(devno_t devno, blkno_t blockno) {
-printf("dev %d block %d\n", devno, blockno);
   struct blkdev *dev = blkdev_tbl[devno];
   if(dev == NULL)
     return NULL;
-
-  for(struct blkdev_buf *p=dev->buf_list; p!=NULL; p=p->next) {
-    //printf("\tblockno: %d(%x)\n", p->blockno, p);
-  }
 
   for(struct blkdev_buf *p=dev->buf_list; p!=NULL; p=p->next) {
     if(p->blockno == blockno) {

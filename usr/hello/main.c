@@ -10,8 +10,7 @@ void func() {
 }
 
 int main() {
-  //printf("%d\n", 90);
-  syscall1();
-  //func();
+  if(isatty(0) == 45)
+    syscall1();
   return 123;
 }

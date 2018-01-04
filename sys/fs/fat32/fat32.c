@@ -185,8 +185,8 @@ static struct inode *fat32_getroot(struct fs *fs) {
 
 static u32 fat32_fat_at(struct fat32_fs *f, u32 index) {
   struct fat32_boot *boot = &(f->boot);
-  u32 sector = f->fatstart + (index*4/boot->BPB_BytsPerSec);
-  u32 offset = (index*4)%boot->BPB_BytsPerSec;
+  u32 sector = (f->fatstart + index*4)/boot->BPB_BytsPerSec;
+  u32 offset = (f->fatstart + index*4)%boot->BPB_BytsPerSec;
   struct blkdev_buf *buf = blkdev_getbuf(f->devno, sector);
   blkdev_buf_sync(buf);
   u32 entry = buf->addr[offset] & 0x0fffffff;
@@ -199,10 +199,20 @@ static u32 walk_cluster_chain(struct fat32_fs *f, u32 offset, u32 cluster) {
   for(int i=0; i<nlook; i++) {
     cluster = fat32_fat_at(f, cluster);
     if(!is_active_cluster(cluster))
-      return cluster;
+      return BAD_CLUSTER;
   }
   return cluster;
 }
+
+static void show_cluster_chain(struct fat32_fs *f, u32 cluster) {
+  while(1) {
+    cluster = fat32_fat_at(f, cluster);
+    if(!is_active_cluster(cluster))
+      return;
+    printf("\tchain: %d\n", cluster);
+  }
+}
+
 
 static u32 cluster_to_sector(struct fat32_fs *f, u32 cluster);
 
@@ -218,21 +228,24 @@ static int fat32_inode_read(struct inode *inode, u8 *base, u32 offset, u32 count
   struct fat32_inode *fatino = container_of(inode, struct fat32_inode, inode);
   struct blkdev_buf *buf = NULL;
 
+  show_cluster_chain(f, fatino->cluster);
+
   u32 current_cluster = walk_cluster_chain(f, offset, fatino->cluster);
-  u32 blks_per_sec = f->boot.BPB_BytsPerSec / BLOCKSIZE;
+  u32 secs_per_clus = f->boot.BPB_SecPerClus;
   u32 in_clus_off = offset % (f->boot.BPB_SecPerClus * f->boot.BPB_BytsPerSec);
-  
+
   while(remain > 0) {
     if(!is_active_cluster(current_cluster))
       break;
 
     u32 in_blk_off = in_clus_off % BLOCKSIZE;
-    for(int sec = in_clus_off / BLOCKSIZE; remain > 0 && sec < blks_per_sec; sec++) {
+    for(int sec = in_clus_off / BLOCKSIZE; remain > 0 && sec < secs_per_clus; sec++) {
       if(buf != NULL)
         blkdev_releasebuf(buf);
       buf = blkdev_getbuf(devno, cluster_to_sector(f, current_cluster) + sec);
       blkdev_buf_sync(buf);
       u32 copylen = MIN(BLOCKSIZE - in_blk_off, remain);
+      //printf("%x to %x len=%d\n", buf->addr+in_blk_off, base, copylen);
       memcpy(base, buf->addr + in_blk_off, copylen);
       base += copylen;
       remain -= copylen;

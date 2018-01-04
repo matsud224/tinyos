@@ -162,7 +162,7 @@ void dispatcher_init() {
   //thread_run(kthread_new(thread_a, 3));
   thread_run(kthread_new(thread_b, NULL, "fs test thread"));
   thread_run(kthread_new(thread_idle, NULL, "idle task"));
-  thread_run(kthread_new(thread_echo, NULL, "echo task"));
+  //thread_run(kthread_new(thread_echo, NULL, "echo task"));
   //thread_run(kthread_new(thread_test, NULL, "udp test task"));
   //thread_run(kthread_new(thread_test2, NULL, "tcp test task"));
 }

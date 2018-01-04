@@ -36,7 +36,6 @@ KERNENTRY void kernel_main(void) {
   pic_init();
   pagetbl_init();
   vmem_init();
-  pit_init();
   dispatcher_init();
   pci_init();
   blkdev_init();
@@ -47,6 +46,7 @@ KERNENTRY void kernel_main(void) {
 
   
   ip_set_defaultgw(IPADDR(192,168,4,1));
+  pit_init();
 
   dispatcher_run();
 

@@ -26,6 +26,8 @@
 #define IRQ_DISABLE do{ int __ie = geteflags()&0x200; cli();
 #define IRQ_RESTORE if(__ie) sti(); }while(0);
 
+#define pagealign(a) ((a)&~(PAGESIZE-1))
+
 int abs(int n);
 char *strncpy(char *dest, const char *src, size_t n);
 size_t strnlen(const char *s, size_t n);

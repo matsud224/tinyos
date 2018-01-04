@@ -1,5 +1,5 @@
 BINNAME		= hello
-CC				= i686-elf-gcc
+CC				= i686-tinyos-gcc
 CFLAGS		= -std=gnu99 -O2 -Wall -Wextra -g -I../../
 OBJCOPY		= i686-elf-objcopy
 NASM			= nasm
@@ -12,11 +12,11 @@ ASMS			= $(wildcard *.asm)
 OBJS			= $(addprefix $(OBJDIR)/, $(notdir $(SRCS:.c=.o))) $(addprefix $(OBJDIR)/, $(notdir $(ASMS:.asm=.o)))
 
 $(BINNAME): $(OBJS)
-	$(CC) $(CFLAGS) -o $@ -ffreestanding -nostdlib -lgcc $^
+	$(CC) $(CFLAGS) -o $@ $^
 
 $(OBJDIR)/%.o: %.c
 	-mkdir -p $(OBJDIR)
-	$(CC) $(CFLAGS) -ffreestanding -c $^ -o $@
+	$(CC) $(CFLAGS) -c $^ -o $@
 
 $(OBJDIR)/%.o: %.asm
 	-mkdir -p $(OBJDIR)

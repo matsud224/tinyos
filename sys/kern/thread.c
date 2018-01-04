@@ -209,7 +209,9 @@ int thread_exec(struct inode *ino) {
     return -1;
 
   //prepare user space stack
-  vm_add_area(current->vmmap, USER_STACK_BOTTOM-USER_STACK_SIZE, USER_STACK_SIZE, anon_mapper_new(USER_STACK_SIZE), 0);
+  vm_add_area(current->vmmap, USER_STACK_BOTTOM-USER_STACK_SIZE, USER_STACK_SIZE, anon_mapper_new(), 0);
+  printf("loaded: %x - %x (stack, anon mapping)\n", USER_STACK_BOTTOM-USER_STACK_SIZE, USER_STACK_BOTTOM-USER_STACK_SIZE+USER_STACK_SIZE);
+
 
   jmpto_userspace(entrypoint, USER_STACK_BOTTOM - 4);
 

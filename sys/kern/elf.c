@@ -18,6 +18,7 @@ int elf32_is_valid_exec(struct elf32_hdr *hdr) {
   return 1;
 }
 
+
 void *elf32_load(struct inode *ino) {
   struct elf32_hdr *ehdr = malloc(sizeof(struct elf32_hdr));
   fs_read(ino, ehdr, 0, sizeof(struct elf32_hdr));
@@ -36,14 +37,8 @@ void *elf32_load(struct inode *ino) {
     struct elf32_phdr *phdr = (struct elf32_phdr *)((u8 *)phdr_table + ehdr->e_phentsize*i);
     switch(phdr->p_type) {
     case PT_LOAD:
-      if(phdr->p_filesz != 0) {
-        vm_add_area(current->vmmap, phdr->p_vaddr, phdr->p_filesz, inode_mapper_new(ino, phdr->p_offset), 0);
-        printf("loaded: %x - %x (file mapping)\n", phdr->p_vaddr, phdr->p_vaddr + phdr->p_filesz);
-      }
-      if(phdr->p_filesz < phdr->p_memsz) {
-        vm_add_area(current->vmmap, phdr->p_vaddr+phdr->p_filesz, phdr->p_memsz - phdr->p_filesz, anon_mapper_new(phdr->p_memsz - phdr->p_filesz), 0);
-        printf("loaded: %x - %x (anon mapping)\n", phdr->p_vaddr+phdr->p_filesz, phdr->p_vaddr+phdr->p_filesz+(phdr->p_memsz-phdr->p_filesz));
-      }
+      vm_add_area(current->vmmap, phdr->p_vaddr, phdr->p_memsz, inode_mapper_new(ino, phdr->p_offset, phdr->p_filesz), 0);
+      printf("loaded: %x - %x (file mapping)\n", phdr->p_vaddr, phdr->p_vaddr + phdr->p_filesz);
       break;
     }
   }

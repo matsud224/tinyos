@@ -6,38 +6,53 @@
 #define VM_AREA_HAVE_SUBMAP 0x1
 
 struct anon_mapper {
-  size_t size;
   struct mapper mapper;
 };
 
 struct inode_mapper {
   struct inode *inode;
-  size_t offset;
+  size_t file_off;
+  size_t len;
   struct mapper mapper;
 };
 
 u32 anon_mapper_request(struct mapper *m UNUSED, u32 offset UNUSED) {
-  return (u32)get_zeropage();
+  u8 *p = (u32)get_zeropage();
+  printf("allocated: %x\n", p);
+  return (u32)p;
 }
 
 static const struct mapper_ops anon_mapper_ops = {
   .request = anon_mapper_request
 };
 
-struct mapper *anon_mapper_new(u32 size) {
+struct mapper *anon_mapper_new() {
   struct anon_mapper *m;
   if((m = malloc(sizeof(struct anon_mapper))) == NULL)
     return NULL;
 
-  m->size = size;
   m->mapper.ops = &anon_mapper_ops;
   return &(m->mapper);
 }
 
 u32 inode_mapper_request(struct mapper *m, u32 offset) {
-  u8 *p = page_alloc();
+  u8 *p = get_zeropage();
   struct inode_mapper *im = container_of(m, struct inode_mapper, mapper);
-  fs_read(im->inode, p, im->offset + (offset & ~(PAGESIZE-1)), PAGESIZE);
+  u32 st = pagealign(offset);
+  u32 end = pagealign(offset) + PAGESIZE;
+  u32 readlen = PAGESIZE;
+  if(end > m->area->offset + im->len)
+    readlen -= MIN(end - (m->area->offset + im->len), PAGESIZE);
+  if(offset < PAGESIZE)
+    readlen -= m->area->offset;
+
+  if(readlen != 0) {
+    if(offset < PAGESIZE)
+      fs_read(im->inode, p+m->area->offset, st - m->area->offset + im->file_off, readlen);
+    else
+      fs_read(im->inode, p, st - m->area->offset + im->file_off, readlen);
+  }
+  printf("allocated: %x\n", p);
   return (u32)p;
 }
 
@@ -45,13 +60,14 @@ static const struct mapper_ops inode_mapper_ops = {
   .request = inode_mapper_request
 };
 
-struct mapper *inode_mapper_new(struct inode *inode, u32 offset) {
+struct mapper *inode_mapper_new(struct inode *inode, u32 file_off, u32 len) {
   struct inode_mapper *m;
   if((m = malloc(sizeof(struct inode_mapper))) == NULL)
     return NULL;
 
   m->inode = inode;
-  m->offset = offset;
+  m->file_off = file_off;
+  m->len = len;
   m->mapper.ops = &inode_mapper_ops;
   return &(m->mapper);
 }
@@ -90,13 +106,14 @@ int vm_add_area(struct vm_map *map, u32 start, size_t size, struct mapper *mappe
   if(new == NULL)
     return -1;
   new->submap = NULL;
-  new->start = start;
-  new->size = size;
-  new->offset = 0;
+  new->start = pagealign(start);
+  new->size = pagealign(size) + PAGESIZE;
+  new->offset = start & (PAGESIZE-1);
   new->flags = 0;
   new->mapper = mapper;
   new->next = map->area_list;
   map->area_list = new;
+  mapper->area = new;
   return 0;
 }
 

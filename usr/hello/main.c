@@ -1,14 +1,17 @@
 #include "syscall.h"
+#include <unistd.h>
+#include <stdio.h>
 
 int a = 2;
 
-int func() {
+void func() {
   if(a)
     syscall1();
 }
 
 int main() {
-  func();
-  exit();
+  //printf("%d\n", 90);
+  syscall1();
+  //func();
   return 123;
 }

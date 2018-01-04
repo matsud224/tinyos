@@ -15,6 +15,7 @@ struct trap_stack {
 
 void gpe_isr(int errcode) {
   printf("General Protection Exception in thread#%d, errorcode = %d\n", current->pid, errcode);
+  while(1);
   thread_exit();
 }
 
@@ -23,10 +24,14 @@ void pf_isr(u32 addr, u32 eip) {
   struct vm_area *varea = vm_findarea(current->vmmap, addr);
   if(varea == NULL) {
     printf("Segmentation Fault in thread#%d\n", current->pid);
+  while(1);
     thread_exit();
   } else {
     u32 paddr = varea->mapper->ops->request(varea->mapper, addr - varea->start);
     pagetbl_add_mapping(current->regs.cr3, addr, paddr);
+  for(int i=0; i<10; i++) {
+    printf("%x ", *((u8*)0x80480c0+i));
+  }
   }
 }
 

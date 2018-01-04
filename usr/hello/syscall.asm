@@ -15,8 +15,8 @@ global funcall
 funcall:
 ret
 
-global exit
-exit:
+global do_exit
+do_exit:
 mov eax, 0x0
 systemcall
 ret

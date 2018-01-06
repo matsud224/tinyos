@@ -76,12 +76,14 @@ pf_inthandler:
   add esp, 4 ; pop error code
   handler_enter
   mov ecx, esp
+  mov eax, [ecx+24] ;saved esp
+  push eax
   mov eax, [ecx+12] ;saved eip
   push eax
   mov eax, cr2
   push eax
   call pf_isr
-  add esp, 8
+  add esp, 12
   handler_leave
 
 extern syscall_isr

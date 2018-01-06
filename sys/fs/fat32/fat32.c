@@ -185,11 +185,11 @@ static struct inode *fat32_getroot(struct fs *fs) {
 
 static u32 fat32_fat_at(struct fat32_fs *f, u32 index) {
   struct fat32_boot *boot = &(f->boot);
-  u32 sector = (f->fatstart + index*4)/boot->BPB_BytsPerSec;
-  u32 offset = (f->fatstart + index*4)%boot->BPB_BytsPerSec;
+  u32 sector = f->fatstart + (index*4/boot->BPB_BytsPerSec);
+  u32 offset = index * 4 % boot->BPB_BytsPerSec;
   struct blkdev_buf *buf = blkdev_getbuf(f->devno, sector);
   blkdev_buf_sync(buf);
-  u32 entry = buf->addr[offset] & 0x0fffffff;
+  u32 entry = *((u32*)((u8*)(buf->addr) + offset)) & 0x0fffffff;
   blkdev_releasebuf(buf);
   return entry;
 }
@@ -206,10 +206,10 @@ static u32 walk_cluster_chain(struct fat32_fs *f, u32 offset, u32 cluster) {
 
 static void show_cluster_chain(struct fat32_fs *f, u32 cluster) {
   while(1) {
+    printf("\tchain: %d\n", cluster);
     cluster = fat32_fat_at(f, cluster);
     if(!is_active_cluster(cluster))
       return;
-    printf("\tchain: %d\n", cluster);
   }
 }
 
@@ -228,8 +228,6 @@ static int fat32_inode_read(struct inode *inode, u8 *base, u32 offset, u32 count
   struct fat32_inode *fatino = container_of(inode, struct fat32_inode, inode);
   struct blkdev_buf *buf = NULL;
 
-  show_cluster_chain(f, fatino->cluster);
-
   u32 current_cluster = walk_cluster_chain(f, offset, fatino->cluster);
   u32 secs_per_clus = f->boot.BPB_SecPerClus;
   u32 in_clus_off = offset % (f->boot.BPB_SecPerClus * f->boot.BPB_BytsPerSec);
@@ -239,13 +237,15 @@ static int fat32_inode_read(struct inode *inode, u8 *base, u32 offset, u32 count
       break;
 
     u32 in_blk_off = in_clus_off % BLOCKSIZE;
+    //printf("\tcluster: %d\n", current_cluster);
     for(int sec = in_clus_off / BLOCKSIZE; remain > 0 && sec < secs_per_clus; sec++) {
       if(buf != NULL)
         blkdev_releasebuf(buf);
+
+      //printf("\t\tsector: %d\n", sec);
       buf = blkdev_getbuf(devno, cluster_to_sector(f, current_cluster) + sec);
       blkdev_buf_sync(buf);
       u32 copylen = MIN(BLOCKSIZE - in_blk_off, remain);
-      //printf("%x to %x len=%d\n", buf->addr+in_blk_off, base, copylen);
       memcpy(base, buf->addr + in_blk_off, copylen);
       base += copylen;
       remain -= copylen;
@@ -351,13 +351,13 @@ static struct inode *fat32_inode_opdent(struct inode *inode, const char *name, i
   struct fat32_dent found_dent;
 
   u32 current_cluster = fatino->cluster;
-  u32 blks_per_sec = f->boot.BPB_BytsPerSec / BLOCKSIZE;
+  u32 secs_per_clus = f->boot.BPB_SecPerClus;
   
   while(1) {
     if(!is_active_cluster(current_cluster))
       break;
 
-    for(int sec = 0; sec < blks_per_sec; sec++) {
+    for(int sec = 0; sec < secs_per_clus; sec++) {
       if(buf != NULL)
        blkdev_releasebuf(buf);
       buf = blkdev_getbuf(devno, cluster_to_sector(f, current_cluster) + sec);

@@ -18,7 +18,6 @@ struct inode_mapper {
 
 u32 anon_mapper_request(struct mapper *m UNUSED, u32 offset UNUSED) {
   u8 *p = (u32)get_zeropage();
-  printf("allocated: %x\n", p);
   return (u32)p;
 }
 
@@ -52,7 +51,6 @@ u32 inode_mapper_request(struct mapper *m, u32 offset) {
     else
       fs_read(im->inode, p, st - m->area->offset + im->file_off, readlen);
   }
-  printf("allocated: %x\n", p);
   return (u32)p;
 }
 
@@ -106,14 +104,15 @@ int vm_add_area(struct vm_map *map, u32 start, size_t size, struct mapper *mappe
   if(new == NULL)
     return -1;
   new->submap = NULL;
-  new->start = pagealign(start);
-  new->size = pagealign(size) + PAGESIZE;
+  new->start = start;
+  new->size = size;
   new->offset = start & (PAGESIZE-1);
   new->flags = 0;
   new->mapper = mapper;
   new->next = map->area_list;
   map->area_list = new;
   mapper->area = new;
+printf("vm_add_area: from %x size %x(%x) offset %x\n", new->start, new->size, size, new->offset);
   return 0;
 }
 

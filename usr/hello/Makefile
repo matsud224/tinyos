@@ -1,6 +1,6 @@
 BINNAME		= hello
 CC				= i686-tinyos-gcc
-CFLAGS		= -std=gnu99 -O2 -Wall -Wextra -g -I../../
+CFLAGS		= -std=gnu99 -g -O2 -Wall -Wextra -g -I../../
 OBJCOPY		= i686-elf-objcopy
 NASM			= nasm
 RM				= rm -f

@@ -5,38 +5,27 @@
 #include <kern/queue.h>
 #include <net/socket/socket.h>
 
-struct netdev;
-
 struct netdev_ops {
-  void (*open)(struct netdev *dev);
-  void (*close)(struct netdev *dev);
-  int (*tx)(struct netdev *dev, struct pktbuf *pkt);
-  struct pktbuf *(*rx)(struct netdev *dev);
+  void (*open)(int minor);
+  void (*close)(int minor);
+  int (*tx)(int minor, struct pktbuf *pkt);
+  struct pktbuf *(*rx)(int minor);
 };
 
 struct ifaddr {
   struct list_head dev_link;
   struct list_head family_link;
-  struct netdev *dev;
+  devno_t devno;
   u8 len;
   u8 family;
   u8 addr[];
 };
 
-struct netdev {
-  u16 devno;
-  const struct netdev_ops *ops;
-  struct list_head ifaddr_list;
-};
-
-extern struct netdev *netdev_tbl[MAX_NETDEV];
-extern struct list_head ifaddr_tbl[MAX_PF];
-
 void netdev_init(void);
-void netdev_add(struct netdev *dev);
-int netdev_tx(struct netdev *dev, struct pktbuf *pkt);
-int netdev_tx_nowait(struct netdev *dev, struct pktbuf *pkt);
-struct pktbuf *netdev_rx(struct netdev *dev);
-struct pktbuf *netdev_rx_nowait(struct netdev *dev);
-void netdev_add_ifaddr(struct netdev *dev, struct ifaddr *addr);
-struct ifaddr *netdev_find_addr(struct netdev *dev, u16 pf);
+int netdev_register(struct netdev_ops *ops);
+int netdev_tx(devno_t devno, struct pktbuf *pkt);
+int netdev_tx_nowait(devno_t devno, struct pktbuf *pkt);
+struct pktbuf *netdev_rx(devno_t devno);
+struct pktbuf *netdev_rx_nowait(devno_t devno);
+void netdev_add_ifaddr(devno_t devno, struct ifaddr *addr);
+struct ifaddr *netdev_find_addr(devno_t devno, u16 pf);

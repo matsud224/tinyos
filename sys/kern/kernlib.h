@@ -28,6 +28,10 @@
 
 #define pagealign(a) ((a)&~(PAGESIZE-1))
 
+#define DEV_MINOR(n) ((n) & 0xffff)
+#define DEV_MAJOR(n) ((n) >> 16)
+#define DEVNO(ma, mi) (((ma)<<16) | (mi))
+
 int abs(int n);
 char *strncpy(char *dest, const char *src, size_t n);
 size_t strnlen(const char *s, size_t n);

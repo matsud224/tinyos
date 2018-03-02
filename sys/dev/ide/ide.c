@@ -171,20 +171,22 @@ struct ide_dev{
   u32 cmdsets;
   u32 size;
   char model[41];
-  struct blkdev blkdev_info;
 } ide_dev[4];
 
-static void ide_open(void);
-static void ide_close(void);
-static void ide_sync(struct blkdev_buf *);
+static void ide_open(int minor);
+static void ide_close(int minor);
+static void ide_readblk(struct blkbuf *buf);
+static void ide_writeblk(struct blkbuf *buf);
+
 struct blkdev_ops ide_blkdev_ops = {
   .open = ide_open,
   .close = ide_close,
-  .sync = ide_sync
+  .read = ide_readblk,
+  .write = ide_writeblk,
 };
 
 struct request {
-  struct blkdev_buf *buf;
+  struct blkbuf *buf;
   u8 dir;
   u8 nsect;
   u8 rem_nsect;
@@ -302,7 +304,6 @@ DRIVER_INIT void ide_init() {
       ide_dev[drvno].capabilities = *(u16 *)(ide_buf + IDENT_CAPABILITIES);
       ide_dev[drvno].cmdsets = *(u32 *)(ide_buf + IDENT_COMMANDSETS);
       ide_dev[drvno].blkdev_info.ops = &ide_blkdev_ops;
-      ide_dev[drvno].blkdev_info.buf_list = NULL;
      
       if(ide_dev[drvno].cmdsets & (1<<26))
         ide_dev[drvno].size = *(u32 *)(ide_buf + IDENT_MAX_LBA_EXT);
@@ -321,7 +322,6 @@ DRIVER_INIT void ide_init() {
   for(int i = 0; i < 4; i++) {
     if(ide_dev[i].exist) {
       printf("ide drive #%d %dKB %s\n", i, ide_dev[i].size*512, ide_dev[i].model);
-      blkdev_add(&ide_dev[i].blkdev_info);
     } else {
       printf("ide drive #%d not found\n", i);
     }
@@ -403,7 +403,8 @@ static int ide_ata_access(u8 dir, u8 drv, u32 lba, u8 nsect) {
 static void ide_procnext(u8 chan);
 
 void *ide_request(struct request *req) {
-  u8 chan = container_of(req->buf->dev, struct ide_dev, blkdev_info)->channel;
+  u8 chan = ide_dev[DEV_MINOR(req->buf->devno)]->channel;
+
   cli();
   list_pushback(&req->link, &ide_channel[chan].req_queue);
   ide_procnext(chan);
@@ -417,17 +418,15 @@ static void ide_procnext(u8 chan) {
     return;
   struct request *req = container_of(ide_channel[chan].req_queue.next, struct request, link);
 
-  struct ide_dev *dev = container_of(req->buf->dev, struct ide_dev, blkdev_info);
-  ide_ata_access(req->dir, (dev->channel<<1)|dev->drive, req->buf->blockno, req->nsect);
+  struct ide_dev *dev = ide_dev[DEV_MINOR(req->buf->devno)];
+  ide_ata_access(req->dir, (dev->channel<<1)|dev->drive, req->blockno, req->nsect);
 }
 
 static void dequeue_and_next(u8 chan) {
   struct list_head *head = list_pop(&ide_channel[chan].req_queue);
   if(head) {
-    struct blkdev_buf *buf = container_of(head, struct request, link)->buf;
-    buf->flags &= ~(BDBUF_EMPTY|BDBUF_PENDING);
-    buf->flags |= BDBUF_READY;
-    thread_wakeup(buf);
+    struct request *req = container_of(head, struct request, link);
+    thread_wakeup(req->buf);
   }
   ide_procnext(chan);
 }
@@ -442,11 +441,14 @@ static void ide_isr_common(u8 chan) {
         *(req->next_addr++) = data&0xff;
         *(req->next_addr++) = data>>8;
       }
-      if(--req->rem_nsect == 0)
+      if(--req->rem_nsect == 0) {
+        req->buf->flags &= ~BB_PENDING;
         dequeue_and_next(chan);
+      }
     }
   } else {
-    req->buf->flags |= BDBUF_ERROR;
+    req->buf->flags &= ~BB_PENDING;
+    req->buf->flags |= BB_ERROR;
     puts("ide error!");
     dequeue_and_next(chan);
   }
@@ -463,31 +465,45 @@ void ide2_isr() {
   ide_isr_common(IDE_SECONDARY);
 }
 
-static void ide_open() {
-  return;
+static int check_minor(int minor) {
+  if(minor < 0 || minor > 3)
+    return -1;
+  if(!ide_dev[minor].exist)
+    return -1;
+  return 0;
 }
 
-static void ide_close() {
-  return;
+static int ide_open(int minor) {
+  return check_minor(minor);
 }
 
-static void ide_sync(struct blkdev_buf *buf) {
-  int dir;
-  if(buf->flags & BDBUF_EMPTY)
-    dir = ATA_READ;
-  else if(buf->flags & BDBUF_DIRTY)
-    dir = ATA_WRITE;
-  else
-    return;
+static int ide_close(int minor) {
+  return check_minor(minor);
+}
 
+static int ide_readblk(struct blkbuf *buf) {
+  if(check_minor(minor))
+    return -1;
   struct request *req = malloc(sizeof(struct request));
-  if(req == NULL)
-    puts("malloc failed.");
   req->buf = buf;
   req->nsect = req->rem_nsect = 1;
   req->next_addr = buf->addr;
-  req->dir = dir;
+  req->dir = ATA_READ;
   ide_request(req);
+  return 0;
+}
+
+
+static int ide_writeblk(struct blkbuf *buf) {
+  if(check_minor(minor))
+    return -1;
+  struct request *req = malloc(sizeof(struct request));
+  req->buf = buf;
+  req->nsect = req->rem_nsect = 1;
+  req->next_addr = buf->addr;
+  req->dir = ATA_WRITE;
+  ide_request(req);
+  return 0;
 }
 
 

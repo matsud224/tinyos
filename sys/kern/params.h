@@ -18,6 +18,12 @@
 #define MAX_FSINFO		32
 #define MAX_MOUNT			32
 
+#define NBLKBUF				64
+
+#define CLASS_BLKDEV	1
+#define CLASS_CHARDEV	2
+#define CLASS_NETDEV	3
+
 #define GDT_SEL_NULL			0*8
 #define GDT_SEL_CODESEG_0	1*8
 #define GDT_SEL_DATASEG_0	2*8

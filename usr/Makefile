@@ -22,3 +22,12 @@ install: all
 	sudo cp -r ./* $(MNTDIR)
 	sudo umount $(MNTDIR)
 
+.PHONY: mount
+mount:
+	-sudo mkdir $(MNTDIR)
+	sudo mount -t $(DISKTYPE) -o loop $(DISKIMG) $(MNTDIR)
+
+.PHONY: unmount
+unmount:
+	sudo umount $(MNTDIR)
+

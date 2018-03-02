@@ -4,45 +4,37 @@
 
 #define BLOCKSIZE 512
 
-enum {
-  BDBUF_EMPTY		= 0x1,
-  BDBUF_DIRTY		= 0x2,
-  BDBUF_PENDING	= 0x4,
-  BDBUF_ERROR		= 0x8,
-  BDBUF_READY		= 0x10,
+struct blkdev_ops {
+  void (*open)(int minor);
+  void (*close)(int minor);
+  void (*readreq)(struct blkbuf *buf);
+  void (*writereq)(struct blkbuf *buf);
 };
 
-struct blkdev_buf {
+enum {
+  BB_ABSENT		= 0x1,
+  BB_DIRTY		= 0x2,
+  BB_PENDING	= 0x4,
+  BB_ERROR		= 0x8,
+};
+
+struct blkbuf {
   u16 ref;
-  struct blkdev *dev;
-  blkno_t blockno;
+  devno_t devno;
+  blkno_t blkno;
   u8 *addr;
   u32 flags;
-  struct blkdev_buf *next;
-  struct blkdev_buf *prev;
+  struct list_head avail_link;
+  struct list_head dev_link;
 };
-
-struct blkdev_ops {
-  void (*open)(void);
-  void (*close)(void);
-  void (*sync)(struct blkdev_buf *);
-};
-
-struct blkdev {
-  devno_t devno;
-  const struct blkdev_ops *ops;
-  struct blkdev_buf *buf_list;
-};
-
-extern struct blkdev *blkdev_tbl[MAX_BLKDEV];
 
 void blkdev_init(void);
 void blkdev_add(struct blkdev *dev);
-struct blkdev_buf *blkdev_getbuf(devno_t devno, blkno_t blockno);
-void blkdev_releasebuf(struct blkdev_buf *buf);
-void blkdev_buf_sync_nowait(struct blkdev_buf *buf);
-void blkdev_buf_sync(struct blkdev_buf *buf);
-void blkdev_buf_markdirty(struct blkdev_buf *buf);
-
-
-
+int blkdev_register(struct blkdev_ops *ops);
+int blkdev_open(devno_t devno);
+int blkdev_close(devno_t devno);
+struct blkbuf *blkbuf_get(devno_t devno, blkno_t blkno);
+void blkbuf_release(struct blkbuf *buf);
+void blkbuf_markdirty(struct blkbuf *buf);
+int blkdev_wait(struct blkbuf *buf);
+void blkbuf_sync(struct blkbuf *buf);

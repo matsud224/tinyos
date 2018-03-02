@@ -1,65 +1,78 @@
 #include <kern/netdev.h>
 #include <kern/thread.h>
 
-struct netdev *netdev_tbl[MAX_NETDEV];
+struct netdev_ops *netdev_tbl[MAX_NETDEV];
+struct list_head ifaddr_list[MAX_NETDEV];
+
 struct list_head ifaddr_tbl[MAX_PF];
 static u16 nnetdev;
 
 void netdev_init() {
-  for(int i=0; i<MAX_NETDEV; i++)
+  for(int i=0; i<MAX_NETDEV; i++) {
     netdev_tbl[i] = NULL;
+    list_init(&ifaddr_list[i]);
+  }
+
   for(int i=0; i<MAX_PF; i++)
     list_init(&ifaddr_tbl[i]);
+
   nnetdev = 0;
 }
 
-void netdev_add(struct netdev *dev) {
-  netdev_tbl[nnetdev] = dev;
-  dev->devno = nnetdev;
-  nnetdev++;
+int netdev_register(struct netdev_ops *ops) {
+  if(nnetdev >= MAX_NETDEV)
+    return -1;
+  netdev_tbl[nnetdev] = ops;
+  return nnetdev++;
 }
 
-int netdev_tx(struct netdev *dev, struct pktbuf *pkt) {
+int netdev_tx(devno_t devno, struct pktbuf *pkt) {
   int res = -1;
+  struct netdev_ops *dev = netdev_tbl[DEV_MAJOR(devno)];
+IRQ_DISABLE
   while(res < 0) {
-    res = dev->ops->tx(dev, pkt);
+    res = dev->ops->tx(DEV_MINOR(devno), pkt);
     if(res < 0)
       thread_sleep(dev);
   }
+IRQ_RESTORE
   return 0;
 }
 
-int netdev_tx_nowait(struct netdev *dev, struct pktbuf *pkt) {
-  int res = dev->ops->tx(dev, pkt);
+int netdev_tx_nowait(devno_t devno, struct pktbuf *pkt) {
+  int res = netdev_tbl[DEV_MAJOR(devno)]->ops->tx(DEV_MINOR(devno), pkt);
   return res;
 }
 
-struct pktbuf *netdev_rx(struct netdev *dev) {
+struct pktbuf *netdev_rx(devno_t devno) {
   struct pktbuf *pkt = NULL;
+  struct netdev_ops *dev = netdev_tbl[DEV_MAJOR(devno)];
+IRQ_DISABLE
   while(pkt == NULL) {
-    pkt = dev->ops->rx(dev);
+    pkt = dev->ops->rx(DEV_MINOR(devno));
     if(pkt == NULL)
       thread_sleep(dev);
   }
+IRQ_RESTORE
   return pkt;
 }
 
-struct pktbuf *netdev_rx_nowait(struct netdev *dev) {
-  struct pktbuf *pkt = dev->ops->rx(dev);
+struct pktbuf *netdev_rx_nowait(devno_t devno) {
+  struct pktbuf *pkt = netdev_tbl[DEV_MAJOR(devno)]->ops->rx(DEV_MINOR(devno));
   return pkt;
 }
 
-void netdev_add_ifaddr(struct netdev *dev, struct ifaddr *addr) {
-  addr->dev = dev;
-  list_pushback(&addr->dev_link, &dev->ifaddr_list);
+void netdev_add_ifaddr(devno_t devno, struct ifaddr *addr) {
+  addr->devno = devno;
+  list_pushback(&addr->dev_link, &ifaddr_list[DEV_MAJOR(devno)]);
   list_pushback(&addr->family_link, &ifaddr_tbl[addr->family]);
 }
 
-struct ifaddr *netdev_find_addr(struct netdev *dev, u16 pf) {
+struct ifaddr *netdev_find_addr(devno_t devno, u16 pf) {
   struct list_head *p;
-  list_foreach(p, &dev->ifaddr_list) {
+  list_foreach(p, &ifaddr_list[DEV_MAJOR(devno)]) {
     struct ifaddr *addr = list_entry(p, struct ifaddr, dev_link);
-    if(addr->family == pf)
+    if(addr->devno == devno && addr->family == pf)
       return addr;
   }
   return NULL;

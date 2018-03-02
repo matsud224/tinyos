@@ -98,5 +98,6 @@ syscall_inthandler:
   push eax
   call syscall_isr
   add esp, 24
+  mov [esp+8], eax ;set return value
   handler_leave
   

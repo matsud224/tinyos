@@ -1,12 +1,5 @@
-#include <kern/page.h>
-#include <kern/kernasm.h>
 #include <kern/blkdev.h>
 #include <kern/kernlib.h>
-#include <kern/thread.h>
-#include <kern/lock.h>
-
-struct blkdev *blkdev_tbl[MAX_BLKDEV];
-static u16 nblkdev;
 
 struct chunk {
   struct chunk *next_chunk;
@@ -16,22 +9,40 @@ struct chunk {
   int nfree;
 };
 
+static struct blkdev_ops *blkdev_tbl[MAX_BLKDEV];
+static u16 nblkdev;
+
 static struct chunk *chunklist;
+static struct list_head buf_list[MAX_BLKDEV];
+static struct list_head avail_list;
+static struct blkbuf blkbufs[NBLKBUF];
 
-void blkdev_init() {
-  for(int i=0; i<MAX_BLKDEV; i++) {
+DEV_INIT void blkdev_init() {
+  for(int i=0; i<MAX_BLKDEV; i++)
     blkdev_tbl[i] = NULL;
-  }
+
   nblkdev = 0;
+
+  list_init(&avail_list);
+  for(int i=0; i<MAX_BLKDEV; i++)
+    list_init(&buf_list[i]);
+
+  for(int i=0; i<NBLKBUF; i++) {
+    blkbufs[i].ref = 0;
+    blkbufs[i].flags = 0;
+    list_pushback(&blkbufs[i].avail_link, avail_list);
+  }
 }
 
-void blkdev_add(struct blkdev *dev) {
-  blkdev_tbl[nblkdev] = dev;
+int blkdev_register(struct blkdev_ops *ops) {
+  if(nblkdev >= MAX_BLKDEV)
+    return -1;
+  blkdev_tbl[nblkdev] = ops;
   dev->devno = nblkdev;
-  nblkdev++;
+  return nblkdev++;
 }
 
-static void *bufallocator_alloc() {
+static void *blkbuf_alloc() {
   struct chunk *c = chunklist;
   while(c!=NULL && c->nfree) c = c->next_chunk;
   if(c == NULL) {
@@ -53,7 +64,7 @@ static void *bufallocator_alloc() {
   return addr;
 }
 
-static void bufallocator_free(void *addr) {
+static void blkbuf_free(void *addr) {
   u32 chunk_addr = (u32)addr & ~(PAGESIZE-1);
   struct chunk *c = chunklist;
   while(c!=NULL && c->addr == (void *)chunk_addr) c = c->next_chunk;
@@ -63,56 +74,99 @@ static void bufallocator_free(void *addr) {
   c->freelist = addr;
 }
 
-struct blkdev_buf *blkdev_getbuf(devno_t devno, blkno_t blockno) {
-  struct blkdev *dev = blkdev_tbl[devno];
-  if(dev == NULL)
-    return NULL;
+static struct blkbuf *blkbuf_get_avail() {
+  struct blkbuf *buf;
+IRQ_DISABLE
+  while(list_is_empty(&avail_list)) {
+    thread_wait(&avail_list);
+  }
+  buf = list_pop(&avail_list);
+  list_remove(&buf->dev_link);
+IRQ_RESTORE
 
-  for(struct blkdev_buf *p=dev->buf_list; p!=NULL; p=p->next) {
-    if(p->blockno == blockno) {
-      p->ref++;
-      return p;
+  blkbuf_sync(buf);
+  return buf;
+}
+
+struct blkbuf *blkbuf_get(devno_t devno, blkno_t blkno) {
+  struct list_head *p;
+  list_foreach(p, &buf_list[DEV_MAJOR(devno)]) {
+    struct blkbuf *blk = list_entry(p, struct blkbuf, dev_link);
+    if(blk->blkno == blkno) {
+      if(blk->ref == 0)
+        list_pushback(&blk->avail_link, &avail_list);
+      blk->ref++;
+      return blk;
     }
   }
 
-  struct blkdev_buf *newbuf = malloc(sizeof(struct blkdev_buf));
-  newbuf->ref = 1;
-  newbuf->dev = dev;
-  newbuf->blockno = blockno;
-  newbuf->addr = bufallocator_alloc();
-  newbuf->flags = BDBUF_EMPTY;
-  newbuf->next = dev->buf_list;
-  dev->buf_list = newbuf;
-  return newbuf;
+  struct blkbuf *newblk = blkbuf_get_avail();
+  newblk->ref = 1;
+  newblk->devno = devno;
+  newblk->blkno = blkno;
+  newblk->addr = blkbuf_alloc();
+  newblk->flags = BB_ABSENT;
+  list_pushfront(&newblk->dev_link, &dev->buf_list);
+  return newblk;
 } 
 
-void blkdev_releasebuf(struct blkdev_buf *buf) {
-  if(buf->ref != 0)
+void blkbuf_release(struct blkbuf *buf) {
+  if(buf->ref == 1)
+    list_pushback(&buf->avail_link, &avail_list);
+  else
     buf->ref--;
 }
 
-static void waitbuf(struct blkdev_buf *buf) {
+void blkbuf_markdirty(struct blkbuf *buf) {
+  buf->flags |= BB_DIRTY;
+}
+
+
+int blkdev_open(devno_t devno) {
+  return blkdev_tbl[DEV_MAJOR(devno)]->ops->readblk(DEV_MINOR[devno], buf, blkno);
+}
+
+int blkdev_close(devno_t devno) {
+  return blkdev_tbl[DEV_MAJOR(devno)]->ops->readblk(DEV_MINOR[devno], buf, blkno);
+}
+
+static int blkdev_readreq(struct blkbuf *buf) {
+  buf->flags |= BB_PENDING;
+  buf->flags &= ~(BB_ABSENT | BB_DIRTY | BB_ERROR);
+  return blkdev_tbl[DEV_MAJOR(buf->devno)]->ops->readreq(buf);
+}
+
+static int blkdev_writereq(struct blkbuf *buf) {
+  buf->flags |= BB_PENDING;
+  buf->flags &= ~(BB_ABSENT | BB_DIRTY | BB_ERROR);
+  return blkdev_tbl[DEV_MAJOR(buf->devno)]->ops->writereq(buf);
+}
+
+int blkdev_wait(struct blkbuf *buf) {
 IRQ_DISABLE
-  while((buf->flags & BDBUF_READY) == 0) {
-    thread_sleep(buf);
+  while(buf->flags & BB_PENDING) {
+    thread_sleep(status);
   }
 IRQ_RESTORE
+
+  if(buf->flags & BB_ERROR) {
+    buf->flags |= BB_ABSENT;
+    return -1;
+  }
+
+  return 0;
 }
 
-void blkdev_buf_sync_nowait(struct blkdev_buf *buf) {
-  struct blkdev *dev = buf->dev;
-  dev->ops->sync(buf);
-}
-
-void blkdev_buf_sync(struct blkdev_buf *buf) {
-  if(buf->flags & BDBUF_READY)
+void blkbuf_sync(struct blkbuf *buf) {
+  if(buf->flags & BB_PENDING)
     return;
-  blkdev_buf_sync_nowait(buf);
-  waitbuf(buf);
-}
 
-void blkdev_buf_markdirty(struct blkdev_buf *buf) {
-  buf->flags |= BDBUF_DIRTY;
+  if(buf->flags & BB_DIRTY)
+    blkdev_writereq(buf);
+  else if(buf->flags & BB_ABSENT)
+    blkdev_readreq(buf);
+
+  blkdev_wait(buf);
 }
 
 

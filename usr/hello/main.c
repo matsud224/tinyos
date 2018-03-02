@@ -19,5 +19,6 @@ int main() {
   printf("pow: %d\n", (int)pow(a, 5));
   a = 100;
   printf("a is %10x\n", a);
+  printf("pid = %d\n", getpid());
   return 123;
 }

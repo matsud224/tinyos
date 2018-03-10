@@ -35,27 +35,7 @@ enum field {
   PCI_INTLINE				= 0x3c,
 };
 
-static const char *PCI_CLASS_STR[0x12] = {
-  "Device was built prior definition of the class code field",
-  "Mass Storage Controller",
-  "Network Controller",
-  "Display Controller",
-  "Multimedia Controller",
-  "Memory Controller",
-  "Bridge Device",
-  "Simple Communication Controllers",
-  "Base System Peripherals",
-  "Input Devices",
-  "Docking Stations",
-  "Processors",
-  "Serial Bus Controllers",
-  "Wireless Controllers",
-  "Intelligent I/O Controllers",
-  "Satellite Communication Controllers",
-  "Encryption/Decryption Controllers",
-  "Data Acquisition and Signal Processing Controllers",
-};
-
+extern const char *PCI_CLASS_STR[0x12];
 
 u32 pci_config_read32(struct pci_dev *pcidev, u8 offset);
 u16 pci_config_read16(struct pci_dev *pcidev, u8 offset);

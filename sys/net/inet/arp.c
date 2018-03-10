@@ -15,7 +15,7 @@ struct pending_frame {
   struct list_head link;
   struct pktbuf *frm;
   u16 proto;
-  struct netdev *dev;
+  devno_t devno;
 };
 
 struct arpentry {
@@ -48,11 +48,11 @@ NET_INIT void arp_init() {
   thread_run(kthread_new(arp_10sec_thread, NULL, "arp_thread"));
 }
 
-static struct pending_frame *pending_frame_new(struct pktbuf *frm, u16 proto, struct netdev *dev) {
+static struct pending_frame *pending_frame_new(struct pktbuf *frm, u16 proto, devno_t devno) {
   struct pending_frame *p = malloc(sizeof(struct pending_frame));
   p->frm = frm;
   p->proto = proto;
-  p->dev = dev;
+  p->devno = devno;
   return p;
 }
 
@@ -69,7 +69,7 @@ static void pending_remove_all_preserve_pkts(struct list_head *pending) {
   list_free_all(pending, struct pending_frame, link, free);
 }
 
-static int arp_resolve(in_addr_t ipaddr, struct etheraddr *macaddr, struct pktbuf *frm, u16 proto, struct netdev *dev) {
+static int arp_resolve(in_addr_t ipaddr, struct etheraddr *macaddr, struct pktbuf *frm, u16 proto, devno_t devno) {
   mutex_lock(&arptbl_mtx);
 
   for(int i=0; i<MAX_ARPTABLE; i++){
@@ -82,7 +82,7 @@ static int arp_resolve(in_addr_t ipaddr, struct etheraddr *macaddr, struct pktbu
       }else{
         //保留となっているフレームが他にもある
         //受付順に送信するため、末尾に挿入
-        list_pushback(&pending_frame_new(frm, proto, dev)->link, &arptable[i].pending);
+        list_pushback(&pending_frame_new(frm, proto, devno)->link, &arptable[i].pending);
         result = RESULT_ADD_LIST;
       }
       mutex_unlock(&arptbl_mtx);
@@ -94,7 +94,7 @@ static int arp_resolve(in_addr_t ipaddr, struct etheraddr *macaddr, struct pktbu
   if(!list_is_empty(&arptable[next_register].pending)){
     pending_remove_all(&arptable[next_register].pending);
   }
-  list_pushfront(&pending_frame_new(frm, proto, dev)->link, &arptable[next_register].pending);
+  list_pushfront(&pending_frame_new(frm, proto, devno)->link, &arptable[next_register].pending);
   arptable[next_register].timeout = ARBTBL_TIMEOUT_CLC;
   arptable[next_register].ipaddr = ipaddr;
   next_register = (next_register+1) % MAX_ARPTABLE;
@@ -115,7 +115,7 @@ void register_arptable(in_addr_t ipaddr, struct etheraddr macaddr, int is_perman
         struct list_head *p;
         list_foreach(p, &arptable[i].pending) {
           struct pending_frame *pending = list_entry(p, struct pending_frame, link);
-          ether_tx(pending->frm, macaddr, pending->proto, pending->dev);
+          ether_tx(pending->frm, macaddr, pending->proto, pending->devno);
         }
         pending_remove_all_preserve_pkts(&arptable[i].pending);
       }
@@ -147,17 +147,19 @@ void arp_rx(struct pktbuf *frm){
   switch(ntoh16(earp->arp_op)){
   case ARPOP_REQUEST:
   {
-    struct netdev *dev = NULL;
+    devno_t devno;
     struct list_head *p;
+    int found = 0;
     list_foreach(p, &ifaddr_tbl[PF_INET]) {
       struct ifaddr_in *inaddr = 
          list_entry(p, struct ifaddr_in, family_link);
       if(inaddr->addr == earp->arp_tpa) {
-        dev = inaddr->dev;
+        devno = inaddr->devno;
+        found = 1;
         break;
       }
     }
-    if(dev == NULL) {
+    if(!found) {
       pktbuf_free(frm);
       break;
     }
@@ -167,10 +169,10 @@ void arp_rx(struct pktbuf *frm){
     struct etheraddr destether = earp->arp_sha;
     earp->arp_tha = earp->arp_sha;
     earp->arp_tpa = earp->arp_spa;
-    earp->arp_sha = *(struct etheraddr *)(netdev_find_addr(dev, PF_LINK)->addr);
-    earp->arp_spa = ((struct ifaddr_in *)netdev_find_addr(dev, PF_INET))->addr;
+    earp->arp_sha = *(struct etheraddr *)(netdev_find_addr(devno, PF_LINK)->addr);
+    earp->arp_spa = ((struct ifaddr_in *)netdev_find_addr(devno, PF_INET))->addr;
     earp->arp_op = hton16(ARPOP_REPLY);
-    ether_tx(frm, destether, ETHERTYPE_ARP, dev);
+    ether_tx(frm, destether, ETHERTYPE_ARP, devno);
     break;
   }
   case ARPOP_REPLY:
@@ -180,7 +182,7 @@ void arp_rx(struct pktbuf *frm){
   return;
 }
 
-static void send_arprequest(in_addr_t dstaddr, struct netdev *dev){
+static void send_arprequest(in_addr_t dstaddr, devno_t devno){
   struct pktbuf *req =
     pktbuf_alloc(sizeof(struct ether_hdr) + sizeof(struct ether_arp));
 
@@ -193,12 +195,12 @@ static void send_arprequest(in_addr_t dstaddr, struct netdev *dev){
   earp->arp_hln = ETHER_ADDR_LEN;
   earp->arp_pln = 4;
   earp->arp_op = hton16(ARPOP_REQUEST);
-  earp->arp_sha = *(struct etheraddr *)netdev_find_addr(dev, PF_LINK)->addr;
-  earp->arp_spa = ((struct ifaddr_in *)netdev_find_addr(dev, PF_INET))->addr;
+  earp->arp_sha = *(struct etheraddr *)netdev_find_addr(devno, PF_LINK)->addr;
+  earp->arp_spa = ((struct ifaddr_in *)netdev_find_addr(devno, PF_INET))->addr;
   memset(&earp->arp_tha, 0x00, ETHER_ADDR_LEN);
   earp->arp_tpa = dstaddr;
 
-  ether_tx(req, ETHER_ADDR_BROADCAST, ETHERTYPE_ARP, dev);
+  ether_tx(req, ETHER_ADDR_BROADCAST, ETHERTYPE_ARP, devno);
 }
 
 static void arp_10sec_thread(void *arg UNUSED) {
@@ -217,7 +219,7 @@ static void arp_10sec_thread(void *arg UNUSED) {
           list_free_all(&arptable[i].pending, struct pktbuf, link, pktbuf_free);
       } else {
         if(!list_is_empty(&arptable[i].pending)) {
-          send_arprequest(arptable[i].ipaddr, list_entry(list_first(&arptable[i].pending), struct pending_frame, link)->dev);
+          send_arprequest(arptable[i].ipaddr, list_entry(list_first(&arptable[i].pending), struct pending_frame, link)->devno);
         }
       }
     }
@@ -225,15 +227,15 @@ static void arp_10sec_thread(void *arg UNUSED) {
   }
 }
 
-void arp_tx(struct pktbuf *pkt, in_addr_t dstaddr, u16 proto, struct netdev *dev){
+void arp_tx(struct pktbuf *pkt, in_addr_t dstaddr, u16 proto, devno_t devno){
   struct etheraddr dest_ether;
 
-  switch(arp_resolve(dstaddr, &dest_ether, pkt, proto, dev)){
+  switch(arp_resolve(dstaddr, &dest_ether, pkt, proto, devno)){
   case RESULT_FOUND:
-    ether_tx(pkt, dest_ether, proto, dev);
+    ether_tx(pkt, dest_ether, proto, devno);
     break;
   case RESULT_NOT_FOUND:
-    send_arprequest(dstaddr, dev);
+    send_arprequest(dstaddr, devno);
     break;
   case RESULT_ADD_LIST:
     break;

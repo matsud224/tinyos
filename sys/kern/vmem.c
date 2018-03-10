@@ -9,16 +9,16 @@ struct anon_mapper {
   struct mapper mapper;
 };
 
-struct inode_mapper {
-  struct inode *inode;
-  size_t file_off;
+struct vnode_mapper {
+  struct vnode *vnode;
+  off_t file_off;
   size_t len;
   struct mapper mapper;
 };
 
-u32 anon_mapper_request(struct mapper *m UNUSED, u32 offset UNUSED) {
-  u8 *p = (u32)get_zeropage();
-  return (u32)p;
+void *anon_mapper_request(struct mapper *m UNUSED, vaddr_t offset UNUSED) {
+  void *p = get_zeropage();
+  return p;
 }
 
 static const struct mapper_ops anon_mapper_ops = {
@@ -34,39 +34,39 @@ struct mapper *anon_mapper_new() {
   return &(m->mapper);
 }
 
-u32 inode_mapper_request(struct mapper *m, u32 offset) {
-  u8 *p = get_zeropage();
-  struct inode_mapper *im = container_of(m, struct inode_mapper, mapper);
-  u32 st = pagealign(offset);
-  u32 end = pagealign(offset) + PAGESIZE;
-  u32 readlen = PAGESIZE;
-  if(end > m->area->offset + im->len)
-    readlen -= MIN(end - (m->area->offset + im->len), PAGESIZE);
+void *vnode_mapper_request(struct mapper *m, vaddr_t offset) {
+  void *p = get_zeropage();
+  struct vnode_mapper *vm = container_of(m, struct vnode_mapper, mapper);
+  vaddr_t st = pagealign(offset);
+  vaddr_t end = pagealign(offset) + PAGESIZE;
+  size_t readlen = PAGESIZE;
+  if(end > m->area->offset + vm->len)
+    readlen -= MIN(end - (m->area->offset + vm->len), PAGESIZE);
   if(offset < PAGESIZE)
     readlen -= m->area->offset;
-
+/*
   if(readlen != 0) {
     if(offset < PAGESIZE)
-      fs_read(im->inode, p+m->area->offset, st - m->area->offset + im->file_off, readlen);
+      fs_read(vm->vnode, p+m->area->offset, st - m->area->offset + vm->file_off, readlen);
     else
-      fs_read(im->inode, p, st - m->area->offset + im->file_off, readlen);
-  }
+      fs_read(vm->vnode, p, st - m->area->offset + vm->file_off, readlen);
+  }*/
   return (u32)p;
 }
 
-static const struct mapper_ops inode_mapper_ops = {
-  .request = inode_mapper_request
+static const struct mapper_ops vnode_mapper_ops = {
+  .request = vnode_mapper_request
 };
 
-struct mapper *inode_mapper_new(struct inode *inode, u32 file_off, u32 len) {
-  struct inode_mapper *m;
-  if((m = malloc(sizeof(struct inode_mapper))) == NULL)
+struct mapper *vnode_mapper_new(struct vnode *vnode, off_t file_off, size_t len) {
+  struct vnode_mapper *m;
+  if((m = malloc(sizeof(struct vnode_mapper))) == NULL)
     return NULL;
 
-  m->inode = inode;
+  m->vnode = vnode;
   m->file_off = file_off;
   m->len = len;
-  m->mapper.ops = &inode_mapper_ops;
+  m->mapper.ops = &vnode_mapper_ops;
   return &(m->mapper);
 }
 
@@ -132,7 +132,7 @@ int vm_remove_area(struct vm_map *map, u32 start, size_t size) {
 }
 */
 
-struct vm_area *vm_findarea(struct vm_map *map, u32 addr) {
+struct vm_area *vm_findarea(struct vm_map *map, vaddr_t addr) {
   struct vm_area *a;
   for(a=map->area_list; a!=NULL; a=a->next) {
     //printf("area 0x%x - 0x%x\n", a->start, a->start+a->size);

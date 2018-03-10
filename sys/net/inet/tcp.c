@@ -57,7 +57,7 @@ struct tcpcb {
   u32 snd_buf_len;
   bool snd_persisttim_enabled; //持続タイマが起動中か
   u32 iss; //初期送信シーケンス番号
-  u8 *snd_buf;
+  char *snd_buf;
 
   u32 rcv_nxt; //次のデータ転送で使用できるシーケンス番号
   u16 rcv_wnd; //受信ウィンドウサイズ
@@ -187,7 +187,7 @@ void tcp_tx_request(void);
 struct pktbuf *sendbuf_to_pktbuf(struct tcpcb *cb, u32 from_index, u32 len);
 void tcp_tx_from_buf(struct tcpcb *cb);
 bool tcp_resend_from_buf(struct tcpcb *cb, struct timinfo *tinfo);
-int tcp_write_to_sendbuf(struct tcpcb *cb, const u8 *data, u32 len);
+int tcp_write_to_sendbuf(struct tcpcb *cb, const char *data, u32 len);
 
 void tcp_rx(struct pktbuf *pkt, struct ip_hdr *ih);
 void tcp_rx_closed(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th, u16 payload_len);
@@ -197,23 +197,23 @@ void tcp_rx_otherwise(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th,
 
 void tcp_arrival_free(struct tcp_arrival *a);
 struct list_head arrival_pick_head(struct tcp_arrival *a, u32 len);
-u32 arrival_copy_head(struct tcpcb *cb, u8 *base, u32 len);
+u32 arrival_copy_head(struct tcpcb *cb, char *base, u32 len);
 void arrival_show(struct tcpcb *cb);
 struct list_head arrival_pick_tail(struct tcp_arrival *a, u32 len);
 void arrival_merge(struct tcp_arrival *to, struct tcp_arrival *from);
 void tcp_arrival_add(struct pktbuf *pkt, struct tcpcb *cb, u32 start_seq, u32 end_seq);
-int tcp_read_from_arrival(struct tcpcb *cb, u8 *data, u32 len);
+int tcp_read_from_arrival(struct tcpcb *cb, char *data, u32 len);
 
 void *tcp_sock_init(void);
 int tcp_sock_connect(void *pcb, const struct sockaddr *addr);
 int tcp_sock_listen(void *pcb, int backlog);
 void *tcp_sock_accept(void *pcb, struct sockaddr *client_addr);
-int tcp_sock_send(void *pcb, const u8 *msg, size_t len, int flags UNUSED);
-int tcp_sock_recv(void *pcb, u8 *buf, size_t len, int flags UNUSED);
+int tcp_sock_send(void *pcb, const char *msg, size_t len, int flags UNUSED);
+int tcp_sock_recv(void *pcb, char *buf, size_t len, int flags UNUSED);
 int tcp_sock_close(void *pcb);
 int tcp_sock_bind(void *pcb, const struct sockaddr *addr);
-int tcp_sock_sendto(void *pcb UNUSED, const u8 *msg UNUSED, size_t len UNUSED, int flags UNUSED, struct sockaddr *dest_addr UNUSED);
-int tcp_sock_recvfrom(void *pcb UNUSED, u8 *buf UNUSED, size_t len UNUSED, int flags UNUSED, struct sockaddr *from_addr UNUSED);
+int tcp_sock_sendto(void *pcb UNUSED, const char *msg UNUSED, size_t len UNUSED, int flags UNUSED, struct sockaddr *dest_addr UNUSED);
+int tcp_sock_recvfrom(void *pcb UNUSED, char *buf UNUSED, size_t len UNUSED, int flags UNUSED, struct sockaddr *from_addr UNUSED);
 
 
 static const struct socket_ops tcp_sock_ops = {
@@ -223,8 +223,6 @@ static const struct socket_ops tcp_sock_ops = {
   .connect = tcp_sock_connect,
   .listen = tcp_sock_listen,
   .accept = tcp_sock_accept,
-  .sendto = tcp_sock_sendto,
-  .recvfrom = tcp_sock_recvfrom,
   .send = tcp_sock_send,
   .recv = tcp_sock_recv,
 };
@@ -452,8 +450,8 @@ u16 tcp_checksum_send(struct pktbuf *seg, in_addr_t ip_src, in_addr_t ip_dst) {
 //制御用のセグメント（ペイロードなし）を送信
 void tcp_ctl_tx(u32 seq, u32 ack, u16 win, u8 flags, in_addr_t to_addr, in_port_t to_port, in_port_t my_port, struct tcpcb *cb) {
   in_addr_t r_src, r_dst;
-  struct netdev *dev = ip_routing(cb?cb->laddr:INADDR_ANY, to_addr, &r_src, &r_dst);
-  if(dev == NULL)
+  devno_t devno;
+  if(ip_routing(cb?cb->laddr:INADDR_ANY, to_addr, &r_src, &r_dst, &devno))
     return; //no interface to send
 
   struct pktbuf *tcpseg = pktbuf_alloc(MAX_HDRLEN_TCP);
@@ -592,7 +590,7 @@ exit:
   return;
 }
 
-struct list_head arrival_pick_head(struct tcp_arrival *a, u32 len) {
+struct list_head arrival_pick_head(struct tcp_arrival *a, size_t len) {
   struct list_head saved;
   struct list_head *p, *tmp;
 
@@ -627,7 +625,7 @@ puts("------------");
 puts("------------");
 }
 
-u32 arrival_copy_head(struct tcpcb *cb, u8 *base, u32 len) {
+u32 arrival_copy_head(struct tcpcb *cb, char *base, size_t len) {
   u32 remain = len;
   struct list_head *p, *q, *tmp1, *tmp2;
 
@@ -659,7 +657,7 @@ exit:
   return len - remain; 
 }
 
-struct list_head arrival_pick_tail(struct tcp_arrival *a, u32 len) {
+struct list_head arrival_pick_tail(struct tcp_arrival *a, size_t len) {
   struct list_head saved;
   struct list_head *p, *tmp;
 
@@ -734,7 +732,7 @@ int tcpcb_has_arrival(struct tcpcb *cb) {
   return (cb->rcv_wnd < cb->rcv_buf_len);
 }
 
-struct pktbuf *sendbuf_to_pktbuf(struct tcpcb *cb, u32 from_index, u32 len) {
+struct pktbuf *sendbuf_to_pktbuf(struct tcpcb *cb, u32 from_index, size_t len) {
   struct pktbuf *tcpseg = pktbuf_alloc(MAX_HDRLEN_TCP + len);
   pktbuf_reserve_headroom(tcpseg, MAX_HDRLEN_TCP);
 
@@ -752,8 +750,8 @@ struct pktbuf *sendbuf_to_pktbuf(struct tcpcb *cb, u32 from_index, u32 len) {
 
 void tcp_tx_from_buf(struct tcpcb *cb) {
   in_addr_t r_src, r_dst;
-  struct netdev *dev = ip_routing(cb->laddr, cb->faddr, &r_src, &r_dst);
-  if(dev == NULL)
+  devno_t devno;
+  if(ip_routing(cb->laddr, cb->faddr, &r_src, &r_dst, &devno))
     return; //no interface to send
 
   bool is_zerownd_probe = false;
@@ -797,7 +795,7 @@ void tcp_tx_from_buf(struct tcpcb *cb) {
     struct pktbuf *tcpseg = sendbuf_to_pktbuf(cb, SEQ2IDX_SEND(cb->snd_nxt, cb), payload_len);
     tinfo->resend_pkt = tcpseg;
     pktbuf_add_header(tcpseg, sizeof(struct tcp_hdr));
-    pktbuf_copyin(tcpseg, (u8*)&th_base, sizeof(struct tcp_hdr), 0);
+    pktbuf_copyin(tcpseg, (char *)&th_base, sizeof(struct tcp_hdr), 0);
 
     struct tcp_hdr *th = (struct tcp_hdr*)tcpseg->head;
     th->th_seq = hton32(cb->snd_nxt);
@@ -839,8 +837,8 @@ bool tcp_resend_from_buf(struct tcpcb *cb, struct timinfo *tinfo) {
     return false; //送信可能なものはない
 
   in_addr_t r_src, r_dst;
-  struct netdev *dev = ip_routing(cb->laddr, cb->faddr, &r_src, &r_dst);
-  if(dev == NULL)
+  devno_t devno;
+  if(ip_routing(cb->laddr, cb->faddr, &r_src, &r_dst, &devno))
     return false; //no interface to send
 
   struct pktbuf *pkt = tinfo->resend_pkt;
@@ -858,7 +856,7 @@ bool tcp_resend_from_buf(struct tcpcb *cb, struct timinfo *tinfo) {
   return true;
 }
 
-int tcp_write_to_sendbuf(struct tcpcb *cb, const u8 *data, u32 len) {
+int tcp_write_to_sendbuf(struct tcpcb *cb, const char *data, u32 len) {
   u32 remain = len;
   while(remain > 0) {
     if(cb->snd_buf_used < cb->snd_buf_len){
@@ -891,7 +889,7 @@ int tcp_write_to_sendbuf(struct tcpcb *cb, const u8 *data, u32 len) {
   return len - remain;
 }
 
-int tcp_read_from_arrival(struct tcpcb *cb, u8 *data, u32 len) {
+int tcp_read_from_arrival(struct tcpcb *cb, char *data, u32 len) {
   u32 copied = 0;
 
   while(copied == 0) {
@@ -1366,7 +1364,7 @@ retry:
   }
 }
 
-int tcp_sock_send(void *pcb, const u8 *msg, size_t len, int flags UNUSED) {
+int tcp_sock_send(void *pcb, const char *msg, size_t len, int flags UNUSED) {
   struct tcpcb *cb = (struct tcpcb *)pcb;
   int err;
   mutex_lock(&cb->mtx);
@@ -1398,7 +1396,7 @@ int tcp_sock_send(void *pcb, const u8 *msg, size_t len, int flags UNUSED) {
   }
 }
 
-int tcp_sock_recv(void *pcb, u8 *buf, size_t len, int flags UNUSED) {
+int tcp_sock_recv(void *pcb, char *buf, size_t len, int flags UNUSED) {
   struct tcpcb *cb = (struct tcpcb *)pcb;
   int result;
   mutex_lock(&cb->mtx);
@@ -1496,14 +1494,6 @@ int tcp_sock_bind(void *pcb, const struct sockaddr *addr) {
   mutex_unlock(&cb->mtx);
   mutex_unlock(&cblist_mtx);
   return 0;
-}
-
-int tcp_sock_sendto(void *pcb UNUSED, const u8 *msg UNUSED, size_t len UNUSED, int flags UNUSED, struct sockaddr *dest_addr UNUSED) {
-  return EBADF;
-}
-
-int tcp_sock_recvfrom(void *pcb UNUSED, u8 *buf UNUSED, size_t len UNUSED, int flags UNUSED, struct sockaddr *from_addr UNUSED) {
-  return EBADF;
 }
 
 void timinfo_free(struct timinfo *tinfo) {

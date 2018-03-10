@@ -4,4 +4,4 @@
 #include <kern/netdev.h>
 
 void arp_rx(struct pktbuf *frm);
-void arp_tx(struct pktbuf *packet, in_addr_t dstaddr, u16 proto, struct netdev *dev);
+void arp_tx(struct pktbuf *packet, in_addr_t dstaddr, u16 proto, devno_t devno);

@@ -25,21 +25,17 @@ static void *udp_sock_init();
 static int udp_sock_bind(void *pcb, const struct sockaddr *addr);
 static int udp_sock_close(void *pcb);
 static int udp_sock_connect(void *pcb, const struct sockaddr *addr);
-static int udp_sock_sendto(void *pcb, const u8 *msg, size_t len, int flags, struct sockaddr *dest_addr);
+static int udp_sock_sendto(void *pcb, const char *msg, size_t len, int flags, const struct sockaddr *dest_addr);
 static size_t udp_analyze(struct pktbuf *pkt, struct sockaddr_in *addr);
-static int udp_sock_recvfrom(void *pcb, u8 *buf, size_t len, int flags, struct sockaddr *from_addr);
-static int udp_sock_send(void *pcb, const u8 *msg, size_t len, int flags);
-static int udp_sock_recv(void *pcb, u8 *buf, size_t len, int flags);
-static int udp_sock_listen(void *pcb, int backlog);
-static void *udp_sock_accept(void *pcb, struct sockaddr *client_addr);
+static int udp_sock_recvfrom(void *pcb, char *buf, size_t len, int flags, struct sockaddr *from_addr);
+static int udp_sock_send(void *pcb, const char *msg, size_t len, int flags);
+static int udp_sock_recv(void *pcb, char *buf, size_t len, int flags);
 
 static const struct socket_ops udp_sock_ops = {
   .init = udp_sock_init,
   .bind = udp_sock_bind,
   .close = udp_sock_close,
   .connect = udp_sock_connect,
-  .listen = udp_sock_listen,
-  .accept = udp_sock_accept,
   .sendto = udp_sock_sendto,
   .recvfrom = udp_sock_recvfrom,
   .send = udp_sock_send,
@@ -219,7 +215,7 @@ static int udp_sock_connect(void *pcb, const struct sockaddr *addr) {
   return 0;
 }
 
-static int udp_sock_sendto(void *pcb, const u8 *msg, size_t len, int flags UNUSED, struct sockaddr *dest_addr){
+static int udp_sock_sendto(void *pcb, const char *msg, size_t len, int flags UNUSED, const struct sockaddr *dest_addr){
   struct udpcb *cb = (struct udpcb *)pcb;
 
   if(dest_addr->family != PF_INET)
@@ -237,8 +233,8 @@ static int udp_sock_sendto(void *pcb, const u8 *msg, size_t len, int flags UNUSE
   mutex_unlock(&cblist_mtx);
 
   in_addr_t r_src, r_dst;
-  struct netdev *dev = ip_routing(local_addr.addr, ((struct sockaddr_in *)dest_addr)->addr, &r_src, &r_dst);
-  if(dev == NULL)
+  devno_t devno;
+  if(ip_routing(local_addr.addr, ((struct sockaddr_in *)dest_addr)->addr, &r_src, &r_dst, &devno))
     return -1; //no interface to send
 
   struct pktbuf *udpseg = pktbuf_alloc(MAX_HDRLEN_UDP + len);
@@ -262,7 +258,7 @@ static size_t udp_analyze(struct pktbuf *pkt, struct sockaddr_in *addr) {
   return ntoh16(udphdr->uh_ulen) - sizeof(struct udp_hdr);
 }
 
-static int udp_sock_recvfrom(void *pcb, u8 *buf, size_t len, int flags UNUSED, struct sockaddr *from_addr) {
+static int udp_sock_recvfrom(void *pcb, char *buf, size_t len, int flags UNUSED, struct sockaddr *from_addr) {
   struct udpcb *cb = (struct udpcb *)pcb;
   mutex_lock(&cb->mtx);
   while(1) {
@@ -285,19 +281,12 @@ static int udp_sock_recvfrom(void *pcb, u8 *buf, size_t len, int flags UNUSED, s
   }
 }
 
-static int udp_sock_send(void *pcb, const u8 *msg, size_t len, int flags) {
+static int udp_sock_send(void *pcb, const char *msg, size_t len, int flags) {
   struct udpcb *cb = (struct udpcb *)pcb;
   return udp_sock_sendto(pcb, msg, len, flags, (struct sockaddr *)(&cb->foreign_addr));
 }
 
-static int udp_sock_recv(void *pcb, u8 *buf, size_t len, int flags) {
+static int udp_sock_recv(void *pcb, char *buf, size_t len, int flags) {
   return udp_sock_recvfrom(pcb, buf, len, flags, NULL);
 }
 
-static int udp_sock_listen(void *pcb UNUSED, int backlog UNUSED) {
-  return -1;
-}
-
-static void *udp_sock_accept(void *pcb UNUSED, struct sockaddr *client_addr UNUSED) {
-  return NULL;
-}

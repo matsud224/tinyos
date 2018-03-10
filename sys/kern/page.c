@@ -8,7 +8,6 @@ struct ardesc {
   u32 type;
 };
 
-
 #define PAGE_RESERVED 0x2
 #define PAGE_ALLOCATED 0x1
 
@@ -35,20 +34,20 @@ void *page_alloc() {
   page_freelist = page_freelist->next_free;
   new->next_free = NULL;
   new->flags |= PAGE_ALLOCATED;
-  u32 phyaddr = (size_t)((u32)new-(KERN_VMEM_ADDR+PROTMEM_ADDR))/sizeof(struct page) * PAGESIZE;
-  return (void *)PHYS_TO_KERN_VMEM(phyaddr);
+  paddr_t paddr = (size_t)((vaddr_t)new-(KERN_VMEM_ADDR+PROTMEM_ADDR))/sizeof(struct page) * PAGESIZE;
+  return (void *)PHYS_TO_KERN_VMEM(paddr);
 }
 
-void page_free(u32 addr) {
-  addr = KERN_VMEM_TO_PHYS(addr);
-  int index = addr / PAGESIZE;
+void page_free(void *addr) {
+  paddr_t paddr = KERN_VMEM_TO_PHYS(addr);
+  int index = paddr / PAGESIZE;
   pageinfo[index].flags &= ~PAGE_ALLOCATED;
   pageinfo[index].next_free = page_freelist;
   page_freelist = &pageinfo[index];
   page_nfree++;
 }
 
-static void recycle_area(u32 start, size_t size) {
+static void recycle_area(paddr_t start, size_t size) {
   int startindex = (start+(PAGESIZE-1)) / PAGESIZE;
   int endindex = startindex + size / PAGESIZE;
   for(int i=startindex; i<endindex; i++) {

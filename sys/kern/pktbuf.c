@@ -1,6 +1,6 @@
 #include <kern/pktbuf.h>
 
-struct pktbuf *pktbuf_create(u8 *buf, size_t size, void (*freefunc)(u8 *)) {
+struct pktbuf *pktbuf_create(char *buf, size_t size, void (*freefunc)(void *)) {
   struct pktbuf *pkt = malloc(sizeof(struct pktbuf));
   pkt->begin = pkt->head = buf;
   pkt->end = pkt->tail = buf + size;
@@ -11,6 +11,7 @@ struct pktbuf *pktbuf_create(u8 *buf, size_t size, void (*freefunc)(u8 *)) {
 struct pktbuf *pktbuf_alloc(size_t size) {
   struct pktbuf *pkt = pktbuf_create(malloc(size), size, free);
   pkt->tail = pkt->head;
+  return pkt;
 }
 
 void pktbuf_free(struct pktbuf *pkt) {
@@ -28,7 +29,7 @@ int pktbuf_reserve_headroom(struct pktbuf *pkt, size_t size) {
   return 0;
 }
 
-u8 *pktbuf_add_header(struct pktbuf *pkt, size_t size) {
+char *pktbuf_add_header(struct pktbuf *pkt, size_t size) {
   if(pkt->begin + size > pkt->head) {
     return NULL;
   }
@@ -40,7 +41,7 @@ void pktbuf_remove_header(struct pktbuf *pkt, size_t size) {
   pkt->head += size;
 }
 
-void pktbuf_copyin(struct pktbuf *pkt, const u8 *data, size_t size, u32 offset) {
+void pktbuf_copyin(struct pktbuf *pkt, const char *data, size_t size, off_t offset) {
   if(pkt->head + offset + size > pkt->tail)
     pkt->tail = pkt->head + offset + size;
   memcpy(pkt->head+offset, data, size);

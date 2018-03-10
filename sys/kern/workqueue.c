@@ -1,5 +1,6 @@
 #include <kern/workqueue.h>
 #include <kern/thread.h>
+#include <kern/timer.h>
 #include <kern/kernlib.h>
 
 struct workqueue {
@@ -29,7 +30,7 @@ static void workqueue_thread(void *arg) {
   }
 }
 
-struct workqueue *workqueue_new(char *name) {
+struct workqueue *workqueue_new(const char *name) {
   struct workqueue *wq = malloc(sizeof(struct workqueue));
   list_init(&wq->queue);
   wq->thread = kthread_new(workqueue_thread, wq, name);

@@ -51,25 +51,26 @@ struct thread {
   struct thread_state regs; //do not move
   struct list_head link;
   void *kstack;
-  u32 kstacksize;
+  size_t kstacksize;
   struct vm_map *vmmap;
   u8 state;
   u32 flags;
-  u32 pid;
-  void *waitcause;
-  char *name;
+  pid_t pid;
+  const void *waitcause;
+  const char *name;
 };
 
 void dispatcher_init(void);
 void dispatcher_run(void);
 void kstack_setaddr(void);
-struct thread *kthread_new(void (*func)(void *), void *arg, char *name);
-int thread_exec(struct inode *ino);
+struct thread *kthread_new(void (*func)(void *), void *arg, const char *name);
+int thread_exec(const char *path);
 void thread_run(struct thread *t);
 void thread_sched(void);
-void thread_sleep(void *cause);
-void thread_wakeup(void *cause);
+void thread_sleep(const void *cause);
+void thread_wakeup(const void *cause);
 void thread_yield(void);
 void thread_set_alarm(void *cause, u32 expire);
+void thread_exit(void);
 struct deferred_func *defer_exec(void (*func)(void *), void *arg, int priority, int delay);
 void *defer_cancel(struct deferred_func *f);

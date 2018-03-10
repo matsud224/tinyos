@@ -27,6 +27,7 @@
 #define IRQ_RESTORE if(__ie) sti(); }while(0);
 
 #define pagealign(a) ((a)&~(PAGESIZE-1))
+#define align(a, b) ((a)&~(b-1))
 
 #define DEV_MINOR(n) ((n) & 0xffff)
 #define DEV_MAJOR(n) ((n) >> 16)

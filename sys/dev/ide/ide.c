@@ -173,16 +173,16 @@ struct ide_dev{
   char model[41];
 } ide_dev[4];
 
-static void ide_open(int minor);
-static void ide_close(int minor);
-static void ide_readblk(struct blkbuf *buf);
-static void ide_writeblk(struct blkbuf *buf);
+static int ide_open(int minor);
+static int ide_close(int minor);
+static int ide_readblk(struct blkbuf *buf);
+static int ide_writeblk(struct blkbuf *buf);
 
 struct blkdev_ops ide_blkdev_ops = {
   .open = ide_open,
   .close = ide_close,
-  .read = ide_readblk,
-  .write = ide_writeblk,
+  .readreq = ide_readblk,
+  .writereq = ide_writeblk,
 };
 
 struct request {
@@ -303,7 +303,6 @@ DRIVER_INIT void ide_init() {
       ide_dev[drvno].signature = *(u16 *)(ide_buf + IDENT_DEVICETYPE);
       ide_dev[drvno].capabilities = *(u16 *)(ide_buf + IDENT_CAPABILITIES);
       ide_dev[drvno].cmdsets = *(u32 *)(ide_buf + IDENT_COMMANDSETS);
-      ide_dev[drvno].blkdev_info.ops = &ide_blkdev_ops;
      
       if(ide_dev[drvno].cmdsets & (1<<26))
         ide_dev[drvno].size = *(u32 *)(ide_buf + IDENT_MAX_LBA_EXT);
@@ -403,7 +402,7 @@ static int ide_ata_access(u8 dir, u8 drv, u32 lba, u8 nsect) {
 static void ide_procnext(u8 chan);
 
 void *ide_request(struct request *req) {
-  u8 chan = ide_dev[DEV_MINOR(req->buf->devno)]->channel;
+  u8 chan = ide_dev[DEV_MINOR(req->buf->devno)].channel;
 
   cli();
   list_pushback(&req->link, &ide_channel[chan].req_queue);
@@ -418,8 +417,8 @@ static void ide_procnext(u8 chan) {
     return;
   struct request *req = container_of(ide_channel[chan].req_queue.next, struct request, link);
 
-  struct ide_dev *dev = ide_dev[DEV_MINOR(req->buf->devno)];
-  ide_ata_access(req->dir, (dev->channel<<1)|dev->drive, req->blockno, req->nsect);
+  struct ide_dev *dev = &ide_dev[DEV_MINOR(req->buf->devno)];
+  ide_ata_access(req->dir, (dev->channel<<1)|dev->drive, req->buf->blkno, req->nsect);
 }
 
 static void dequeue_and_next(u8 chan) {
@@ -482,7 +481,7 @@ static int ide_close(int minor) {
 }
 
 static int ide_readblk(struct blkbuf *buf) {
-  if(check_minor(minor))
+  if(check_minor(DEV_MINOR(buf->devno)))
     return -1;
   struct request *req = malloc(sizeof(struct request));
   req->buf = buf;
@@ -495,7 +494,7 @@ static int ide_readblk(struct blkbuf *buf) {
 
 
 static int ide_writeblk(struct blkbuf *buf) {
-  if(check_minor(minor))
+  if(check_minor(DEV_MINOR(buf->devno)))
     return -1;
   struct request *req = malloc(sizeof(struct request));
   req->buf = buf;

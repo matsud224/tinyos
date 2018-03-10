@@ -26,6 +26,23 @@ static const struct file_ops minix3_file_ops = {
   .sync = minix3_sync,
 };
 
+struct vnode *minix3_create(struct vnode *vno, const char *name);
+struct vnode *minix3_lookup(struct vnode *vno, const char *name);
+int minix3_mknod(struct vnode *vno, const char *name);
+int minix3_link(struct vnode *vno, const char *name);
+int minix3_unlink(struct vnode *vno, const char *name);
+int minix3_stat(struct vnode *vno, struct stat *buf);
+
+static const struct vnode_ops minix3_vnode_ops = {
+	.create = minix3_create,
+	.lookup = minix3_lookup,
+	.mknod = minix3_mknod, 
+	.link = minix3_link,
+	.unlink = minix3_unlink,
+	.stat = minix3_stat,
+};
+
+
 static const struct fsinfo_ops minix3_fsinfo_ops = {
   .mount = minix3_mount
 };
@@ -231,7 +248,7 @@ static int strcmp_dent(const char *path, const char *name) {
   return *path - *name;
 }
 
-static struct inode *minix3_inode_opdent(struct inode *inode, const char *name, int op) {
+static struct inode *minix3_dentop(struct inode *inode, const char *name, int op) {
   struct minix3_fs *f = container_of(inode->fs, struct minix3_fs, fs);
   devno_t devno = f->devno;
   struct minix3_inode *v6ino = container_of(inode, struct minix3_inode, inode);
@@ -253,7 +270,7 @@ static struct inode *minix3_inode_opdent(struct inode *inode, const char *name, 
     if(dent->inode_no == 0)
       continue;
     switch(op) {
-    case DENTOP_GET:
+    case OP_LOOKUP:
       if(strcmp_dent(name, dent->name) == 0) {
         found = dent->inode_no;
         goto exit;
@@ -270,7 +287,7 @@ exit:
     blkdev_releasebuf(buf);
 
   switch(op) {
-  case DENTOP_GET:
+  case OP_LOOKUP:
     if(found == 0)
       return NULL;
     else
@@ -305,6 +322,33 @@ int minix3_close(struct socket *s) {
 }
 
 int minix3_sync(struct socket *s) {
+  return 0;
+}
+
+struct vnode *minix3_create(struct vnode *vno, const char *name) {
+  return NULL;
+}
+
+int minix3_mknod(struct vnode *vno, int mode, dev_t devno) {
+  return -1;
+}
+
+int minix3_link(struct vnode *vno, const char *name) {
+  return -1;
+}
+
+int minix3_unlink(struct vnode *vno, const char *name) {
+  return -1;
+}
+
+int minix3_stat(struct vnode *vno, struct stat *buf) {
+  struct minix3_vno *fatvno = container_of(vno, struct minix3_vnode, vnode);
+  struct minix3_fs *f = container_of(vno->fs, struct minix3_fs, fs);
+
+  bzero(buf, sizeof(struct stat));
+  buf->st_dev = f->devno;
+  buf->st_size = fatvno->size;
+
   return 0;
 }
 

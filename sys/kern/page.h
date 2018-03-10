@@ -4,6 +4,6 @@
 void page_init(void);
 int page_getnfree(void);
 void *page_alloc(void);
-void page_free(u32 addr);
+void page_free(void *addr);
 void bzero(void *s, size_t n);
-void *get_zeropage();
+void *get_zeropage(void);

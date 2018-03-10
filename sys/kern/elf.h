@@ -109,5 +109,5 @@ struct elf32_phdr {
 
 
 int elf32_is_valid_exec(struct elf32_hdr *hdr);
-void *elf32_load(struct inode *ino);
+void *elf32_load(struct vnode *vno);
  

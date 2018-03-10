@@ -25,14 +25,14 @@
 #define PTE_GLOBAL				0x100
 
 
-static u32 *kernspace_pdt; //over 0xc0000000
+static u32 *kernspace_pdt; //beyond 0xc0000000
 
-u32 *procpdt_new() {
+paddr_t procpdt_new() {
   u32 *pdt = get_zeropage();
   //fill kernel space page diectory entry
   for(int i = 0; i < 1024; i++)
     pdt[i] = kernspace_pdt[i];
-  return pdt;
+  return (paddr_t)pdt;
 }
 
 void pagetbl_init() {
@@ -41,7 +41,7 @@ void pagetbl_init() {
   //kernel space straight mapping(896MB)
   int st_start_index = KERN_VMEM_ADDR / 0x400000;
   int st_end_index = st_start_index + (KERN_STRAIGHT_MAP_SIZE/0x400000);
-  u32 addr = 0x0; 
+  vaddr_t addr = 0x0; 
   for(int i = st_start_index; i < st_end_index;
         i++, addr += 0x400000){
     kernspace_pdt[i] = addr | PDE_PRESENT | PDE_RW | PDE_SIZE_4MB | PDE_USER;
@@ -49,7 +49,7 @@ void pagetbl_init() {
   //kernel space virtual area
   for(int i = st_end_index; i < 1024; i++) {
     u32 *pt = get_zeropage();
-    kernspace_pdt[i] = KERN_VMEM_TO_PHYS((u32)pt) | PDE_PRESENT | PDE_RW | PDE_USER;
+    kernspace_pdt[i] = KERN_VMEM_TO_PHYS((vaddr_t)pt) | PDE_PRESENT | PDE_RW | PDE_USER;
   }
 
   flushtlb(kernspace_pdt);

@@ -2,11 +2,11 @@
 #include <kern/list.h>
 
 struct queue_head {
-  int free;
+  size_t free;
   struct list_head list;
 };
 
-void queue_init(struct queue_head *hdr, int len);
+void queue_init(struct queue_head *hdr, size_t len);
 int queue_enqueue(struct list_head *item, struct queue_head *q);
 struct list_head *queue_dequeue(struct queue_head *q);
 #define queue_is_full(q) ((q)->free == 0)

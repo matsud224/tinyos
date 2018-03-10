@@ -6,7 +6,7 @@ RM				= rm -f
 
 BINDIR		= ../bin
 OBJDIR		= ../obj
-SUBDIRS		= $(shell find * -type d)
+SUBDIRS		= fat32
 
 .PHONY: all
 all:

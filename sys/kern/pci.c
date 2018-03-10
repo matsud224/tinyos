@@ -10,6 +10,27 @@
 
 static struct list_head pci_dev_list;
 
+const char *PCI_CLASS_STR[0x12] = {
+  "Device was built prior definition of the class code field",
+  "Mass Storage Controller",
+  "Network Controller",
+  "Display Controller",
+  "Multimedia Controller",
+  "Memory Controller",
+  "Bridge Device",
+  "Simple Communication Controllers",
+  "Base System Peripherals",
+  "Input Devices",
+  "Docking Stations",
+  "Processors",
+  "Serial Bus Controllers",
+  "Wireless Controllers",
+  "Intelligent I/O Controllers",
+  "Satellite Communication Controllers",
+  "Encryption/Decryption Controllers",
+  "Data Acquisition and Signal Processing Controllers",
+};
+
 static u32 _pci_config_read32(u8 bus, u8 dev, u8 func, u8 offset) {
   u32 addr = (bus<<16) | (dev<<11) | (func<<8) | (offset&0xfc) | 0x80000000u;
   out32(PCI_CONFIG_ADDR, addr);

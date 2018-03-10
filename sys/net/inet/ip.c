@@ -252,7 +252,7 @@ exit:
 }
 
 static void fill_iphdr(struct ip_hdr *iphdr, u16 datalen, u16 id,
-          int mf, u16 offset, u8 proto, in_addr_t dstaddr, struct netdev *dev) {
+          int mf, u16 offset, u8 proto, in_addr_t dstaddr, devno_t devno) {
   iphdr->ip_v = 4;
   iphdr->ip_hl = sizeof(struct ip_hdr)/4;
   iphdr->ip_tos = 0x80;
@@ -262,7 +262,7 @@ static void fill_iphdr(struct ip_hdr *iphdr, u16 datalen, u16 id,
   iphdr->ip_ttl = IP_TTL;
   iphdr->ip_p = proto;
   iphdr->ip_sum = 0;
-  iphdr->ip_src = ((struct ifaddr_in *)netdev_find_addr(dev, PF_INET))->addr;
+  iphdr->ip_src = ((struct ifaddr_in *)netdev_find_addr(devno, PF_INET))->addr;
   iphdr->ip_dst = dstaddr;
 
   iphdr->ip_sum = checksum((u16*)iphdr, sizeof(struct ip_hdr));
@@ -278,24 +278,25 @@ in_addr_t ip_get_defaultgw() {
   return defaultgw;
 }
 
-static struct netdev *ip_routing_src(in_addr_t orig_src, in_addr_t orig_dst, in_addr_t *src, in_addr_t *dst) {
+static int ip_routing_src(in_addr_t orig_src, in_addr_t orig_dst, in_addr_t *src, in_addr_t *dst, devno_t *devno) {
   struct list_head *p;
   list_foreach(p, &ifaddr_tbl[PF_INET]) {
     struct ifaddr_in *inaddr = list_entry(p, struct ifaddr_in, family_link);
     if(inaddr->addr == orig_src) {
       *src = orig_src;
       *dst = orig_dst;
-      return inaddr->dev;
+      *devno = inaddr->devno;
+      return 0;
     }
   }
 
-  return NULL;
+  return -1;
 }
 
 
-struct netdev *ip_routing(in_addr_t orig_src, in_addr_t orig_dst, in_addr_t *src, in_addr_t *dst) {
+int ip_routing(in_addr_t orig_src, in_addr_t orig_dst, in_addr_t *src, in_addr_t *dst, devno_t *devno) {
   if(orig_src != INADDR_ANY)
-    return ip_routing_src(orig_src, orig_dst, src, dst);
+    return ip_routing_src(orig_src, orig_dst, src, dst, devno);
 
   struct list_head *p;
   list_foreach(p, &ifaddr_tbl[PF_INET]) {
@@ -303,14 +304,15 @@ struct netdev *ip_routing(in_addr_t orig_src, in_addr_t orig_dst, in_addr_t *src
     if((inaddr->addr & inaddr->netmask) == (orig_dst & inaddr->netmask)) {
       *src = inaddr->addr;
       *dst = orig_dst;
-      return inaddr->dev;
+      *devno = inaddr->devno;
+      return 0;
     }
   }
 
   if(orig_dst == defaultgw)
-    return NULL;
+    return -1;
 
-  return ip_routing(orig_src, defaultgw, src, dst);
+  return ip_routing(orig_src, defaultgw, src, dst, devno);
 }
 
 u16 ip_getid(){
@@ -325,10 +327,9 @@ void ip_tx(struct pktbuf *data, in_addr_t srcaddr, in_addr_t dstaddr, u8 proto) 
   size_t datalen = pktbuf_get_size(data);
   size_t remainlen = datalen;
   u16 currentid = ip_getid();
-  struct netdev *dev = NULL;
+  devno_t devno;
   in_addr_t r_src, r_dst;
-  dev = ip_routing(srcaddr, dstaddr, &r_src, &r_dst);
-  if(dev == NULL) {
+  if(ip_routing(srcaddr, dstaddr, &r_src, &r_dst, &devno)) {
     //no interface available
     pktbuf_free(data);
     return;
@@ -336,8 +337,8 @@ void ip_tx(struct pktbuf *data, in_addr_t srcaddr, in_addr_t dstaddr, u8 proto) 
 
   if(sizeof(struct ip_hdr) + remainlen <= MTU){
     fill_iphdr((struct ip_hdr *)pktbuf_add_header(data, sizeof(struct ip_hdr)), 
-                 remainlen, currentid, 0, 0, proto, r_dst, dev);
-    arp_tx(data, r_dst, ETHERTYPE_IP, dev);
+                 remainlen, currentid, 0, 0, proto, r_dst, devno);
+    arp_tx(data, r_dst, ETHERTYPE_IP, devno);
   }else{
     while(remainlen > 0) {
       size_t frag_totallen = 
@@ -348,9 +349,9 @@ void ip_tx(struct pktbuf *data, in_addr_t srcaddr, in_addr_t dstaddr, u8 proto) 
       pktbuf_reserve_headroom(pkt, sizeof(struct ether_hdr) + sizeof(struct ip_hdr));
       pktbuf_copyin(pkt, data->head + offset, frag_datalen, 0);
       fill_iphdr((struct ip_hdr *)pktbuf_add_header(pkt, sizeof(struct ip_hdr)), frag_datalen, 
-                   currentid, remainlen>0, offset, proto, r_dst, dev);
+                   currentid, remainlen>0, offset, proto, r_dst, devno);
 
-      arp_tx(pkt, r_dst, ETHERTYPE_IP, dev);
+      arp_tx(pkt, r_dst, ETHERTYPE_IP, devno);
       remainlen -= frag_datalen;
     }
   }

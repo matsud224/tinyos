@@ -19,7 +19,7 @@ void gpe_isr(int errcode) {
   thread_exit();
 }
 
-void pf_isr(u32 addr, u32 eip, u32 esp) {
+void pf_isr(vaddr_t addr, u32 eip, u32 esp) {
   printf("\nPage fault addr = 0x%x (eip = 0x%x, esp = 0x%x)\n", addr, eip, esp);
   struct vm_area *varea = vm_findarea(current->vmmap, addr);
   if(varea == NULL) {

@@ -3,6 +3,7 @@
 #include <kern/idt.h>
 #include <kern/timer.h>
 #include <kern/kernasm.h>
+#include <kern/thread.h>
 
 #define PIT_CH0_DATA 0x40
 #define PIT_CH1_DATA 0x41

@@ -10,6 +10,7 @@
 #include <kern/netdev.h>
 #include <kern/timer.h>
 #include <kern/lock.h>
+#include <kern/elf.h>
 
 #include <net/socket/socket.h>
 #include <net/inet/inet.h>
@@ -18,7 +19,7 @@
 static struct tss tss;
 
 struct thread *current = NULL;
-static u32 pid_next = 0; 
+static pid_t pid_next = 0; 
 
 static struct list_head run_queue;
 static struct list_head wait_queue;
@@ -28,7 +29,8 @@ void thread_a(void *arg) {
 }
 
 void thread_b(void *arg) {
-  if(fs_mountroot("fat32", (void *)0) < 0) {
+/*
+  if(fs_mountroot("fat32", 0) < 0) {
     puts("mountroot failed.");
     while(1);
   } else {
@@ -42,6 +44,7 @@ void thread_b(void *arg) {
   printf("file found\n");
   
   thread_exec(ino);
+*/
 }
 
 void thread_idle(void *arg) {
@@ -50,7 +53,7 @@ void thread_idle(void *arg) {
 }
 
 void thread_test(void *arg) {
-  struct socket *sock;
+  /*struct socket *sock;
   struct sockaddr_in addr;
 
   char buf[2048];
@@ -75,31 +78,28 @@ void thread_test(void *arg) {
     printf("received %d bytes\n", len);
   }
 
-  close(sock);
+  close(sock);*/
 }
 
 void thread_test2(void *arg) {
+/*
   struct socket *sock0;
   struct sockaddr_in addr;
   struct sockaddr_in client;
   struct socket *sock;
 
-  /* ソケットの作成 */
   sock0 = socket(PF_INET, SOCK_STREAM);
   puts("socket ok");
 
-  /* ソケットの設定 */
   addr.family = PF_INET;
   addr.port = hton16(12345);
   addr.addr = INADDR_ANY;
   bind(sock0, (struct sockaddr *)&addr);
   puts("bind ok");
 
-  /* TCPクライアントからの接続要求を待てる状態にする */
   listen(sock0, 5);
   puts("listening...");
 
-  /* TCPクライアントからの接続要求を受け付ける */
   sock = accept(sock0, (struct sockaddr *)&client);
   puts("accepted");
 
@@ -114,14 +114,14 @@ void thread_test2(void *arg) {
 
 puts("tcp connection closed.");
 
-  /* TCPセッションの終了 */
   close(sock);
 
-  /* listen するsocketの終了 */
   close(sock0);
+*/
 }
 
 void thread_echo(void *arg) {
+/*
   struct socket *sock;
   struct sockaddr_in addr;
 
@@ -145,6 +145,7 @@ void thread_echo(void *arg) {
   }
 
   close(sock);
+*/
 }
 
 void dispatcher_init() {
@@ -175,10 +176,7 @@ void kstack_setaddr() {
   tss.esp0 = (u32)((u8 *)(current->kstack) + current->kstacksize);
 }
 
-
-void thread_exit(void);
-
-struct thread *kthread_new(void (*func)(void *), void *arg, char *name) {
+struct thread *kthread_new(void (*func)(void *), void *arg, const char *name) {
   struct thread *t = malloc(sizeof(struct thread));
   bzero(t, sizeof(struct thread));
   t->name = name;
@@ -191,20 +189,21 @@ struct thread *kthread_new(void (*func)(void *), void *arg, char *name) {
   bzero(t->kstack, PAGESIZE);
   t->kstacksize = PAGESIZE;
   t->regs.esp = (u32)((u8 *)(t->kstack) + t->kstacksize - 4);
-  *(u32 *)t->regs.esp = arg;
+  *(u32 *)t->regs.esp = (u32)arg;
   t->regs.esp -= 4;
   *(u32 *)t->regs.esp = (u32)thread_exit;
   t->regs.esp -= 4;
-  *(u32 *)t->regs.esp = func;
+  *(u32 *)t->regs.esp = (u32)func;
   t->regs.esp -= 4*5;
   *(u32 *)t->regs.esp = 0x200; //initial eflags(IF=1)
   return t;
 }
 
-#define USER_STACK_BOTTOM 0xc0000000
-#define USER_STACK_SIZE 0x1000
-int thread_exec(struct inode *ino) {
-  int (*entrypoint)(void) = elf32_load(ino);
+#define USER_STACK_BOTTOM ((vaddr_t)0xc0000000)
+#define USER_STACK_SIZE ((size_t)0x1000)
+
+int thread_exec(const char *path) {
+  /*int (*entrypoint)(void) = elf32_load(vno);
   if(entrypoint == NULL)
     return -1;
 
@@ -214,7 +213,7 @@ int thread_exec(struct inode *ino) {
 
 
   jmpto_userspace(entrypoint, USER_STACK_BOTTOM - 4);
-
+*/
   return 0;
 }
 
@@ -260,7 +259,7 @@ void thread_yield() {
   IRQ_RESTORE
 }
 
-void thread_sleep(void *cause) {
+void thread_sleep(const void *cause) {
   //printf("thread#%d sleep\n", current->pid);
   current->state = TASK_STATE_WAITING;
   current->waitcause = cause;
@@ -275,14 +274,12 @@ IRQ_RESTORE
 }
 
 
-void thread_wakeup(void *cause) {
-  int wake = 0;
+void thread_wakeup(const void *cause) {
   struct list_head *h, *tmp;
   list_foreach_safe(h, tmp, &wait_queue) {
     struct thread *t = container_of(h, struct thread, link); 
     if(t->waitcause == cause) {
       //printf("thread#%d wakeup\n", t->pid);
-      wake = 1;
       t->state = TASK_STATE_RUNNING;
       list_remove(h);
       list_pushfront(h, &run_queue);

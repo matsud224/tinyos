@@ -34,16 +34,16 @@ void com2_inthandler(void);
 void com1_isr(void);
 void com2_isr(void);
 
-static void serial_open(struct chardev *dev);
-static void serial_close(struct chardev *dev);
-static u32 serial_read(struct chardev *dev, u8 *dest, u32 count);
-static u32 serial_write(struct chardev *dev, u8 *src, u32 count);
+static int serial_open(int minor);
+static int serial_close(int minor);
+static u32 serial_read(int minor, char *dest, size_t count);
+static u32 serial_write(int minor, const char *src, size_t count);
  
 static const struct chardev_ops serial_chardev_ops = {
   .open = serial_open,
   .close = serial_close,
   .read = serial_read,
-  .write = serial_write
+  .write = serial_write,
 };
 
 static struct comport{
@@ -54,10 +54,9 @@ static struct comport{
   void (*inthandler)(void);
   struct chardev_buf *rxbuf;
   struct chardev_buf *txbuf;
-  struct chardev chardev_info;
 } comport[COMPORT_NUM] = {
-  {.port = 0, .base = 0x3f8, .irq = 4, .intvec = IRQ_TO_INTVEC(4), .inthandler = com1_inthandler, .chardev_info.ops = &serial_chardev_ops},
-  {.port = 1, .base = 0x2f8, .irq = 3, .intvec = IRQ_TO_INTVEC(3), .inthandler = com2_inthandler, .chardev_info.ops = &serial_chardev_ops}
+  {.port = 0, .base = 0x3f8, .irq = 4, .intvec = IRQ_TO_INTVEC(4), .inthandler = com1_inthandler},
+  {.port = 1, .base = 0x2f8, .irq = 3, .intvec = IRQ_TO_INTVEC(3), .inthandler = com2_inthandler}
 };
 
 
@@ -79,15 +78,16 @@ DRIVER_INIT void serial_init() {
     comport[i].txbuf = cdbuf_create(malloc(SERIAL_BUFSIZE), SERIAL_BUFSIZE);
 
     pic_clearmask(comport[i].irq);
-    chardev_add(&comport[i].chardev_info);
   }
+
+  chardev_register(&serial_chardev_ops);
 }
 
 static void serial_send(int port) {
   u16 base = comport[port].base;
-  u8 data;
+  char data;
   if(CDBUF_IS_FULL(comport[port].txbuf))
-    thread_wakeup(&comport[port].chardev_info);
+    thread_wakeup(&serial_chardev_ops);
   if(cdbuf_read(comport[port].txbuf, &data, 1) == 1)
     out8(base+DATA, data);
 }
@@ -95,7 +95,7 @@ static void serial_send(int port) {
 void serial_isr_common(int port) {
   u16 base = comport[port].base;
   u8 reason = in8(base+INT_FIFO_CTRL);
-  u8 data;
+  char data;
   if((reason & 0x1) == 0) {
     switch((reason & 0x6)>>1) {
     case 1:
@@ -110,7 +110,7 @@ void serial_isr_common(int port) {
       //受信
       data = in8(base+DATA);
       if(CDBUF_IS_EMPTY(comport[port].rxbuf))
-        thread_wakeup(&comport[port].chardev_info);
+        thread_wakeup(&serial_chardev_ops);
       if(!CDBUF_IS_FULL(comport[port].rxbuf))
         cdbuf_write(comport[port].rxbuf, &data, 1);
       break;
@@ -132,23 +132,39 @@ void com2_isr() {
   serial_isr_common(1);
 }
 
-
-static void serial_open(struct chardev *dev UNUSED) {
-  return;
+static int serial_check_minor(int minor) {
+  if(minor < 0 || minor >= COMPORT_NUM)
+    return -1;
+  else
+    return 0;
 }
 
-static void serial_close(struct chardev *dev UNUSED) {
-  return;
+static int serial_open(int minor) {
+  if(serial_check_minor(minor))
+    return -1;
+  return 0;
 }
 
-static u32 serial_read(struct chardev *dev, u8 *dest, u32 count) {
-  struct comport *com = container_of(dev, struct comport, chardev_info);
+static int serial_close(int minor) {
+  if(serial_check_minor(minor))
+    return -1;
+  return 0;
+}
+
+static u32 serial_read(int minor, char *dest, size_t count) {
+  if(serial_check_minor(minor))
+    return -1;
+
+  struct comport *com = &comport[minor];
   u32 n = cdbuf_read(com->rxbuf, dest, count);
   return n;
 }
 
-static u32 serial_write(struct chardev *dev, u8 *src, u32 count) {
-  struct comport *com = container_of(dev, struct comport, chardev_info);
+static u32 serial_write(int minor, const char *src, size_t count) {
+  if(serial_check_minor(minor))
+    return -1;
+
+  struct comport *com = &comport[minor];
   u32 n = cdbuf_write(com->txbuf, src, count);
   serial_send(com->port);
   return n;

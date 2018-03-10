@@ -1,7 +1,7 @@
 #include <kern/netdev.h>
 #include <kern/thread.h>
 
-struct netdev_ops *netdev_tbl[MAX_NETDEV];
+const struct netdev_ops *netdev_tbl[MAX_NETDEV];
 struct list_head ifaddr_list[MAX_NETDEV];
 
 struct list_head ifaddr_tbl[MAX_PF];
@@ -19,7 +19,7 @@ void netdev_init() {
   nnetdev = 0;
 }
 
-int netdev_register(struct netdev_ops *ops) {
+int netdev_register(const struct netdev_ops *ops) {
   if(nnetdev >= MAX_NETDEV)
     return -1;
   netdev_tbl[nnetdev] = ops;
@@ -28,10 +28,10 @@ int netdev_register(struct netdev_ops *ops) {
 
 int netdev_tx(devno_t devno, struct pktbuf *pkt) {
   int res = -1;
-  struct netdev_ops *dev = netdev_tbl[DEV_MAJOR(devno)];
+  const struct netdev_ops *dev = netdev_tbl[DEV_MAJOR(devno)];
 IRQ_DISABLE
   while(res < 0) {
-    res = dev->ops->tx(DEV_MINOR(devno), pkt);
+    res = dev->tx(DEV_MINOR(devno), pkt);
     if(res < 0)
       thread_sleep(dev);
   }
@@ -40,16 +40,16 @@ IRQ_RESTORE
 }
 
 int netdev_tx_nowait(devno_t devno, struct pktbuf *pkt) {
-  int res = netdev_tbl[DEV_MAJOR(devno)]->ops->tx(DEV_MINOR(devno), pkt);
+  int res = netdev_tbl[DEV_MAJOR(devno)]->tx(DEV_MINOR(devno), pkt);
   return res;
 }
 
 struct pktbuf *netdev_rx(devno_t devno) {
   struct pktbuf *pkt = NULL;
-  struct netdev_ops *dev = netdev_tbl[DEV_MAJOR(devno)];
+  const struct netdev_ops *dev = netdev_tbl[DEV_MAJOR(devno)];
 IRQ_DISABLE
   while(pkt == NULL) {
-    pkt = dev->ops->rx(DEV_MINOR(devno));
+    pkt = dev->rx(DEV_MINOR(devno));
     if(pkt == NULL)
       thread_sleep(dev);
   }
@@ -58,7 +58,7 @@ IRQ_RESTORE
 }
 
 struct pktbuf *netdev_rx_nowait(devno_t devno) {
-  struct pktbuf *pkt = netdev_tbl[DEV_MAJOR(devno)]->ops->rx(DEV_MINOR(devno));
+  struct pktbuf *pkt = netdev_tbl[DEV_MAJOR(devno)]->rx(DEV_MINOR(devno));
   return pkt;
 }
 

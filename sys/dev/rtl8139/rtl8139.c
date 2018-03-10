@@ -13,6 +13,9 @@
 #define RTL8139_VENDORID 0x10ec
 #define RTL8139_DEVICEID 0x8139
 
+int RTL8139_MAJOR;
+const int RTL8139_MINOR = 0;
+
 enum regs {
   IDR				= 0x00,
   MAR				= 0x08,
@@ -112,7 +115,6 @@ static struct {
 	struct queue_head txqueue;
   mutex rxqueue_mtx;
   mutex txqueue_mtx;
-  struct netdev netdev_info;
 } rtldev;
 
 #define RTLREG(r) ((r)+rtldev.iobase)
@@ -125,15 +127,16 @@ static const u16 TX_TSAD[TXDESC_NUM] = {
   TSAD, TSAD+4, TSAD+8, TSAD+12
 };
 
-void rtl8139_open(struct netdev *dev);
-void rtl8139_close(struct netdev *dev);
-int rtl8139_tx(struct netdev *dev, struct pktbuf *pkt);
-struct pktbuf *rtl8139_rx(struct netdev *dev);
+int rtl8139_open(int minor);
+int rtl8139_close(int minor);
+int rtl8139_tx(int minor, struct pktbuf *pkt);
+struct pktbuf *rtl8139_rx(int minor);
+
 static const struct netdev_ops rtl8139_ops = {
   .open = rtl8139_open,
   .close = rtl8139_close,
   .tx = rtl8139_tx,
-  .rx = rtl8139_rx
+  .rx = rtl8139_rx,
 };
 
 static struct workqueue *rx_wq;
@@ -146,7 +149,6 @@ void rtl8139_init(struct pci_dev *thisdev) {
   rx_wq = workqueue_new("rtl8139_rx_wq");
   tx_wq = workqueue_new("rtl8139_tx_wq");
 
-  rtldev.netdev_info.ops = &rtl8139_ops;
   rtldev.pci = thisdev;
   rtldev.iobase = pci_config_read32(thisdev, PCI_BAR0);
   rtldev.iobase &= 0xfffc;
@@ -159,21 +161,22 @@ void rtl8139_init(struct pci_dev *thisdev) {
 	mutex_init(&rtldev.rxqueue_mtx);
 	mutex_init(&rtldev.txqueue_mtx);
 
-	list_init(&rtldev.netdev_info.ifaddr_list);
+  RTL8139_MAJOR = netdev_register(&rtl8139_ops);
 
   struct ifaddr *eaddr = malloc(sizeof(struct ifaddr)+ETHER_ADDR_LEN);
   eaddr->len = ETHER_ADDR_LEN;
   eaddr->family = PF_LINK;
   for(int i=0; i<ETHER_ADDR_LEN; i++)
     eaddr->addr[i] = in8(RTLREG(IDR)+i);
-  netdev_add_ifaddr(&rtldev.netdev_info, eaddr);
+
+  netdev_add_ifaddr(DEVNO(RTL8139_MAJOR, RTL8139_MINOR), eaddr);
 
   struct ifaddr_in *inaddr = malloc(sizeof(struct ifaddr_in));
   inaddr->len = sizeof(in_addr_t) * 3;
   inaddr->family = PF_INET;
   inaddr->addr = IPADDR(192,168,4,2);
   inaddr->netmask = IPADDR(255,255,255,0);
-  netdev_add_ifaddr(&rtldev.netdev_info, inaddr);
+  netdev_add_ifaddr(DEVNO(RTL8139_MAJOR, RTL8139_MINOR), (struct ifaddr *)inaddr);
 
   //enable PCI bus mastering
   u16 pci_cmd = pci_config_read16(thisdev, PCI_COMMAND);
@@ -212,8 +215,6 @@ DRIVER_INIT int rtl8139_probe() {
   struct pci_dev *thisdev = pci_search_device(RTL8139_VENDORID, RTL8139_DEVICEID);
   if(thisdev != NULL) {
     rtl8139_init(thisdev);
-    rtldev.netdev_info.ops = &rtl8139_ops;
-    netdev_add(&rtldev.netdev_info);
   }
   return (thisdev != NULL);
 }
@@ -246,9 +247,9 @@ IRQ_RESTORE
   return error;
 }
 
-void rtl8139_tx_all(void *arg) {
+void rtl8139_tx_all(void *arg UNUSED) {
   while(rtl8139_tx_one() == 0);
-  thread_wakeup(&rtldev.netdev_info);
+  thread_wakeup(&rtl8139_ops);
 }
 
 int rtl8139_rx_one() {
@@ -276,7 +277,7 @@ IRQ_DISABLE
   }
 
 	if(!queue_is_full(&rtldev.rxqueue)) {
-    u8 *buf = malloc(rx_size-4);
+    char *buf = malloc(rx_size-4);
     memcpy(buf, rtldev.rxbuf+offset+4, rx_size-4);
     struct pktbuf *pkt = pktbuf_create(buf, rx_size-4, free);
     queue_enqueue(&pkt->link, &rtldev.rxqueue);
@@ -295,14 +296,14 @@ IRQ_RESTORE
   return error;
 }
 
-void rtl8139_rx_all(void *arg) {
+void rtl8139_rx_all(void *arg UNUSED) {
   int rx_count = 0;
   while(rtl8139_rx_one() == 0)
     rx_count++;
 
   if(rx_count > 0) {
-    thread_wakeup(&rtldev.netdev_info);
-    workqueue_add(ether_wq, ether_rx, &rtldev.netdev_info);
+    thread_wakeup(&rtl8139_ops);
+    workqueue_add(ether_wq, ether_rx, (void *)DEVNO(RTL8139_MAJOR, RTL8139_MINOR));
   }
 }
 
@@ -330,16 +331,32 @@ void rtl8139_isr() {
   pic_sendeoi();
 }
 
-
-void rtl8139_open(struct netdev *dev UNUSED) {
-  return;
+static int rtl8139_check_minor(int minor) {
+  if(minor == 0)
+    return 0;
+  else
+    return -1;
 }
 
-void rtl8139_close(struct netdev *dev UNUSED) {
-  return;
+
+int rtl8139_open(int minor) {
+  if(rtl8139_check_minor(minor))
+    return -1;
+
+  return 0;
 }
 
-int rtl8139_tx(struct netdev *dev UNUSED, struct pktbuf *pkt) {
+int rtl8139_close(int minor) {
+  if(rtl8139_check_minor(minor))
+    return -1;
+
+  return 0;
+}
+
+int rtl8139_tx(int minor, struct pktbuf *pkt) {
+  if(rtl8139_check_minor(minor))
+    return -1;
+
   mutex_lock(&rtldev.txqueue_mtx);
   int result = queue_enqueue(&pkt->link, &rtldev.txqueue);
   if(result == 0)
@@ -348,7 +365,10 @@ int rtl8139_tx(struct netdev *dev UNUSED, struct pktbuf *pkt) {
   return result;
 }
 
-struct pktbuf *rtl8139_rx(struct netdev *dev UNUSED) {
+struct pktbuf *rtl8139_rx(int minor) {
+  if(rtl8139_check_minor(minor))
+    return NULL;
+
   mutex_lock(&rtldev.rxqueue_mtx);
   if(queue_is_empty(&rtldev.rxqueue)) {
     mutex_unlock(&rtldev.rxqueue_mtx);

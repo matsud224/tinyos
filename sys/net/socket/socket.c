@@ -6,23 +6,19 @@
 
 static struct list_head socket_list;
 
-struct socket_ops *sock_ops[MAX_PF][MAX_SOCKTYPE];
+const struct socket_ops *sock_ops[MAX_PF][MAX_SOCKTYPE];
 
 static mutex portno_mtx;
 static mutex socklist_mtx;
 
 int sock_read(struct file *f, void *buf, size_t count);
 int sock_write(struct file *f, const void *buf, size_t count);
-int sock_lseek(struct file *f, off_t offset, int whence);
 int sock_close(struct file *f);
-int sock_sync(struct file *f);
 
 static const struct file_ops sock_file_ops = {
   .read = sock_read,
   .write = sock_write,
-  .lseek = sock_lseek, 
   .close = sock_close,
-  .sync = sock_sync,
 };
 
 
@@ -66,82 +62,109 @@ struct file *socket(int domain, int type) {
   if(s == NULL)
     return NULL;
   s->pcb = s->ops->init();
-  return file_new(FILE_SOCKET, s, sock_file_ops);
+  return file_new(s, &sock_file_ops);
+}
+
+static int is_sock_file(struct file *f) {
+  return f->ops == &sock_file_ops;
 }
 
 int bind(struct file *f, const struct sockaddr *addr) {
-  if(f->type != FILE_SOCKET)
+  if(!is_sock_file(f))
     return -1;
-  struct socket *s = (struct socket *)f->fcb;
-  return s->ops->bind(s->pcb, addr);
+  struct socket *s= (struct socket *)f->data;
+  if(s->ops->bind)
+    return s->ops->bind(s->pcb, addr);
+  else
+    return -1;
 }
 
-int sendto(struct file *f, const char *msg, u32 len, int flags, const struct sockaddr *to_addr) {
-  if(f->type != FILE_SOCKET)
+int sendto(struct file *f, const char *msg, size_t len, int flags, const struct sockaddr *to_addr) {
+  if(!is_sock_file(f))
     return -1;
-  struct socket *s = (struct socket *)f->fcb;
-  return s->ops->sendto(s->pcb, msg, len, flags, to_addr);
+  struct socket *s = (struct socket *)f->data;
+  if(s->ops->sendto)
+    return s->ops->sendto(s->pcb, msg, len, flags, to_addr);
+  else
+    return -1;
 }
 
-int recvfrom(struct file *f, char *buf, u32 len, int flags, struct sockaddr *from_addr) {
-  if(f->type != FILE_SOCKET)
+int recvfrom(struct file *f, char *buf, size_t len, int flags, struct sockaddr *from_addr) {
+  if(!is_sock_file(f))
     return -1;
-  struct socket *s = (struct socket *)f->fcb;
-  return s->ops->recvfrom(s->pcb, buf, len, flags, from_addr);
+  struct socket *s = (struct socket *)f->data;
+  if(s->ops->recvfrom)
+    return s->ops->recvfrom(s->pcb, buf, len, flags, from_addr);
+  else
+    return -1;
 }
 
 int connect(struct file *f, const struct sockaddr *to_addr) {
-  if(f->type != FILE_SOCKET)
+  if(!is_sock_file(f))
     return -1;
-  struct socket *s = (struct socket *)f->fcb;
-  return s->ops->connect(s->pcb, to_addr);
+  struct socket *s = (struct socket *)f->data;
+  if(s->ops->connect)
+    return s->ops->connect(s->pcb, to_addr);
+  else
+    return -1;
 }
 
 int listen(struct file *f, int backlog){
-  if(f->type != FILE_SOCKET)
+  if(!is_sock_file(f))
     return -1;
-  struct socket *s = (struct socket *)f->fcb;
-  return s->ops->listen(s->pcb, backlog);
+  struct socket *s = (struct socket *)f->data;
+  if(s->ops->listen)
+    return s->ops->listen(s->pcb, backlog);
+  else
+    return -1;
 }
 
 struct socket *accept(struct file *f, struct sockaddr *client_addr) {
-  if(f->type != FILE_SOCKET)
-    return -1;
-  struct socket *s = (struct socket *)f->fcb;
+  if(!is_sock_file(f))
+    return NULL;
+  struct socket *s = (struct socket *)f->data;
+  if(!s->ops->accept)
+    return NULL;
+
   struct socket *s2 = _socket(s->domain, s->type);
   s2->pcb = s->ops->accept(s->pcb, client_addr);
   return s2;
 }
 
-int send(struct file *f, const char *msg, u32 len, int flags) {
-  if(f->type != FILE_SOCKET)
+int send(struct file *f, const char *msg, size_t len, int flags) {
+  if(!is_sock_file(f))
     return -1;
-  struct socket *s = (struct socket *)f->fcb;
-  return s->ops->send(s->pcb, msg, len, flags);
-}
-
-int recv(struct file *f, char *buf, u32 len, int flags) {
-  if(f->type != FILE_SOCKET)
+  struct socket *s = (struct socket *)f->data;
+  if(s->ops->send)
+    return s->ops->send(s->pcb, msg, len, flags);
+  else
     return -1;
-  struct socket *s = (struct socket *)f->fcb;
-  return s->ops->recv(s->pcb, buf, len, flags);
+}
+
+int recv(struct file *f, char *buf, size_t len, int flags) {
+  if(!is_sock_file(f))
+    return -1;
+  struct socket *s = (struct socket *)f->data;
+  if(s->ops->recv)
+    return s->ops->recv(s->pcb, buf, len, flags);
+  else
+    return -1;
 }
 
 
-int sock_read(struct socket *s, void *buf, size_t count) {
-  return recv(s, buf, count, 0);
+int sock_read(struct file *f, void *buf, size_t count) {
+  return recv(f, buf, count, 0);
 }
 
-int sock_write(struct socket *s, const void *buf, size_t count) {
-  return send(s, buf, count, 0);
+int sock_write(struct file *f, const void *buf, size_t count) {
+  return send(f, buf, count, 0);
 }
 
-int sock_lseek(struct socket *s, off_t offset, int whence) {
-  return EBADF;
-}
-
-int sock_close(struct socket *s) {
-  int retval = s->ops->close(s->pcb);
+int sock_close(struct file *f) {
+  struct socket *s = (struct socket *)f->data;
+  int retval = 0;
+  if(s->ops->close)
+    retval = s->ops->close(s->pcb);
 
   mutex_lock(&socklist_mtx);
   list_remove(&s->link);
@@ -150,8 +173,5 @@ int sock_close(struct socket *s) {
   return retval;
 }
 
-int sock_sync(struct socket *s) {
-  return 0;
-}
 
 

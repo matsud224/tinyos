@@ -20,10 +20,9 @@ NET_INIT void ether_init() {
   ether_wq = workqueue_new("ether wq");
 }
 
-void ether_rx(void *ndev) {
-  struct netdev *dev = (struct netdev *)ndev;
+void ether_rx(devno_t devno) {
   struct pktbuf *frame = NULL;
-  while((frame = netdev_rx_nowait(dev)) != NULL)
+  while((frame = netdev_rx_nowait(devno)) != NULL)
     ether_rx_one(frame);
 }
 
@@ -52,12 +51,12 @@ reject:
   return;
 }
 
-void ether_tx(struct pktbuf *frm, struct etheraddr dest, u16 proto, struct netdev *dev){
+void ether_tx(struct pktbuf *frm, struct etheraddr dest, u16 proto, devno_t devno){
   struct ether_hdr *ehdr = (struct ether_hdr *)pktbuf_add_header(frm, sizeof(struct ether_hdr));
   ehdr->ether_type = hton16(proto);
   ehdr->ether_dhost = dest;
-  ehdr->ether_shost = *(struct etheraddr *)netdev_find_addr(dev, PF_LINK)->addr;
-  if(netdev_tx_nowait(dev, frm) < 0)
+  ehdr->ether_shost = *((struct etheraddr *)netdev_find_addr(devno, PF_LINK)->addr);
+  if(netdev_tx_nowait(devno, frm) < 0)
     pktbuf_free(frm);
   return;
 }

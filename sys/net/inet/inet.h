@@ -25,7 +25,7 @@ struct sockaddr_in {
 struct ifaddr_in {
   struct list_head dev_link;
   struct list_head family_link;
-  struct netdev *dev;
+  devno_t devno;
   u8 len;
   u8 family;
   in_addr_t addr;

@@ -15,6 +15,7 @@ struct vnode {
 };
 
 struct stat {
+  u32 st_mode;
   devno_t st_dev;
   size_t st_size;
 };

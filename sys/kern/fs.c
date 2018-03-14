@@ -129,10 +129,21 @@ int link(const char *oldpath, const char *newpath) {
   struct vnode *vno0 = name_to_vnode(oldpath, NULL);
   if(vno0 == NULL)
     return -1;
-  if(!vno0->ops->link)
+
+  struct vnode *parent = NULL;
+  struct vnode *vno1 = name_to_vnode(newpath, parent);
+  if(vno1 != NULL)
     return -1;
 
-  
+  if(!parent->ops->create)
+    return -1;
+
+  char *newname;
+  vno1 = parent->ops->create(vno1, newname);
+  if(!vno1->ops->link)
+    return -1;
+
+  return vno1->ops->link();
 }
 
 int unlink(const char *path) {

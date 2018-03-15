@@ -4,7 +4,7 @@
 #include <kern/blkdev.h>
 
 #define FAT32_BOOT 0
-#define FAT32_INODECACHE_SIZE 512
+#define FAT32_MAX_FILE_NAME 255
 
 static struct fs *fat32_mount(devno_t devno);
 static struct vnode *fat32_getroot(struct fs *fs);
@@ -182,21 +182,26 @@ static struct fs *fat32_mount(devno_t devno) {
   return &(fat32->fs);
 }
 
-static struct vnode *fat32_new_vnode(struct fs *fs, u8 attr, u32 size, u32 cluster) {
-  struct fat32_vnode *vno = malloc(sizeof(struct fat32_vnode));
+static struct vnode *fat32_vnode_new(struct fs *fs, u8 attr, u32 size, u32 cluster) {
+  struct fat32_vnode *vno = fs_vcache_find(fs, (vno_t)cluster);
+  if(vno != NULL)
+    return vno;
+  vno = malloc(sizeof(struct fat32_vnode));
   vno->attr = attr;
   vno->size = size;
   vno->cluster = cluster;
+  fs_vnode_init(&vno->vnode);
   vno->vnode.fs = fs;
   vno->vnode.ops = &fat32_vnode_ops;
   vno->vnode.number = vno->cluster;
   vno->vnode.type = V_REGULAR;
+  fs_vcache_add(fs, &vno->vnode);
   return &(vno->vnode);
 }
 
 static struct vnode *fat32_getroot(struct fs *fs) {
   struct fat32_fs *fat32 = container_of(fs, struct fat32_fs, fs);
-  return fat32_new_vnode(fs, ATTR_DIRECTORY, 0, fat32->boot.BPB_RootClus);
+  return fat32_vnode_new(fs, ATTR_DIRECTORY, 0, fat32->boot.BPB_RootClus);
 }
 
 static u32 fatent_read(struct fat32_fs *fat32, u32 index) {
@@ -248,17 +253,6 @@ static void show_cluster_chain(struct fat32_fs *fat32, u32 cluster) {
     if(!is_active_cluster(cluster))
       return;
   }
-}
-
-static u32 cluster_to_sector(struct fat32_fs *fat32, u32 cluster);
-
-static int strcmp_dent(const char *path, const char *name) {
-  while(*path && *path!='/' && *path == *name) {
-    path++; name++;
-  }
-  if(*path == '/' && *name == '\0')
-    return 0;
-  return *path - *name;
 }
 
 static u32 cluster_to_sector(struct fat32_fs *fat32, u32 cluster) {
@@ -359,7 +353,7 @@ struct vnode *fat32_lookup(struct vnode *vno, const char *name) {
         if(dent_name == NULL)
           dent_name = get_sfn(dent);
 
-        if(strcmp_dent(name, dent_name) == 0) {
+        if(strncmp(name, dent_name, FAT32_MAX_FILE_NAME) == 0) {
           found_dent = dent;
           goto exit1;
         }
@@ -379,7 +373,8 @@ exit1:
     dent_cluster = fat32->boot.BPB_RootClus;
   }
 
-  struct vnode *newvno = fat32_new_vnode(&(fat32->fs), found_dent->DIR_Attr, found_dent->DIR_FileSize, dent_cluster);
+  struct vnode *newvno = fat32_vnode_new(&fat32->fs, 
+        found_dent->DIR_Attr, found_dent->DIR_FileSize, dent_cluster);
 
   if(bbuf != NULL)
     blkbuf_release(bbuf);

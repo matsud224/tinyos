@@ -20,6 +20,7 @@
 #define MAX_MOUNT			32
 
 #define NBLKBUF				64
+#define NVNODEBUF			1024
 
 #define CLASS_BLKDEV	1
 #define CLASS_CHARDEV	2

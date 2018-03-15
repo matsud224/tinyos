@@ -22,6 +22,7 @@ int minix3_mknod(struct vnode *vno, const char *name);
 int minix3_link(struct vnode *vno, const char *name);
 int minix3_unlink(struct vnode *vno, const char *name);
 int minix3_stat(struct vnode *vno, struct stat *buf);
+void minix3_vfree(struct vnode *vno);
 
 static const struct vnode_ops minix3_vnode_ops = {
 	.create = minix3_create,
@@ -30,8 +31,14 @@ static const struct vnode_ops minix3_vnode_ops = {
 	.link = minix3_link,
 	.unlink = minix3_unlink,
 	.stat = minix3_stat,
+	.vfree = minix3_vfree,
 };
 
+enum minix3_dent_ops {
+  OP_LOOKUP,
+  OP_ADD,
+  OP_UNLINK,
+}
 
 static const struct fstype_ops minix3_fstype_ops = {
   .mount = minix3_mount,
@@ -147,6 +154,7 @@ FS_INIT void minix3_init() {
 static struct vnode *minix3_vnode_new(struct fs *fs, u32 number, struct minix3_inode *inode) {
   struct minix3_vnode *vno = malloc(sizeof(struct minix3_vnode));
   memcpy(vno->minix3, inode, sizeof(struct minix3_inode));
+  fs_vnode_init(&vno->vnode);
   vno->vnode.fs = fs;
   vno->vnode.ops = &minix3_vnode_ops;
   vno->vnode.number = number;
@@ -155,6 +163,9 @@ static struct vnode *minix3_vnode_new(struct fs *fs, u32 number, struct minix3_i
 }
 
 static struct minix3_vnode *minix3_vnode_get(struct fs *fs, u32 number) {
+  struct vnode *vno = vcache_find(fs, number);
+  if(vno != NULL)
+    return vno;
   struct minix3_fs *minix3 = malloc(sizeof(struct minix3_fs));
   u32 inoblk = number / (MINIX2_INODES_PER_BLOCK / BLOCKS_IN_MINIX_BLOCK);
   u32 inooff = number % (MINIX2_INODES_PER_BLOCK / BLOCKS_IN_MINIX_BLOCK);
@@ -163,11 +174,15 @@ static struct minix3_vnode *minix3_vnode_get(struct fs *fs, u32 number) {
 
   struct minix3_inode *ino = (struct minix3_inode *)(bbuf->addr) + inooff;
   struct minix3_vnode *m3vno = minix3_vnode_new(fs, number, ino);
+  vno = &m3vno->vnode;
+  if(vcache_add(fs, vno) != 0) {
+    //vcache is full
+    minix3_vfree(vno);
+    return NULL;
+  }
+  
   blkbuf_release(bbuf);
-  return &(m3vno->vnode);
-}
-
-static void minix3_vnode_free(struct vnode *vno) {
+  return vnode;
 }
 
 static zone_t zone_vtop(struct minix3_vnode *m3vno, zone_t vzone, int is_write_access) {
@@ -637,6 +652,10 @@ struct vnode *minix3_create(struct vnode *vno, const char *name) {
     return 0;
 }
 
+struct vnode *minix3_lookup(struct vnode *vno, const char *name) {
+  return minix3_dentop(vno, name, OP_LOOKUP, NULL);
+}
+
 int minix3_mknod(struct vnode *vno, int mode, dev_t devno) {
   if(minix3_dentop(vno, name, OP_ADD, 0) == NULL)
     return -1;
@@ -668,5 +687,10 @@ int minix3_stat(struct vnode *vno, struct stat *buf) {
   buf->st_size = m3vno->minix3.i_size;
 
   return 0;
+}
+
+void minix3_vfree(struct vnode *vno) {
+  struct minix3_vnode *m3vno = container_of(vno, struct minix3_vnode, vnode);
+  free(m3vno); 
 }
 

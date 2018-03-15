@@ -1,6 +1,10 @@
 #pragma once
 #include <kern/kernlib.h>
 
+#define MAX_FILE_NAME 255
+
+#define VNO_INVALID 0
+
 enum vtype {
   V_REGULAR, V_BLKDEV, V_CHARDEV, V_PIPE,
 };
@@ -11,7 +15,9 @@ struct vnode {
   int type;
   devno_t devno;
   int ref;
-  int number;
+  vno_t number;
+  mutex mtx;
+  struct list_head fs_link;
 };
 
 struct stat {
@@ -27,6 +33,7 @@ struct vnode_ops {
   int (*link)(struct vnode *vno, const char *name);
   int (*unlink)(struct vnode *vno, const char *name);
   int (*stat)(struct vnode *vno, struct stat *buf);
+  void (*vfree)(struct vnode *vno);
 };
 
 struct fs_ops {
@@ -36,6 +43,7 @@ struct fs_ops {
 struct fs {
   const struct fs_ops *fs_ops;
   const struct file_ops *file_ops;
+  struct list_head vnode_list;
 };
 
 struct fstype_ops {

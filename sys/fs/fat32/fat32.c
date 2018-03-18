@@ -136,10 +136,12 @@ static const struct file_ops fat32_file_ops = {
 
 struct vnode *fat32_lookup(struct vnode *vno, const char *name);
 int fat32_stat(struct vnode *vno, struct stat *buf);
+void fat32_vfree(struct vnode *vno);
 
 static const struct vnode_ops fat32_vnode_ops = {
   .lookup = fat32_lookup,
   .stat = fat32_stat,
+  .vfree = fat32_vfree,
 };
 
 
@@ -166,7 +168,6 @@ static struct fs *fat32_mount(devno_t devno) {
   blkbuf_release(bbuf);
 
   fat32->fs.fs_ops = &fat32_fs_ops;
-  fat32->fs.file_ops = &fat32_file_ops;
   fat32->fatstart = boot->BPB_RsvdSecCnt;
   fat32->fatsectors = boot->BPB_FATSz32 * boot->BPB_NumFATs;
   fat32->rootstart = fat32->fatstart + fat32->fatsectors;
@@ -183,20 +184,20 @@ static struct fs *fat32_mount(devno_t devno) {
 }
 
 static struct vnode *fat32_vnode_new(struct fs *fs, u8 attr, u32 size, u32 cluster) {
-  struct fat32_vnode *vno = fs_vcache_find(fs, (vno_t)cluster);
+  struct vnode *vno = vcache_find(fs, (vno_t)cluster);
   if(vno != NULL)
     return vno;
-  vno = malloc(sizeof(struct fat32_vnode));
-  vno->attr = attr;
-  vno->size = size;
-  vno->cluster = cluster;
-  fs_vnode_init(&vno->vnode);
-  vno->vnode.fs = fs;
-  vno->vnode.ops = &fat32_vnode_ops;
-  vno->vnode.number = vno->cluster;
-  vno->vnode.type = V_REGULAR;
-  fs_vcache_add(fs, &vno->vnode);
-  return &(vno->vnode);
+
+  struct fat32_vnode *fatvno = malloc(sizeof(struct fat32_vnode));
+  fatvno->attr = attr;
+  fatvno->size = size;
+  fatvno->cluster = (vno_t)cluster;
+  vnode_init(&fatvno->vnode, cluster, fs, &fat32_vnode_ops, &fat32_file_ops);
+  if(vcache_add(fs, &fatvno->vnode)) {
+    fat32_vfree(vno);
+    return NULL;
+  }
+  return &(fatvno->vnode);
 }
 
 static struct vnode *fat32_getroot(struct fs *fs) {
@@ -458,5 +459,10 @@ int fat32_stat(struct vnode *vno, struct stat *buf) {
   buf->st_size = fatvno->size;
 
   return 0;
+}
+
+void fat32_vfree(struct vnode *vno) {
+  struct fat32_vnode *fatvno = container_of(vno, struct fat32_vnode, vnode);
+  free(fatvno); 
 }
 

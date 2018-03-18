@@ -16,7 +16,7 @@ struct ifaddr {
   struct list_head dev_link;
   struct list_head family_link;
   devno_t devno;
-  size_t len;
+  u8 len;
   u8 family;
   u8 addr[];
 };

@@ -26,9 +26,8 @@ void _init(void);
 KERNENTRY void kernel_main(void) {
   a20_enable();
 	vga_init();
-	puts("hello, world!");
+	puts("Starting kernel...");
   page_init();
-  printf("%d MB(%d pages) free\n", (page_getnfree()*4)/1024, page_getnfree());
   idt_init();
   idt_register(13, IDT_INTGATE, gpe_inthandler);
   idt_register(14, IDT_INTGATE, pf_inthandler);
@@ -41,10 +40,10 @@ KERNENTRY void kernel_main(void) {
   blkdev_init();
   chardev_init();
   netdev_init();
+  fs_init();
 
   _init();
 
-  
   ip_set_defaultgw(IPADDR(192,168,4,1));
   pit_init();
 

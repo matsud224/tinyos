@@ -21,7 +21,7 @@ const struct file_ops chardev_file_ops = {
 void chardev_init() {
   for(int i=0; i<MAX_CHARDEV; i++)
     chardev_tbl[i] = NULL;
-  nchardev = 0;
+  nchardev = BAD_MAJOR + 1;
 }
 
 int chardev_register(const struct chardev_ops *ops) {

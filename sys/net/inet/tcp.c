@@ -234,6 +234,7 @@ NET_INIT void tcp_init() {
   list_init(&tcpcb_list);
   mutex_init(&cblist_mtx);
   socket_register_ops(PF_INET, SOCK_STREAM, &tcp_sock_ops);
+  puts("socket: \"tcp\" registered");
 }
 
 void tcp_stat(void) {

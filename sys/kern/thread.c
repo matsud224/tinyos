@@ -28,7 +28,44 @@ void thread_a(void *arg) {
   printf("arg = %d\n", (int)arg);
 }
 
+void thread_echo(void *arg) {
+/*
+  struct socket *sock;
+  struct sockaddr_in addr;
+
+  sock = socket(PF_INET, SOCK_DGRAM);
+  if(sock == NULL) {
+    puts("failed to open socket");
+    return;
+  }
+
+  addr.family = PF_INET;
+  addr.port = hton16(54321);
+  addr.addr = IPADDR(192,168,4,1);
+
+  u8 data;
+  while(1) {
+    if(chardev_read(0, &data, 1) == 1) {
+      chardev_write(0, &data, 1);
+      //if(sendto(sock, &data, 1, 0, (struct sockaddr *)&addr) < 0)
+        //puts("sendto failed");
+    }
+  }
+
+  close(sock);
+*/
+}
+
 void thread_b(void *arg) {
+  
+  if(fs_mountroot(ROOTFS_TYPE, ROOTFS_DEV))
+    puts("fs: failed to mount");
+  else
+    puts("fs: mount succeeded");
+
+
+  thread_run(kthread_new(thread_a, 3, "thread_a"));
+  thread_run(kthread_new(thread_echo, NULL, "echo task"));
 /*
   if(fs_mountroot("fat32", 0) < 0) {
     puts("mountroot failed.");
@@ -120,34 +157,6 @@ puts("tcp connection closed.");
 */
 }
 
-void thread_echo(void *arg) {
-/*
-  struct socket *sock;
-  struct sockaddr_in addr;
-
-  sock = socket(PF_INET, SOCK_DGRAM);
-  if(sock == NULL) {
-    puts("failed to open socket");
-    return;
-  }
-
-  addr.family = PF_INET;
-  addr.port = hton16(54321);
-  addr.addr = IPADDR(192,168,4,1);
-
-  u8 data;
-  while(1) {
-    if(chardev_read(0, &data, 1) == 1) {
-      chardev_write(0, &data, 1);
-      //if(sendto(sock, &data, 1, 0, (struct sockaddr *)&addr) < 0)
-        //puts("sendto failed");
-    }
-  }
-
-  close(sock);
-*/
-}
-
 void dispatcher_init() {
   current = NULL;
   list_init(&run_queue);
@@ -160,9 +169,7 @@ void dispatcher_init() {
   gdt_settssbase(&tss);
   ltr(GDT_SEL_TSS);
 
-  //thread_run(kthread_new(thread_a, 3));
   thread_run(kthread_new(thread_idle, NULL, "idle task"));
-  thread_run(kthread_new(thread_echo, NULL, "echo task"));
   thread_run(kthread_new(thread_b, NULL, "fs test thread"));
   //thread_run(kthread_new(thread_test, NULL, "udp test task"));
   //thread_run(kthread_new(thread_test2, NULL, "tcp test task"));
@@ -292,7 +299,7 @@ void thread_set_alarm(void *cause, u32 expire) {
 }
 
 void thread_exit() {
-  printf("thread#%d(%s) exit\n", current->pid, current->name?current->name:"");
+  printf("thread#%d(%s) exit\n", current->pid, current->name?current->name:"???");
   current->state = TASK_STATE_EXITED;
   thread_yield();
 }

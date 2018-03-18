@@ -7,11 +7,19 @@ int abs(int n) {
 }
 
 char *strncpy(char *dest, const char *src, size_t n) {
-  for(size_t i=0; i<n; i++) {
-    *dest++ = *src++;
-    if(*src == '\0') break;
+  size_t i;
+  for(i=0; i<n && src[i]!='\0'; i++) {
+    dest[i] = src[i];
   }
+  for(; i<n; i++)
+    dest[i] = '\0';
   return dest;
+}
+
+size_t strlen(const char *s) {
+  size_t i;
+  for(i=0; *s!='\0'; i++, s++);
+  return i;
 }
 
 size_t strnlen(const char *s, size_t n) {
@@ -20,9 +28,23 @@ size_t strnlen(const char *s, size_t n) {
   return i;
 }
 
+int strcmp(const char *s1, const char *s2) {
+  while(*s1 && *s1 == *s2) {
+    s1++; s2++;
+  }
+  return *s1 - *s2;
+}
+
 int strncmp(const char *s1, const char *s2, size_t n) {
   for(size_t i=0; i<n && *s1 && (*s1==*s2); i++, s1++, s2++);
   return *s1 - *s2;
+}
+
+char *strdup(const char *str) {
+  size_t size = strlen(str) + 1;
+  char *copied = malloc(size);
+  strncpy(copied, str, size);
+  return copied;
 }
 
 void *memcpy(void *dest, const void *src, size_t n) {

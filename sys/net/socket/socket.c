@@ -62,7 +62,7 @@ struct file *socket(int domain, int type) {
   if(s == NULL)
     return NULL;
   s->pcb = s->ops->init();
-  return file_new(s, &sock_file_ops);
+  return file_new(s, &sock_file_ops, _FREAD | _FWRITE);
 }
 
 static int is_sock_file(struct file *f) {

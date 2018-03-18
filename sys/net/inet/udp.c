@@ -54,6 +54,7 @@ NET_INIT void udp_init() {
   mutex_init(&cblist_mtx);
 
   socket_register_ops(PF_INET, SOCK_DGRAM, &udp_sock_ops);
+  puts("socket: \"udp\" registered");
 }
 
 static int is_used_port(in_port_t port) {

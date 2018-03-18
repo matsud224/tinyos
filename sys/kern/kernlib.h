@@ -29,14 +29,17 @@
 #define pagealign(a) ((a)&~(PAGESIZE-1))
 #define align(a, b) ((a)&~(b-1))
 
-#define DEV_MINOR(n) ((n) & 0xffff)
-#define DEV_MAJOR(n) ((n) >> 16)
-#define DEVNO(ma, mi) (((ma)<<16) | (mi))
+#define DEV_MINOR(n) ((n) & 0xff)
+#define DEV_MAJOR(n) ((n) >> 8)
+#define DEVNO(ma, mi) (((ma)<<8) | (mi))
+#define BAD_MAJOR 0
 
 int abs(int n);
 char *strncpy(char *dest, const char *src, size_t n);
 size_t strnlen(const char *s, size_t n);
+int strcmp(const char *s1, const char *s2);
 int strncmp(const char *s1, const char *s2, size_t n);
+char *strdup(const char *str);
 void *memcpy(void *dest, const void *src, size_t n);
 void bzero(void *s, size_t n);
 void *memset(void *s, int c, size_t n);

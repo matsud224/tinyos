@@ -16,7 +16,7 @@ void netdev_init() {
   for(int i=0; i<MAX_PF; i++)
     list_init(&ifaddr_tbl[i]);
 
-  nnetdev = 0;
+  nnetdev = BAD_MAJOR + 1;
 }
 
 int netdev_register(const struct netdev_ops *ops) {

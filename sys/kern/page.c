@@ -78,6 +78,7 @@ void page_init() {
   page_freelist = NULL;
   recycle_area(KERN_VMEM_TO_PHYS(protmem_freearea_addr), memsize - (((u32)KERN_VMEM_TO_PHYS(protmem_freearea_addr))));
   
+  printf("page: %d MB(%d pages) free\n", (page_getnfree()*4)/1024, page_getnfree());
   return;
 }
 

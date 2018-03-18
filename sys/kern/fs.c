@@ -16,37 +16,34 @@ struct fs *mount_tbl[MAX_MOUNT];
 static int mounttbl_used = 0;
 
 static struct fstype fstype_tbl[MAX_FSTYPE];
-static struct vnode *vcache[NVNODES];
+static struct vnode *vcache[NVCACHE];
 static mutex vcache_mtx;
 
 static struct vnode *rootdir;
 
-
-static int fs_mountroot(const char *name, devno_t devno);
-
-FS_INIT void fs_init() {
-  puts("Initializing filesystem...\n");
-  
+void fs_init() {
   mutex_init(&vcache_mtx);  
 
-  for(int i=0; i<NVODES; i++) {
+  for(int i=0; i<NVCACHE; i++) {
     vcache[i] = NULL;
   }
-
-  fs_mountroot(ROOTFS_TYPE, ROOTFS_DEV);
 }
 
 void fstype_register(const char *name, const struct fstype_ops *ops) {
   fstype_tbl[fstypetbl_used].name = name;
   fstype_tbl[fstypetbl_used].ops = ops;
   fstypetbl_used++;
-  printf("Filesystem \"%s\" registered.\n", name);
+  printf("fs: \"%s\" registered\n", name);
 }
 
-void vnode_init(struct vnode *vno) {
+void vnode_init(struct vnode *vno, vno_t number, struct fs *fs, const struct vnode_ops *ops, const struct file_ops *file_ops) {
   bzero(vno, sizeof(struct vnode));
   mutex_init(&vno->mtx);
   vno->ref = 1;
+  vno->number = number;
+  vno->fs = fs;
+  vno->ops = ops;
+  vno->file_ops = file_ops;
 }
 
 void vnode_lock(struct vnode *vno) {
@@ -54,6 +51,8 @@ void vnode_lock(struct vnode *vno) {
 }
 
 void vnode_unlock(struct vnode *vno) {
+  if(vno == NULL)
+    return;
   mutex_unlock(&vno->mtx);
 }
 
@@ -65,16 +64,35 @@ void vnode_hold(struct vnode *vno) {
 }
 
 void vnode_release(struct vnode *vno) {
+  if(vno == NULL)
+    return;
   vnode_lock(vno);
   if(vno->ref > 0)
     vno->ref--;
   vnode_unlock(vno);
 }
 
+void vnode_markdirty(struct vnode *vno) {
+  if(vno == NULL)
+    return;
+  vnode_lock(vno);
+  vno->flags |= V_DIRTY;
+  vnode_unlock(vno);
+}
+
+void vnode_sync(struct vnode *vno) {
+  if(vno == NULL)
+    return;
+  vnode_lock(vno);
+  if(vno->ops->vsync)
+    vno->ops->vsync(vno); 
+  vnode_unlock(vno);
+}
+
 struct vnode *vcache_find(struct fs *fs, vno_t number) {
   mutex_lock(&vcache_mtx);
   struct list_head *p;
-  list_head(p, &fs->vnode_list) {
+  list_foreach(p, &fs->vnode_list) {
     struct vnode *vno = list_entry(p, struct vnode, fs_link);
     if(vno->number == number) {
       vnode_hold(vno);
@@ -83,25 +101,29 @@ struct vnode *vcache_find(struct fs *fs, vno_t number) {
     } 
   }
   mutex_unlock(&vcache_mtx);
+  return NULL;
 }
 
 int vcache_add(struct fs *fs, struct vnode *vno) {
   mutex_lock(&vcache_mtx);
   vno_t i, can_free = VNO_INVALID;
-  for(i=0; i<NVNODES; i++) {
+  for(i=0; i<NVCACHE; i++) {
     if(vcache[i] == NULL)
       break;
     else if(vcache[i]->ref == 0)
       can_free = i;
   }
-  if(i != NVNODES) {
+  if(i != NVCACHE) {
     vcache[i] = vno;
     list_pushfront(&vno->fs_link, &fs->vnode_list);
     mutex_unlock(&vcache_mtx);
     return 0;
   } else if(can_free != VNO_INVALID) {
-    if(vcache[can_free]->ops.vfree)
-      vcache[can_free]->ops.vfree(vcache[can_free]);
+    if(vcache[can_free]->ops->vsync)
+      vcache[can_free]->ops->vsync(vcache[can_free]);
+
+    if(vcache[can_free]->ops->vfree)
+      vcache[can_free]->ops->vfree(vcache[can_free]);
     else
       free(vcache[can_free]);
 
@@ -117,7 +139,7 @@ int vcache_add(struct fs *fs, struct vnode *vno) {
 
 void vcache_remove(struct vnode *vno) {
   mutex_lock(&vcache_mtx);
-  for(i=0; i<NVNODES; i++) {
+  for(int i=0; i<NVCACHE; i++) {
     if(vcache[i] == vno) {
       vcache[i] = NULL;
       list_remove(&vno->fs_link);
@@ -125,16 +147,16 @@ void vcache_remove(struct vnode *vno) {
       return; 
     }
   }
+  mutex_unlock(&vcache_mtx);
 }
 
-int strcmp(const char *s1, const char *s2) {
-  while(*s1 && *s1 == *s2) {
-    s1++; s2++;
+int fs_mountroot(const char *name, devno_t devno) {
+  printf("fs: mounting rootfs(fstype=%s, devno=0x%x) ...\n", name, devno);
+  if(blkdev_open(devno)) {
+    puts("fs: failed to open device");
+    return -1;
   }
-  return *s1 - *s2;
-}
 
-static int fs_mountroot(const char *name, devno_t devno) {
   int i;
   for(i = 0; i<fstypetbl_used; i++)
     if(strcmp(fstype_tbl[i].name, name) == 0)
@@ -166,8 +188,7 @@ static struct vnode *name_to_vnode(const char *path, struct vnode **parent, char
   vnode_hold(rootdir);
   vnode_lock(rootdir);
 
-  if(path == NULL) return NULL;
-  // 現在は絶対パスのみ許可
+  //currently, relative path is not allowed
   if(*ptr != '/') return NULL;
 
   while(1) {
@@ -192,7 +213,7 @@ static struct vnode *name_to_vnode(const char *path, struct vnode **parent, char
     if(i == MAX_FILE_NAME+1)
       break;
     else
-      name[i] = NULL;
+      name[i] = '\0';
 
     if(prevvno != NULL) {
       vnode_unlock(prevvno);
@@ -218,31 +239,69 @@ static struct vnode *name_to_vnode(const char *path, struct vnode **parent, char
     vnode_release(prevvno);
   }
 
+  if(parent!= NULL)
+    *parent = NULL;
+  if(fname != NULL)
+    *fname = NULL;
+
   return NULL;
 }
 
-struct file *open(const char *path) {
+struct file *open(const char *path, int flags) {
   struct file *f;
   struct vnode *parent = NULL;
   char *name = NULL;
+
+  flags += 1;
+  if(!(flags & (_FREAD | _FWRITE)))
+    return NULL;
+
   struct vnode *vno = name_to_vnode(path, &parent, &name);
-  if(vno == NULL)
-    return NULL;
-  switch(vno->type) {
-  case V_REGULAR:
-    f = file_new(vno, vno->fs->file_ops);
-    break;
-  case V_BLKDEV:
-    f = file_new(vno, &blkdev_file_ops);
-    break;
-  case V_CHARDEV:
-    f = file_new(vno, &chardev_file_ops);
-    break;
-  default:
-    //vnode_release(vno);
-    return NULL;
-  } 
+
+  if(vno == NULL) {
+    if(flags & _FCREAT) {
+      if(parent->ops->mknod) {
+        if(parent->ops->mknod(parent, name, S_IFREG, 0))
+          goto err;
+      } else {
+        goto err;
+      }
+    } else {
+      goto err;
+    }
+  } else {
+    if(flags & _FEXCL)
+      goto err;
+  }
+
+  vnode_unlock(vno);
+  vnode_unlock(parent);
+  vnode_release(parent);
+  if(name != NULL)
+    free(name);
+
+  f = file_new(vno, vno->file_ops, flags);
+
+  if(flags & _FAPPEND)
+    lseek(f, 0, SEEK_END);
+
+  if(flags & _FTRUNC)
+    truncate(f, 0);
+
   return f;
+
+err:
+  if(parent != NULL) {
+    vnode_unlock(parent);
+    vnode_release(parent);
+  }
+  if(vno != NULL) {
+    vnode_unlock(vno);
+    vnode_release(vno);
+  }
+  if(name != NULL)
+    free(name);
+  return NULL;
 }
 
 int mknod(const char *path, int mode, devno_t devno) {
@@ -266,6 +325,8 @@ err:
     vnode_unlock(parent);
     vnode_release(parent);
   }
+  if(name != NULL)
+    free(name);
   return ret;
 }
 
@@ -281,9 +342,6 @@ int link(const char *oldpath, const char *newpath) {
 
   vno1 = name_to_vnode(newpath, &parent, &name);
   if(vno1 != NULL)
-    goto err;
-
-  if(!parent->ops->create)
     goto err;
 
   if(parent->fs != vno0->fs)
@@ -324,7 +382,7 @@ int unlink(const char *path) {
 
   vnode_unlock(vno);
   vnode_release(vno);
-  ret = parent->ops->unlink(parent, name);
+  ret = parent->ops->unlink(parent, name, vno);
 
 err:
   if(vno != NULL) {
@@ -341,7 +399,7 @@ err:
 }
 
 int stat(const char *path, struct stat *buf) {
-  struct vnode *vno = name_to_vnode(path, NULL);
+  struct vnode *vno = name_to_vnode(path, NULL, NULL);
   int ret = -1;
   if(vno == NULL)
     goto err;
@@ -355,5 +413,5 @@ err:
     vnode_unlock(vno);
     vnode_release(vno);
   }
-  return ret 
+  return ret;
 }

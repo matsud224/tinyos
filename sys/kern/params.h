@@ -20,7 +20,7 @@
 #define MAX_MOUNT			32
 
 #define NBLKBUF				64
-#define NVNODEBUF			1024
+#define NVCACHE				1024
 
 #define CLASS_BLKDEV	1
 #define CLASS_CHARDEV	2
@@ -35,4 +35,4 @@
 
 
 #define ROOTFS_TYPE "minix3"
-#define ROOTFS_DEV DEVNO(0, 1)
+#define ROOTFS_DEV DEVNO(1, 3)

@@ -11,7 +11,8 @@ typedef int16_t		s16;
 typedef int32_t		s32;
 typedef int64_t		s64;
 
-typedef u32 devno_t;
+typedef u16 devno_t;
+typedef u64 vno_t;
 
 typedef s64 off_t;
 

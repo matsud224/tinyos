@@ -59,8 +59,15 @@ static struct comport{
   {.port = 1, .base = 0x2f8, .irq = 3, .intvec = IRQ_TO_INTVEC(3), .inthandler = com2_inthandler}
 };
 
+static int SERIAL_MAJOR;
 
 DRIVER_INIT void serial_init() {
+  SERIAL_MAJOR = chardev_register(&serial_chardev_ops);
+  if(SERIAL_MAJOR < 0) {
+    puts("serial: failed to register");
+    return;
+  }
+
   for(int i=0; i<COMPORT_NUM; i++) {
     u16 base = comport[i].base;
 
@@ -78,9 +85,9 @@ DRIVER_INIT void serial_init() {
     comport[i].txbuf = cdbuf_create(malloc(SERIAL_BUFSIZE), SERIAL_BUFSIZE);
 
     pic_clearmask(comport[i].irq);
-  }
 
-  chardev_register(&serial_chardev_ops);
+    printf("serial: devno=0x%x\n", DEVNO(SERIAL_MAJOR, i));
+  }
 }
 
 static void serial_send(int port) {

@@ -12,13 +12,18 @@ void file_init() {
   mutex_init(&filelist_mtx);
 }
 
-struct file *file_new(void *data, const struct file_ops *ops) {
+struct file *file_new(void *data, const struct file_ops *ops, int flags) {
   struct file *f = malloc(sizeof(struct file));
   f->ref = 1;
   f->data = data;
   f->ops = ops;
-  if(f->ops->open)
-    f->ops->open(f);
+  f->flags= flags;
+  if(f->ops->open) {
+    if(f->ops->open(f, flags) != 0) {
+      free(f);
+      return NULL;
+    }
+  }
   return f;
 }
 
@@ -63,6 +68,13 @@ int lseek(struct file *f, off_t offset, int whence) {
 int sync(struct file *f) {
   if(f->ops->sync)
     return f->ops->sync(f);
+  else
+    return -1;
+}
+
+int truncate(struct file *f, size_t size) {
+  if(f->ops->truncate)
+    return f->ops->truncate(f, size);
   else
     return -1;
 }

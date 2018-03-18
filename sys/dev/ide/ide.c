@@ -195,6 +195,7 @@ struct request {
 };
 
 static u8 ide_buf[2048];
+static int IDE_MAJOR;
 
 static void ide_out8(u8 chan, u16 reg, u8 data) {
   if(reg > 0x07 && reg < 0x0c) {
@@ -266,6 +267,12 @@ static void ide_channel_init(u8 chan) {
 }
 
 DRIVER_INIT void ide_init() {
+  IDE_MAJOR = blkdev_register(&ide_blkdev_ops);
+  if(IDE_MAJOR < 0) {
+    puts("ide: failed to register");
+    return -1;
+  }
+
   int drvno = -1;
   for(int chan = IDE_PRIMARY; chan <= IDE_SECONDARY; chan++) {
     ide_channel_init(chan);
@@ -320,9 +327,7 @@ DRIVER_INIT void ide_init() {
 
   for(int i = 0; i < 4; i++) {
     if(ide_dev[i].exist) {
-      printf("ide drive #%d %dKB %s\n", i, ide_dev[i].size*512, ide_dev[i].model);
-    } else {
-      printf("ide drive #%d not found\n", i);
+      printf("ide: devno=0x%x %dKB %s\n", DEVNO(IDE_MAJOR, i), ide_dev[i].size*512, ide_dev[i].model);
     }
   }
 
@@ -339,7 +344,7 @@ static int ide_ata_access(u8 dir, u8 drv, u32 lba, u8 nsect) {
   if(!ide_dev[drv].exist)
     return -1;
   if((ide_dev[drv].capabilities & 0x100) == 0)
-    puts("DMA is not supported!");
+    puts("ide: DMA is not supported!");
 
   ide_clrnien(chan);
   if(lba >= 0x10000000) {
@@ -448,7 +453,7 @@ static void ide_isr_common(u8 chan) {
   } else {
     req->buf->flags &= ~BB_PENDING;
     req->buf->flags |= BB_ERROR;
-    puts("ide error!");
+    puts("ide: error!");
     dequeue_and_next(chan);
   }
   ide_in8(chan, STATUS);

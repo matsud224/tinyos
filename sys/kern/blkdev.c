@@ -4,6 +4,7 @@
 #include <kern/fs.h>
 #include <kern/page.h>
 #include <kern/thread.h>
+#include <kern/lock.h>
 
 struct chunk {
   struct chunk *next_chunk;
@@ -18,10 +19,11 @@ static u16 nblkdev;
 
 static struct chunk *chunklist;
 static struct list_head buf_list[MAX_BLKDEV];
+static mutex buf_list_mtx;
 static struct list_head avail_list;
 static struct blkbuf blkbufs[NBLKBUF];
 
-int blkdev_file_open(struct file *f);
+int blkdev_file_open(struct file *f, int mode);
 int blkdev_file_read(struct file *f, void *buf, size_t count);
 int blkdev_file_write(struct file *f, const void *buf, size_t count);
 int blkdev_file_lseek(struct file *f, off_t offset, int whence);
@@ -38,10 +40,12 @@ const struct file_ops blkdev_file_ops = {
 };
 
 void blkdev_init() {
+  mutex_init(&buf_list_mtx);
+
   for(int i=0; i<MAX_BLKDEV; i++)
     blkdev_tbl[i] = NULL;
 
-  nblkdev = 0;
+  nblkdev = BAD_MAJOR + 1;
 
   list_init(&avail_list);
   for(int i=0; i<MAX_BLKDEV; i++)
@@ -51,6 +55,7 @@ void blkdev_init() {
     blkbufs[i].ref = 0;
     blkbufs[i].flags = 0;
     list_pushback(&blkbufs[i].avail_link, &avail_list);
+    list_pushback(&blkbufs[i].dev_link, &buf_list[BAD_MAJOR]);
   }
 }
 
@@ -93,7 +98,7 @@ static void blkbuf_free(void *addr) {
   c->freelist = addr;
 }
 
-static struct blkbuf *blkbuf_get_avail() {
+static struct blkbuf *blkbuf_get_available() {
   struct blkbuf *buf;
 IRQ_DISABLE
   while(list_is_empty(&avail_list)) {
@@ -102,7 +107,6 @@ IRQ_DISABLE
   buf = list_entry(list_pop(&avail_list), struct blkbuf, avail_link);
   list_remove(&buf->dev_link);
 IRQ_RESTORE
-
   blkbuf_sync(buf);
   return buf;
 }
@@ -119,7 +123,7 @@ struct blkbuf *blkbuf_get(devno_t devno, blkno_t blkno) {
     }
   }
 
-  struct blkbuf *newblk = blkbuf_get_avail();
+  struct blkbuf *newblk = blkbuf_get_available();
   newblk->ref = 1;
   newblk->devno = devno;
   newblk->blkno = blkno;
@@ -211,7 +215,7 @@ static int blkdev_check_major(devno_t devno) {
     return 0;
 }
 
-int blkdev_file_open(struct file *f) {
+int blkdev_file_open(struct file *f, int mode UNUSED) {
   struct vnode *vno = (struct vnode *)f->data;
   if(blkdev_check_major(DEV_MAJOR(vno->devno)))
     return -1;

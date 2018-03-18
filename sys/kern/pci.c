@@ -111,8 +111,8 @@ static void pci_dev_add(u8 bus, u8 dev, u8 func) {
   pcidev->revid = _pci_config_read8(bus, dev, func, PCI_REVID);
   pcidev->classcode = _pci_config_read8(bus, dev, func, PCI_CLASS);
   pcidev->hdrtype = _pci_config_read8(bus, dev, func, PCI_HEADERTYPE);
-  printf("%x:%x:%x vendorid:%x deviceid:%x %s\n", bus, dev, func, pcidev->vendorid, pcidev->deviceid, 
-    pcidev->classcode>=0x12?"Unknown":PCI_CLASS_STR[pcidev->classcode]);
+  //printf("pci: %x:%x:%x vendorid:%x deviceid:%x %s\n", bus, dev, func, pcidev->vendorid, pcidev->deviceid, 
+    //pcidev->classcode>=0x12?"Unknown":PCI_CLASS_STR[pcidev->classcode]);
   list_pushback(&pcidev->link, &pci_dev_list);
 }
 

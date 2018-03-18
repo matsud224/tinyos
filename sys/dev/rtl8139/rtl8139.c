@@ -6,6 +6,7 @@
 #include <kern/params.h>
 #include <net/ether/ether.h>
 #include <net/inet/inet.h>
+#include <net/socket/socket.h>
 #include <kern/thread.h>
 #include <kern/workqueue.h>
 #include <kern/lock.h>
@@ -13,8 +14,8 @@
 #define RTL8139_VENDORID 0x10ec
 #define RTL8139_DEVICEID 0x8139
 
-int RTL8139_MAJOR;
-const int RTL8139_MINOR = 0;
+static int RTL8139_MAJOR;
+static const int RTL8139_MINOR = 0;
 
 enum regs {
   IDR				= 0x00,
@@ -162,6 +163,11 @@ void rtl8139_init(struct pci_dev *thisdev) {
 	mutex_init(&rtldev.txqueue_mtx);
 
   RTL8139_MAJOR = netdev_register(&rtl8139_ops);
+  if(RTL8139_MAJOR < 0) {
+    puts("rtl8139: failed to register");
+    return;
+  }
+  printf("rtl8139: devno=0x%x\n", DEVNO(RTL8139_MAJOR, 0));
 
   struct ifaddr *eaddr = malloc(sizeof(struct ifaddr)+ETHER_ADDR_LEN);
   eaddr->len = ETHER_ADDR_LEN;

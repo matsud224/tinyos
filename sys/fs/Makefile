@@ -6,7 +6,7 @@ RM				= rm -f
 
 BINDIR		= ../bin
 OBJDIR		= ../obj
-SUBDIRS		= fat32
+SUBDIRS		= fat32 minix3
 
 .PHONY: all
 all:

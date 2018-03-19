@@ -15,7 +15,6 @@
 #define S_IFCHR  0020000
 #define S_IFIFO  0010000
 
-
 enum vnode_flags {
   V_DIRTY = 0x1,
 };
@@ -38,8 +37,14 @@ struct stat {
   size_t st_size;
 };
 
+enum lookup_result {
+  LOOKUP_FOUND = 0,
+  LOOKUP_NOTFOUND,
+  LOOKUP_ERROR,
+};
+
 struct vnode_ops {
-  struct vnode *(*lookup)(struct vnode *vno, const char *name);
+  int (*lookup)(struct vnode *vno, const char *name, struct vnode **found);
   int (*mknod)(struct vnode *parent, const char *name, int mode, devno_t devno);
   int (*link)(struct vnode *parent, const char *name, struct vnode *vno);
   int (*unlink)(struct vnode *parent, const char *name, struct vnode *vno);

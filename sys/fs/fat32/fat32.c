@@ -134,7 +134,7 @@ static const struct file_ops fat32_file_ops = {
   .lseek = fat32_lseek, 
 };
 
-struct vnode *fat32_lookup(struct vnode *vno, const char *name);
+int fat32_lookup(struct vnode *vno, const char *name, struct vnode **found);
 int fat32_stat(struct vnode *vno, struct stat *buf);
 void fat32_vfree(struct vnode *vno);
 
@@ -319,11 +319,17 @@ static char *get_lfn(struct fat32_dent *sfnent) {
   return name;
 }
 
-struct vnode *fat32_lookup(struct vnode *vno, const char *name) {
+int fat32_lookup(struct vnode *vno, const char *name, struct vnode **found) {
   struct fat32_fs *fat32 = container_of(vno->fs, struct fat32_fs, fs);
   struct fat32_vnode *fatvno = container_of(vno, struct fat32_vnode, vnode);
   struct blkbuf *bbuf = NULL;
   struct fat32_dent *found_dent = NULL;
+
+  if(found)
+    *found = NULL;
+
+  if(!(fatvno->attr & ATTR_DIRECTORY))
+    return LOOKUP_ERROR;
 
   u32 current_cluster = fatvno->cluster;
   u32 secs_per_clus = fat32->boot.BPB_SecPerClus;
@@ -366,7 +372,7 @@ struct vnode *fat32_lookup(struct vnode *vno, const char *name) {
   
 exit1:
   if(found_dent == NULL)
-    return NULL;
+    return LOOKUP_NOTFOUND;
 
   u32 dent_cluster = (found_dent->DIR_FstClusHI<<16) | found_dent->DIR_FstClusLO;
   if(dent_cluster == 0) {
@@ -380,7 +386,9 @@ exit1:
   if(bbuf != NULL)
     blkbuf_release(bbuf);
 
-  return newvno;
+  if(found != NULL)
+    *found = newvno;
+  return LOOKUP_FOUND;
 }
 
 
@@ -455,6 +463,7 @@ int fat32_stat(struct vnode *vno, struct stat *buf) {
   struct fat32_fs *fat32 = container_of(vno->fs, struct fat32_fs, fs);
 
   bzero(buf, sizeof(struct stat));
+  buf->st_mode = (fatvno->attr & ATTR_DIRECTORY) ? S_IFDIR : S_IFREG;
   buf->st_dev = fat32->devno;
   buf->st_size = fatvno->size;
 

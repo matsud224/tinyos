@@ -122,6 +122,8 @@ int vcache_add(struct fs *fs, struct vnode *vno) {
     if(vcache[can_free]->ops->vsync)
       vcache[can_free]->ops->vsync(vcache[can_free]);
 
+    list_remove(&vno->fs_link);
+
     if(vcache[can_free]->ops->vfree)
       vcache[can_free]->ops->vfree(vcache[can_free]);
     else
@@ -178,18 +180,26 @@ int fs_mountroot(const char *name, devno_t devno) {
   return 0;
 }
 
+/*
+           parent retval fname
+found       yes    yes    yes
+not found   yes    no     yes
+error       no     no     no
+*/
 static struct vnode *name_to_vnode(const char *path, struct vnode **parent, char **fname) {
   static char name[MAX_FILE_NAME+1];
   const char *ptr = path;
   struct vnode *prevvno = NULL;
   struct vnode *curvno = rootdir;
 
-  if(rootdir == NULL) return NULL;
-  vnode_hold(rootdir);
-  vnode_lock(rootdir);
+  if(curvno == NULL)
+    return NULL;
+  vnode_hold(curvno);
+  vnode_lock(curvno);
 
   //currently, relative path is not allowed
-  if(*ptr != '/') return NULL;
+  if(*ptr != '/')
+    goto err;
 
   while(1) {
     while(*ptr == '/') ptr++;
@@ -211,24 +221,23 @@ static struct vnode *name_to_vnode(const char *path, struct vnode **parent, char
       name[i] = *ptr;
     }
     if(i == MAX_FILE_NAME+1)
-      break;
+      goto err;
     else
       name[i] = '\0';
 
+printf("current name is %s\n", name);
     if(prevvno != NULL) {
       vnode_unlock(prevvno);
       vnode_release(prevvno);
     }
 
     prevvno = curvno;
-    if(curvno->ops->lookup) {
-      vnode_lock(curvno);
-      curvno = curvno->ops->lookup(curvno, name);
-    } else {
-      break;
-    }
+    if(!curvno || !curvno->ops->lookup ||
+      curvno->ops->lookup(curvno, name, &curvno) == LOOKUP_ERROR)
+        goto err;
   }
 
+err:
   if(curvno != NULL) {
     vnode_unlock(curvno);
     vnode_release(curvno);
@@ -239,7 +248,7 @@ static struct vnode *name_to_vnode(const char *path, struct vnode **parent, char
     vnode_release(prevvno);
   }
 
-  if(parent!= NULL)
+  if(parent != NULL)
     *parent = NULL;
   if(fname != NULL)
     *fname = NULL;
@@ -260,7 +269,7 @@ struct file *open(const char *path, int flags) {
 
   if(vno == NULL) {
     if(flags & _FCREAT) {
-      if(parent->ops->mknod) {
+      if(parent && parent->ops->mknod) {
         if(parent->ops->mknod(parent, name, S_IFREG, 0))
           goto err;
       } else {
@@ -311,7 +320,7 @@ int mknod(const char *path, int mode, devno_t devno) {
   int ret = -1;
   if(vno != NULL)
     goto err;
-  if(!parent->ops->mknod)
+  if(!parent || !parent->ops->mknod)
     goto err;
 
   ret = parent->ops->mknod(parent, name, mode, devno);
@@ -344,7 +353,7 @@ int link(const char *oldpath, const char *newpath) {
   if(vno1 != NULL)
     goto err;
 
-  if(parent->fs != vno0->fs)
+  if(!parent || parent->fs != vno0->fs)
     goto err;
 
   if(!parent->ops->link)
@@ -375,7 +384,7 @@ int unlink(const char *path) {
   char *name = NULL;
   struct vnode *vno = name_to_vnode(path, &parent, &name);
   int ret = -1;
-  if(vno == NULL)
+  if(!vno || !parent)
     goto err;
   if(!vno->ops->unlink)
     goto err;

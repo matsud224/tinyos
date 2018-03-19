@@ -119,7 +119,7 @@ int listen(struct file *f, int backlog){
     return -1;
 }
 
-struct socket *accept(struct file *f, struct sockaddr *client_addr) {
+struct file *accept(struct file *f, struct sockaddr *client_addr) {
   if(!is_sock_file(f))
     return NULL;
   struct socket *s = (struct socket *)f->data;
@@ -128,7 +128,7 @@ struct socket *accept(struct file *f, struct sockaddr *client_addr) {
 
   struct socket *s2 = _socket(s->domain, s->type);
   s2->pcb = s->ops->accept(s->pcb, client_addr);
-  return s2;
+  return file_new(s2, &sock_file_ops, _FREAD | _FWRITE);
 }
 
 int send(struct file *f, const char *msg, size_t len, int flags) {

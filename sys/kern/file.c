@@ -14,10 +14,12 @@ void file_init() {
 
 struct file *file_new(void *data, const struct file_ops *ops, int flags) {
   struct file *f = malloc(sizeof(struct file));
+  bzero(f, sizeof(struct file));
   f->ref = 1;
   f->data = data;
   f->ops = ops;
-  f->flags= flags;
+  f->flags = flags;
+  f->offset = 0;
   if(f->ops->open) {
     if(f->ops->open(f, flags) != 0) {
       free(f);
@@ -36,7 +38,7 @@ int close(struct file *f) {
     return retval;
 
   mutex_lock(&filelist_mtx);
-  list_remove(&f->link);
+  //list_remove(&f->link);
   mutex_unlock(&filelist_mtx);
 
   free(f);

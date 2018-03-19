@@ -14,10 +14,14 @@ struct blkdev_ops {
 };
 
 enum blkbuf_flags {
-  BB_ABSENT		= 0x1,
-  BB_DIRTY		= 0x2,
-  BB_PENDING	= 0x4,
-  BB_ERROR		= 0x8,
+  BB_ABSENT		= 1,
+  BB_DIRTY		= 2,
+};
+
+enum blkbuf_state {
+  BB_DONE			= 0,
+  BB_PENDING	= 1,
+  BB_ERROR		= 2,
 };
 
 struct blkbuf {
@@ -26,6 +30,7 @@ struct blkbuf {
   blkno_t blkno;
   void *addr;
   u32 flags;
+  u32 state;
   struct list_head avail_link;
   struct list_head dev_link;
 };

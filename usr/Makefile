@@ -2,6 +2,9 @@ SUBDIRS		= $(shell find * -maxdepth 0 -type d)
 DISKIMG		= ../disk/fat32disk
 DISKTYPE	= vfat
 MNTDIR		= /mnt/tinyosdisk
+DISKIMG2	= ../disk/minixdisk
+DISKTYPE2	= minix
+MNTDIR2		= /mnt/tinyosdisk2
 
 .PHONY: all
 all:
@@ -17,17 +20,26 @@ clean:
 
 .PHONY: install
 install: all
-	-sudo mkdir $(MNTDIR)
+	sudo mkdir -p $(MNTDIR)
 	sudo mount -t $(DISKTYPE) -o loop $(DISKIMG) $(MNTDIR)
-	sudo cp -r ./* $(MNTDIR)
+	sudo rm -r $(MNTDIR)/*
+	sudo cp -r ./fat32/* $(MNTDIR)
 	sudo umount $(MNTDIR)
+	sudo mkdir -p $(MNTDIR2)
+	sudo mount -t $(DISKTYPE2) -o loop $(DISKIMG2) $(MNTDIR2)
+	sudo rm -r $(MNTDIR2)/*
+	sudo cp -r ./minix/* $(MNTDIR2)
+	sudo umount $(MNTDIR2)
 
 .PHONY: mount
 mount:
-	-sudo mkdir $(MNTDIR)
+	sudo mkdir -p $(MNTDIR)
 	sudo mount -t $(DISKTYPE) -o loop $(DISKIMG) $(MNTDIR)
+	sudo mkdir -p $(MNTDIR2)
+	sudo mount -t $(DISKTYPE2) -o loop $(DISKIMG2) $(MNTDIR2)
 
-.PHONY: unmount
-unmount:
-	sudo umount $(MNTDIR)
+.PHONY: umount
+umount:
+	-sudo umount $(MNTDIR)
+	-sudo umount $(MNTDIR2)
 

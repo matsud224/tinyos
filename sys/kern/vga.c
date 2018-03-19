@@ -1,5 +1,7 @@
 #include <kern/vga.h>
+#include <kern/lock.h>
 #include <kern/params.h>
+#include <kern/kernlib.h>
 
 static struct {
   size_t column;
@@ -85,6 +87,7 @@ static const char numchar[] =
    'a', 'b', 'c', 'd', 'e', 'f' };
 
 static void print_num_signed(int32_t val, int base) {
+IRQ_DISABLE
   char *ptr = buf;
   *ptr++ = '\0';
   if(val < 0) {
@@ -97,9 +100,11 @@ static void print_num_signed(int32_t val, int base) {
   } while(val);
   while(*(--ptr))
     putchar(*ptr);
+IRQ_RESTORE
 }
 
 static void print_num_unsigned(u32 val, int base) {
+IRQ_DISABLE
   char *ptr = buf;
   *ptr++ = '\0';
   do {
@@ -108,7 +113,7 @@ static void print_num_unsigned(u32 val, int base) {
   } while(val);
   while(*(--ptr))
     putchar(*ptr);
-  return;
+IRQ_RESTORE
 }
 
 

@@ -29,6 +29,22 @@ void thread_a(void *arg) {
 }
 
 void thread_echo(void *arg) {
+  char data;
+  while(1) {
+    if(chardev_read(DEVNO(1, 0), &data, 1) == 1) {
+      if(data == 0x7f) {
+        chardev_write(DEVNO(1, 0), "\b \b", 3);
+      } else if(data == '\r') {
+        chardev_write(DEVNO(1, 0), "\n", 1);
+      } else {
+        chardev_write(DEVNO(1, 0), &data, 1);
+      }
+      //if(sendto(sock, &data, 1, 0, (struct sockaddr *)&addr) < 0)
+        //puts("sendto failed");
+    }
+  }
+
+
 /*
   struct socket *sock;
   struct sockaddr_in addr;
@@ -56,41 +72,8 @@ void thread_echo(void *arg) {
 */
 }
 
-void thread_b(void *arg) {
-  
-  if(fs_mountroot(ROOTFS_TYPE, ROOTFS_DEV))
-    puts("fs: failed to mount");
-  else
-    puts("fs: mount succeeded");
-
-
-  thread_run(kthread_new(thread_a, 3, "thread_a"));
-  thread_run(kthread_new(thread_echo, NULL, "echo task"));
-/*
-  if(fs_mountroot("fat32", 0) < 0) {
-    puts("mountroot failed.");
-    while(1);
-  } else {
-    puts("mount ok");
-  }
-  struct inode *ino = fs_nametoi("/hello/hello");
-  if(ino == NULL) {
-    puts("nametoi failed.");
-    while(1);
-  }
-  printf("file found\n");
-  
-  thread_exec(ino);
-*/
-}
-
-void thread_idle(void *arg) {
-  while(1)
-    cpu_halt();
-}
-
 void thread_test(void *arg) {
-  /*struct socket *sock;
+  struct file *sock;
   struct sockaddr_in addr;
 
   char buf[2048];
@@ -115,15 +98,14 @@ void thread_test(void *arg) {
     printf("received %d bytes\n", len);
   }
 
-  close(sock);*/
+  close(sock);
 }
 
 void thread_test2(void *arg) {
-/*
-  struct socket *sock0;
+  struct file *sock0;
   struct sockaddr_in addr;
   struct sockaddr_in client;
-  struct socket *sock;
+  struct file *sock;
 
   sock0 = socket(PF_INET, SOCK_STREAM);
   puts("socket ok");
@@ -143,7 +125,7 @@ void thread_test2(void *arg) {
   u8 buf[2048];
   int len;
   while((len = recv(sock, buf, sizeof(buf), 0)) > 0) {
-    //printf("tcp: received %d byte\n", len);
+    printf("tcp: received %d byte\n", len);
     buf[len] = '\0';
     puts(buf);
     send(sock, "ok. ", 4, 0);
@@ -154,7 +136,59 @@ puts("tcp connection closed.");
   close(sock);
 
   close(sock0);
-*/
+
+}
+
+
+void thread_b(void *arg) {
+  
+  if(fs_mountroot(ROOTFS_TYPE, ROOTFS_DEV))
+    puts("fs: failed to mount");
+  else
+    puts("fs: mount succeeded");
+
+
+  thread_run(kthread_new(thread_a, 3, "thread_a"));
+  thread_run(kthread_new(thread_echo, NULL, "echo task"));
+  thread_run(kthread_new(thread_test, NULL, "udp test task"));
+  thread_run(kthread_new(thread_test2, NULL, "tcp test task"));
+  
+  struct file *f = open("/wamcompiler.lisp", O_RDWR);
+  if(f == NULL) {
+    puts("open failed.");
+    goto stattest;
+  } else {
+    puts("open succeeded.");
+  }
+  char buf[512];
+  size_t count;
+  lseek(f, 0, SEEK_END);
+  lseek(f, -12, SEEK_CUR);
+  count = read(f, buf, 20);
+  printf("%d bytes read.\n", count);
+  for(int i=0; i<count; i++)
+    printf("%c", buf[i]);
+  lseek(f, 0, SEEK_SET);
+  char str[] = "write call test!!!";
+  write(f, str, sizeof(str));
+  lseek(f, 0, SEEK_SET);
+  count = read(f, buf, 20);
+  printf("(2nd) %d bytes read.\n", count);
+  for(int i=0; i<count; i++)
+    printf("%c", buf[i]);
+stattest:
+  puts("");
+  struct stat st;
+  if(stat("/wamcompiler.lisp", &st))
+    puts("stat failed");
+  else
+    printf("stat: mode=%x, devno=%x, size=%d\n",
+      st.st_mode, st.st_dev, st.st_size);
+}
+
+void thread_idle(void *arg) {
+  while(1)
+    cpu_halt();
 }
 
 void dispatcher_init() {
@@ -171,8 +205,6 @@ void dispatcher_init() {
 
   thread_run(kthread_new(thread_idle, NULL, "idle task"));
   thread_run(kthread_new(thread_b, NULL, "fs test thread"));
-  //thread_run(kthread_new(thread_test, NULL, "udp test task"));
-  //thread_run(kthread_new(thread_test2, NULL, "tcp test task"));
 }
 
 void dispatcher_run() {

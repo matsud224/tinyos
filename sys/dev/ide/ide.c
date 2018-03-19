@@ -327,7 +327,7 @@ DRIVER_INIT void ide_init() {
 
   for(int i = 0; i < 4; i++) {
     if(ide_dev[i].exist) {
-      printf("ide: devno=0x%x %dKB %s\n", DEVNO(IDE_MAJOR, i), ide_dev[i].size*512, ide_dev[i].model);
+      printf("ide: devno=0x%x %dKiB %s\n", DEVNO(IDE_MAJOR, i), (ide_dev[i].size*512)/(1024), ide_dev[i].model);
     }
   }
 
@@ -401,6 +401,14 @@ static int ide_ata_access(u8 dir, u8 drv, u32 lba, u8 nsect) {
   ide_wait(chan, SR_BSY, 0);
   ide_wait(chan, SR_DRDY, 1);
   ide_sendcmd(chan, cmd);
+if(dir == 1)
+printf("request: lba/dir = %d/%d\n", lba_mode, dir);
+  if(dir == 1) {
+    for(int i=0; i<512; i+=2) {
+      out16(ide_channel[chan].base + DATA, 0xab);
+    }
+    ide_sendcmd(chan, ATACMD_CACHE_FLUSH);
+  }
   return 0;
 }
 
@@ -436,23 +444,37 @@ static void dequeue_and_next(u8 chan) {
 }
 
 static void ide_isr_common(u8 chan) {
+puts("ide_isr");
   struct request *req = container_of(ide_channel[chan].req_queue.next, struct request, link);
   if((ide_in8(chan, STATUS) & SR_ERR) == 0) {
     if(req != NULL) {
-      for(int i=0; i<512; i+=2) {
-        u16 data;
-        data = in16(ide_channel[chan].base + DATA);
-        *(req->next_addr++) = data&0xff;
-        *(req->next_addr++) = data>>8;
+      if(req->dir == ATA_READ) {
+        for(int i=0; i<512; i+=2) {
+          u16 data;
+          data = in16(ide_channel[chan].base + DATA);
+          *(req->next_addr++) = data&0xff;
+          *(req->next_addr++) = data>>8;
+        }
       }
+
       if(--req->rem_nsect == 0) {
-        req->buf->flags &= ~BB_PENDING;
+puts("done");
+        req->buf->state = BB_DONE;
         dequeue_and_next(chan);
+      }
+
+      if(req->dir == ATA_WRITE) {
+        for(int i=0; i<512; i+=2) {
+          u16 data;
+          data = *(req->next_addr++);
+          data |= *(req->next_addr++) << 8;
+          out16(ide_channel[chan].base + DATA, data);
+        }
+        ide_sendcmd(chan, ATACMD_CACHE_FLUSH);
       }
     }
   } else {
-    req->buf->flags &= ~BB_PENDING;
-    req->buf->flags |= BB_ERROR;
+    req->buf->state = BB_ERROR;
     puts("ide: error!");
     dequeue_and_next(chan);
   }

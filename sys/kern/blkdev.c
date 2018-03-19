@@ -112,13 +112,18 @@ IRQ_RESTORE
 }
 
 struct blkbuf *blkbuf_get(devno_t devno, blkno_t blkno) {
+  if(blkdev_tbl[DEV_MAJOR(devno)] == NULL)
+    return NULL;
+
+  mutex_lock(&buf_list_mtx);
   struct list_head *p;
   list_foreach(p, &buf_list[DEV_MAJOR(devno)]) {
     struct blkbuf *blk = list_entry(p, struct blkbuf, dev_link);
     if(blk->blkno == blkno) {
       if(blk->ref == 0)
-        list_pushback(&blk->avail_link, &avail_list);
+        list_remove(&blk->avail_link);
       blk->ref++;
+      mutex_unlock(&buf_list_mtx);
       return blk;
     }
   }
@@ -129,61 +134,73 @@ struct blkbuf *blkbuf_get(devno_t devno, blkno_t blkno) {
   newblk->blkno = blkno;
   newblk->addr = blkbuf_alloc();
   newblk->flags = BB_ABSENT;
+  newblk->state = BB_DONE;
   list_pushfront(&newblk->dev_link, &buf_list[DEV_MAJOR(devno)]);
+  mutex_unlock(&buf_list_mtx);
   return newblk;
 } 
 
 void blkbuf_release(struct blkbuf *buf) {
-  if(buf->ref == 1)
+  mutex_lock(&buf_list_mtx);
+  buf->ref--;
+  if(buf->ref == 0)
     list_pushback(&buf->avail_link, &avail_list);
-  else
-    buf->ref--;
+  mutex_unlock(&buf_list_mtx);
 }
 
 int blkbuf_remove(struct blkbuf *buf) {
-  if(buf->ref > 0)
+  mutex_lock(&buf_list_mtx);
+  if(buf->ref > 0) {
+    mutex_unlock(&buf_list_mtx);
     return -1;
+  }
 
   list_remove(&buf->dev_link);
   list_pushback(&buf->avail_link, &avail_list);
+  mutex_unlock(&buf_list_mtx);
   return 0;
 }
 
 
 void blkbuf_markdirty(struct blkbuf *buf) {
-  buf->flags |= BB_DIRTY;
+  buf->flags = BB_DIRTY;
 }
 
 
 int blkdev_open(devno_t devno) {
+  if(blkdev_tbl[DEV_MAJOR(devno)] == NULL)
+    return -1;
   return blkdev_tbl[DEV_MAJOR(devno)]->open(DEV_MINOR(devno));
 }
 
 int blkdev_close(devno_t devno) {
+  if(blkdev_tbl[DEV_MAJOR(devno)] == NULL)
+    return -1;
   return blkdev_tbl[DEV_MAJOR(devno)]->close(DEV_MINOR(devno));
 }
 
 static int blkdev_readreq(struct blkbuf *buf) {
-  buf->flags |= BB_PENDING;
-  buf->flags &= ~(BB_ABSENT | BB_DIRTY | BB_ERROR);
+  buf->flags = 0;
+  buf->state = BB_PENDING;
   return blkdev_tbl[DEV_MAJOR(buf->devno)]->readreq(buf);
 }
 
 static int blkdev_writereq(struct blkbuf *buf) {
-  buf->flags |= BB_PENDING;
-  buf->flags &= ~(BB_ABSENT | BB_DIRTY | BB_ERROR);
+puts("writereq");
+  buf->flags = 0;
+  buf->state = BB_PENDING;
   return blkdev_tbl[DEV_MAJOR(buf->devno)]->writereq(buf);
 }
 
 int blkdev_wait(struct blkbuf *buf) {
 IRQ_DISABLE
-  while(buf->flags & BB_PENDING) {
+  while(buf->state == BB_PENDING) {
     thread_sleep(buf);
   }
 IRQ_RESTORE
 
-  if(buf->flags & BB_ERROR) {
-    buf->flags |= BB_ABSENT;
+  if(buf->state == BB_ERROR) {
+    buf->flags = BB_ABSENT;
     return -1;
   }
 
@@ -192,12 +209,12 @@ IRQ_RESTORE
 
 int blkbuf_sync(struct blkbuf *buf) {
   int result = 0;
-  if(buf->flags & BB_PENDING)
+  if(buf->state == BB_PENDING)
     return 0;
 
-  if(buf->flags & BB_DIRTY)
+  if(buf->flags == BB_DIRTY)
     result = blkdev_writereq(buf);
-  else if(buf->flags & BB_ABSENT)
+  else if(buf->flags == BB_ABSENT)
     result = blkdev_readreq(buf);
 
   if(result)
@@ -290,11 +307,13 @@ int blkdev_file_close(struct file *f) {
 
   blkdev_file_sync(f);
 
+  mutex_lock(&buf_list_mtx);
   struct list_head *p;
   list_foreach(p, &buf_list[DEV_MAJOR(vno->devno)]) {
     struct blkbuf *buf = list_entry(p, struct blkbuf, dev_link);
     blkbuf_remove(buf);
   }
+  mutex_unlock(&buf_list_mtx);
   return blkdev_close(vno->devno);
 }
 
@@ -303,10 +322,12 @@ int blkdev_file_sync(struct file *f) {
   if(blkdev_check_major(vno->devno))
     return -1;
 
+  mutex_lock(&buf_list_mtx);
   struct list_head *p;
   list_foreach(p, &buf_list[DEV_MAJOR(vno->devno)]) {
     struct blkbuf *buf = list_entry(p, struct blkbuf, dev_link);
     blkbuf_sync(buf);
   }
+  mutex_unlock(&buf_list_mtx);
   return 0;
 }

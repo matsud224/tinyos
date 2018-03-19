@@ -46,7 +46,7 @@ int sendto(struct file *f, const char *msg, size_t len, int flags, const struct 
 int recvfrom(struct file *f, char *buf, size_t len, int flags, struct sockaddr *from_addr);
 int connect(struct file *f, const struct sockaddr *to_addr);
 int listen(struct file *f, int backlog);
-struct socket *accept(struct file *f, struct sockaddr *client_addr);
+struct file *accept(struct file *f, struct sockaddr *client_addr);
 int send(struct file *f, const char *msg, size_t len, int flags);
 int recv(struct file *f, char *buf, size_t len, int flags);
 

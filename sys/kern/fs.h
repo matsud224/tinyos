@@ -37,6 +37,11 @@ struct stat {
   size_t st_size;
 };
 
+struct dirent {
+  vno_t d_vno;
+  char d_name[MAX_FILENAME_LEN+1];
+};
+
 enum lookup_result {
   LOOKUP_FOUND = 0,
   LOOKUP_NOTFOUND,

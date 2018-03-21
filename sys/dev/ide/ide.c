@@ -270,7 +270,7 @@ DRIVER_INIT void ide_init() {
   IDE_MAJOR = blkdev_register(&ide_blkdev_ops);
   if(IDE_MAJOR < 0) {
     puts("ide: failed to register");
-    return -1;
+    return;
   }
 
   int drvno = -1;
@@ -337,6 +337,16 @@ DRIVER_INIT void ide_init() {
   }
 }
 
+static u8 ide_judge_lbamode(u32 lba) {
+  if(lba >= 0x10000000) {
+    // LBA48
+    return 2;
+  } else {
+    // LBA28
+    return 1;
+  }
+}
+
 static int ide_ata_access(u8 dir, u8 drv, u32 lba, u8 nsect) {
   u8 lba_mode, lba_io[6], chan = drv>>1, slave = drv&1;
   u8 head, cmd = 0;
@@ -347,31 +357,31 @@ static int ide_ata_access(u8 dir, u8 drv, u32 lba, u8 nsect) {
     puts("ide: DMA is not supported!");
 
   ide_clrnien(chan);
-  if(lba >= 0x10000000) {
+
+  lba_mode = ide_judge_lbamode(lba);
+  if(lba_mode == 2) {
     // LBA48
-    lba_mode = 2;
     lba_io[0] = (lba & 0x000000FF) >> 0;
     lba_io[1] = (lba & 0x0000FF00) >> 8;
     lba_io[2] = (lba & 0x00FF0000) >> 16;
     lba_io[3] = (lba & 0xFF000000) >> 24;
     lba_io[4] = 0; // LBA28 is integer, so 32-bits are enough to access 2TB.
     lba_io[5] = 0; // LBA28 is integer, so 32-bits are enough to access 2TB.
-    head      = 0; // Lower 4-bits of HDDEVSEL are not used here.
-  } else if(1/*ide_dev[drv].capabilities & 0x200*/) {
+    head = 0; // Lower 4-bits of HDDEVSEL are not used here.
+  } else if (lba_mode == 1) {
     // LBA28
-    lba_mode  = 1;
     lba_io[0] = (lba & 0x00000FF) >> 0;
     lba_io[1] = (lba & 0x000FF00) >> 8;
     lba_io[2] = (lba & 0x0FF0000) >> 16;
     lba_io[3] = 0; // These Registers are not used here.
     lba_io[4] = 0; // These Registers are not used here.
     lba_io[5] = 0; // These Registers are not used here.
-    head      = (lba & 0xF000000) >> 24;
+    head = (lba & 0xF000000) >> 24;
   } else {
     // LBA is not supported
     return -3;
   }
-
+ 
   ide_drivesel(chan, slave);
 
   if(lba_mode == 0)
@@ -401,14 +411,7 @@ static int ide_ata_access(u8 dir, u8 drv, u32 lba, u8 nsect) {
   ide_wait(chan, SR_BSY, 0);
   ide_wait(chan, SR_DRDY, 1);
   ide_sendcmd(chan, cmd);
-if(dir == 1)
-printf("request: lba/dir = %d/%d\n", lba_mode, dir);
-  if(dir == 1) {
-    for(int i=0; i<512; i+=2) {
-      out16(ide_channel[chan].base + DATA, 0xab);
-    }
-    ide_sendcmd(chan, ATACMD_CACHE_FLUSH);
-  }
+
   return 0;
 }
 
@@ -425,6 +428,28 @@ void *ide_request(struct request *req) {
   return req;
 }
 
+static void ide_read_from_datareg(struct request *req, u8 chan) {
+  for(int i=0; i<512; i+=2) {
+    *((u16 *)req->next_addr) = in16(ide_channel[chan].base + DATA);
+    req->next_addr += sizeof(u16);
+  }
+}
+
+static void ide_write_to_datareg(struct request *req, u8 chan) {
+  for(int i=0; i<512; i+=2) {
+    out16(ide_channel[chan].base + DATA, *(u16 *)req->next_addr);
+    req->next_addr += sizeof(u16);
+  }
+ 
+  u8 lbamode = ide_judge_lbamode(req->buf->blkno + (req->nsect - req->rem_nsect));
+  if(lbamode == 1) {
+    ide_sendcmd(chan, ATACMD_CACHE_FLUSH);
+  } else if(lbamode == 2) {
+    ide_sendcmd(chan, ATACMD_CACHE_FLUSH_EXT);
+  }
+}
+   
+
 static void ide_procnext(u8 chan) {
   if(list_is_empty(&ide_channel[chan].req_queue))
     return;
@@ -432,6 +457,10 @@ static void ide_procnext(u8 chan) {
 
   struct ide_dev *dev = &ide_dev[DEV_MINOR(req->buf->devno)];
   ide_ata_access(req->dir, (dev->channel<<1)|dev->drive, req->buf->blkno, req->nsect);
+  if(req->dir == ATA_WRITE) {
+    ide_wait(chan, SR_BSY, 0);
+    ide_write_to_datareg(req, chan);
+  }
 }
 
 static void dequeue_and_next(u8 chan) {
@@ -449,28 +478,15 @@ puts("ide_isr");
   if((ide_in8(chan, STATUS) & SR_ERR) == 0) {
     if(req != NULL) {
       if(req->dir == ATA_READ) {
-        for(int i=0; i<512; i+=2) {
-          u16 data;
-          data = in16(ide_channel[chan].base + DATA);
-          *(req->next_addr++) = data&0xff;
-          *(req->next_addr++) = data>>8;
-        }
+        ide_read_from_datareg(req, chan);
       }
 
-      if(--req->rem_nsect == 0) {
-puts("done");
+      req->rem_nsect--;
+      if(req->rem_nsect == 0) {
         req->buf->state = BB_DONE;
         dequeue_and_next(chan);
-      }
-
-      if(req->dir == ATA_WRITE) {
-        for(int i=0; i<512; i+=2) {
-          u16 data;
-          data = *(req->next_addr++);
-          data |= *(req->next_addr++) << 8;
-          out16(ide_channel[chan].base + DATA, data);
-        }
-        ide_sendcmd(chan, ATACMD_CACHE_FLUSH);
+      } else if(req->dir == ATA_WRITE) {
+        ide_write_to_datareg(req, chan);
       }
     }
   } else {

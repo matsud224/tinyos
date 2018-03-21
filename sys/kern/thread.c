@@ -162,8 +162,7 @@ void thread_b(void *arg) {
   }
   char buf[512];
   size_t count;
-  lseek(f, 0, SEEK_END);
-  lseek(f, -12, SEEK_CUR);
+  lseek(f, 0, SEEK_SET);
   count = read(f, buf, 20);
   printf("%d bytes read.\n", count);
   for(int i=0; i<count; i++)

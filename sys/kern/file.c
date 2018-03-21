@@ -1,6 +1,7 @@
 #include <kern/file.h>
 #include <kern/lock.h>
 #include <kern/kernlib.h>
+#include <kern/fs.h>
 
 static struct list_head file_list;
 
@@ -80,3 +81,11 @@ int truncate(struct file *f, size_t size) {
   else
     return -1;
 }
+
+int getdents(struct file *f, struct dirent *dirp, size_t count) {
+  if(f->ops->getdents)
+    return f->ops->getdents(f, dirp, count);
+  else
+    return -1;
+}
+

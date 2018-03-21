@@ -23,7 +23,6 @@ all:
 	-mkdir -p $(BINDIR)
 	$(MAKE) -C $(BOOTDIR)
 	$(MAKE) -C $(SYSDIR)
-	$(MAKE) -C $(USRDIR) install
 	cat $(BINDIR)/boot.bin $(BINDIR)/kernel.bin > $(BINDIR)/kernel
   
 .PHONY: clean

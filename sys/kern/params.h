@@ -19,6 +19,8 @@
 #define MAX_FSTYPE		32
 #define MAX_MOUNT			32
 
+#define MAX_FILENAME_LEN 255 //null is not contained
+
 #define NBLKBUF				64
 #define NVCACHE				1024
 

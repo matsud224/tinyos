@@ -4,6 +4,7 @@
 #include <kern/page.h>
 #include <kern/malloc.h>
 #include <kern/kernasm.h>
+#include <kern/kernlib.h>
 #include <kern/params.h>
 #include <kern/blkdev.h>
 #include <kern/list.h>
@@ -197,7 +198,7 @@ struct request {
 static u8 ide_buf[2048];
 static int IDE_MAJOR;
 
-static void ide_out8(u8 chan, u16 reg, u8 data) {
+void ide_out8(u8 chan, u16 reg, u8 data) {
   if(reg > 0x07 && reg < 0x0c) {
     ide_out8(chan, CONTROL, HOB | ide_channel[chan].nien);
     out8(ide_channel[chan].base + reg - 0x06, data);
@@ -207,7 +208,7 @@ static void ide_out8(u8 chan, u16 reg, u8 data) {
   }
 }
 
-static u8 ide_in8(u8 chan, u16 reg) {
+u8 ide_in8(u8 chan, u16 reg) {
   if(reg > 0x07 && reg < 0x0c) {
     ide_out8(chan, CONTROL, HOB | ide_channel[chan].nien);
     u8 r = in8(ide_channel[chan].base + reg - 0x06);
@@ -218,17 +219,17 @@ static u8 ide_in8(u8 chan, u16 reg) {
   }
 }
 
-static void ide_setnien(u8 chan) {
+void ide_setnien(u8 chan) {
   ide_channel[chan].nien = NIEN;
   ide_out8(chan, CONTROL, ide_channel[chan].nien);
 }
 
-static void ide_clrnien(u8 chan) {
+void ide_clrnien(u8 chan) {
   ide_channel[chan].nien = 0;
   ide_out8(chan, CONTROL, ide_channel[chan].nien);
 }
 
-static void ide_in_idspace(u8 chan, u8 *buf, int bytes) {
+void ide_in_idspace(u8 chan, u8 *buf, int bytes) {
   for(int i = 0; i < bytes; i+=2) {
     u16 data = in16(ide_channel[chan].base + DATA);
     buf[i] = data&0xff;
@@ -236,12 +237,12 @@ static void ide_in_idspace(u8 chan, u8 *buf, int bytes) {
   }
 }
 
-static void wait400ns(u8 chan) {
+void wait400ns(u8 chan) {
   for(int i = 0; i < 5; i++)
     ide_in8(chan, ALTSTATUS);
 }
 
-static void ide_wait(u8 chan, u8 flag, u8 cond) {
+void ide_wait(u8 chan, u8 flag, u8 cond) {
   wait400ns(chan);
   if(cond)
     while((ide_in8(chan, STATUS) & flag) == 0);
@@ -249,7 +250,7 @@ static void ide_wait(u8 chan, u8 flag, u8 cond) {
     while((ide_in8(chan, STATUS) & flag) != 0);
 }
 
-static void ide_drivesel(u8 chan, u8 drv) {
+void ide_drivesel(u8 chan, u8 drv) {
   ide_wait(chan, SR_BSY, 0);
   ide_wait(chan, SR_DRQ, 0);
   ide_out8(chan, HDDEVSEL, 0xa0 | (drv<<4));
@@ -257,11 +258,11 @@ static void ide_drivesel(u8 chan, u8 drv) {
   ide_wait(chan, SR_DRQ, 0);
 }
 
-static void ide_sendcmd(u8 chan, u8 cmd) {
+void ide_sendcmd(u8 chan, u8 cmd) {
   ide_out8(chan, COMMAND, cmd);
 }
 
-static void ide_channel_init(u8 chan) {
+void ide_channel_init(u8 chan) {
   list_init(&ide_channel[chan].req_queue);
   ide_setnien(chan);
 }
@@ -337,7 +338,7 @@ DRIVER_INIT void ide_init() {
   }
 }
 
-static u8 ide_judge_lbamode(u32 lba) {
+u8 ide_judge_lbamode(u32 lba) {
   if(lba >= 0x10000000) {
     // LBA48
     return 2;
@@ -347,7 +348,7 @@ static u8 ide_judge_lbamode(u32 lba) {
   }
 }
 
-static int ide_ata_access(u8 dir, u8 drv, u32 lba, u8 nsect) {
+int ide_ata_access(u8 dir, u8 drv, u32 lba, u8 nsect) {
   u8 lba_mode, lba_io[6], chan = drv>>1, slave = drv&1;
   u8 head, cmd = 0;
 
@@ -382,15 +383,16 @@ static int ide_ata_access(u8 dir, u8 drv, u32 lba, u8 nsect) {
     return -3;
   }
  
-  ide_drivesel(chan, slave);
+  ide_wait(chan, SR_BSY, 0);
+  //ide_drivesel(chan, slave);
 
   if(lba_mode == 0)
     ide_out8(chan, HDDEVSEL, 0xa0 | (slave<<4) | head);
   else
     ide_out8(chan, HDDEVSEL, 0xe0 | (slave<<4) | head);
 
-  ide_wait(chan, SR_BSY, 0);
-  ide_wait(chan, SR_DRQ, 0);
+  //ide_wait(chan, SR_BSY, 0);
+  //ide_wait(chan, SR_DRQ, 0);
 
   if (lba_mode == 2) {
     ide_out8(chan, SECCOUNT1,   0);
@@ -408,34 +410,32 @@ static int ide_ata_access(u8 dir, u8 drv, u32 lba, u8 nsect) {
   else if (lba_mode == 2 && dir == 0)	cmd = ATACMD_READ_PIO_EXT;
   else if (lba_mode == 1 && dir == 1)	cmd = ATACMD_WRITE_PIO;
   else if (lba_mode == 2 && dir == 1)	cmd = ATACMD_WRITE_PIO_EXT;
-  ide_wait(chan, SR_BSY, 0);
-  ide_wait(chan, SR_DRDY, 1);
+  //ide_wait(chan, SR_BSY, 0);
+  //ide_wait(chan, SR_DRDY, 1);
   ide_sendcmd(chan, cmd);
 
   return 0;
 }
 
-static void ide_procnext(u8 chan);
+void ide_procnext(u8 chan);
 
-void *ide_request(struct request *req) {
+void ide_request(struct request *req) {
   u8 chan = ide_dev[DEV_MINOR(req->buf->devno)].channel;
-
-  cli();
+IRQ_DISABLE
   list_pushback(&req->link, &ide_channel[chan].req_queue);
   ide_procnext(chan);
-  sti();
-
-  return req;
+IRQ_RESTORE
+  return;
 }
 
-static void ide_read_from_datareg(struct request *req, u8 chan) {
+void ide_read_from_datareg(struct request *req, u8 chan) {
   for(int i=0; i<512; i+=2) {
     *((u16 *)req->next_addr) = in16(ide_channel[chan].base + DATA);
     req->next_addr += sizeof(u16);
   }
 }
 
-static void ide_write_to_datareg(struct request *req, u8 chan) {
+void ide_write_to_datareg(struct request *req, u8 chan) {
   for(int i=0; i<512; i+=2) {
     out16(ide_channel[chan].base + DATA, *(u16 *)req->next_addr);
     req->next_addr += sizeof(u16);
@@ -450,30 +450,30 @@ static void ide_write_to_datareg(struct request *req, u8 chan) {
 }
    
 
-static void ide_procnext(u8 chan) {
-  if(list_is_empty(&ide_channel[chan].req_queue))
+void ide_procnext(u8 chan) {
+  if(list_is_empty(&ide_channel[chan].req_queue)) {
     return;
+  }
   struct request *req = container_of(ide_channel[chan].req_queue.next, struct request, link);
 
   struct ide_dev *dev = &ide_dev[DEV_MINOR(req->buf->devno)];
   ide_ata_access(req->dir, (dev->channel<<1)|dev->drive, req->buf->blkno, req->nsect);
   if(req->dir == ATA_WRITE) {
-    ide_wait(chan, SR_BSY, 0);
     ide_write_to_datareg(req, chan);
   }
 }
 
-static void dequeue_and_next(u8 chan) {
+void dequeue_and_next(u8 chan) {
   struct list_head *head = list_pop(&ide_channel[chan].req_queue);
   if(head) {
     struct request *req = container_of(head, struct request, link);
     thread_wakeup(req->buf);
+    free(req);
   }
   ide_procnext(chan);
 }
 
-static void ide_isr_common(u8 chan) {
-puts("ide_isr");
+void ide_isr_common(u8 chan) {
   struct request *req = container_of(ide_channel[chan].req_queue.next, struct request, link);
   if((ide_in8(chan, STATUS) & SR_ERR) == 0) {
     if(req != NULL) {
@@ -483,15 +483,18 @@ puts("ide_isr");
 
       req->rem_nsect--;
       if(req->rem_nsect == 0) {
-        req->buf->state = BB_DONE;
+        blkbuf_iodone(req->buf);
         dequeue_and_next(chan);
       } else if(req->dir == ATA_WRITE) {
         ide_write_to_datareg(req, chan);
       }
     }
   } else {
-    req->buf->state = BB_ERROR;
     puts("ide: error!");
+    if(req->dir == ATA_READ)
+      blkbuf_readerror(req->buf);
+    else
+      blkbuf_writeerror(req->buf);
     dequeue_and_next(chan);
   }
   ide_in8(chan, STATUS);
@@ -507,7 +510,7 @@ void ide2_isr() {
   ide_isr_common(IDE_SECONDARY);
 }
 
-static int check_minor(int minor) {
+int check_minor(int minor) {
   if(minor < 0 || minor > 3)
     return -1;
   if(!ide_dev[minor].exist)

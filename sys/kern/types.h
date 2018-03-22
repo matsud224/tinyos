@@ -12,13 +12,13 @@ typedef int32_t		s32;
 typedef int64_t		s64;
 
 typedef u16 devno_t;
-typedef u64 vno_t;
+typedef u32 vno_t;
 
 typedef s64 off_t;
 
 typedef u32 paddr_t;
 typedef u32 vaddr_t;
 
-typedef u64 blkno_t;
+typedef u32 blkno_t;
 
 typedef u32 pid_t;

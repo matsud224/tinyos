@@ -29,14 +29,14 @@ struct fragment{
   struct pktbuf *pkt;
 };
 
-static struct hole *hole_new(u16 first, u16 last) {
+struct hole *hole_new(u16 first, u16 last) {
   struct hole *h = malloc(sizeof(struct hole));
   h->first = first;
   h->last = last;
   return h;
 }
 
-static struct fragment *fragment_new(u16 first, u16 last, struct pktbuf *pkt) {
+struct fragment *fragment_new(u16 first, u16 last, struct pktbuf *pkt) {
   struct fragment *frag = malloc(sizeof(struct fragment));
   frag->first = first;
   frag->last = last;
@@ -44,7 +44,7 @@ static struct fragment *fragment_new(u16 first, u16 last, struct pktbuf *pkt) {
   return frag;
 }
 
-static void fragment_free(struct fragment *f) {
+void fragment_free(struct fragment *f) {
   pktbuf_free(f->pkt);
   free(f);
 }
@@ -65,7 +65,7 @@ struct reasminfo{
   int16_t timeout; //タイムアウトまでのカウント
 };
 
-static void reasminfo_free(struct reasminfo *ri) {
+void reasminfo_free(struct reasminfo *ri) {
   list_free_all(&ri->holelist, struct hole, link, free);
   list_free_all(&ri->fraglist, struct fragment, link, fragment_free);
   free(ri);
@@ -74,7 +74,7 @@ static void reasminfo_free(struct reasminfo *ri) {
 static struct list_head reasm_ongoing;
 static mutex reasm_ongoing_mtx;
 
-static void ip_10sec_thread(void *);
+void ip_10sec_thread(void *);
 
 NET_INIT void ip_init(){
   list_init(&reasm_ongoing);
@@ -82,11 +82,10 @@ NET_INIT void ip_init(){
   thread_run(kthread_new(ip_10sec_thread, NULL, "ip_thread"));
 }
 
-static void ip_10sec_thread(void *arg UNUSED) {
+void ip_10sec_thread(void *arg UNUSED) {
   while(1) {
     thread_set_alarm(ip_10sec_thread, msecs_to_ticks(10000));
     thread_sleep(ip_10sec_thread);
-
     mutex_lock(&reasm_ongoing_mtx);
     struct list_head *p, *tmp;
     list_foreach_safe(p, tmp, &reasm_ongoing) {
@@ -100,7 +99,7 @@ static void ip_10sec_thread(void *arg UNUSED) {
   }
 }
 
-static struct reasminfo *get_reasminfo(in_addr_t ip_src, in_addr_t ip_dst, u8 ip_pro, u16 ip_id){
+struct reasminfo *get_reasminfo(in_addr_t ip_src, in_addr_t ip_dst, u8 ip_pro, u16 ip_id){
   // already locked.
   struct list_head *p;
   list_foreach(p, &reasm_ongoing){
@@ -130,7 +129,7 @@ static struct reasminfo *get_reasminfo(in_addr_t ip_src, in_addr_t ip_dst, u8 ip
 
 
 //データ領域のサイズが分かったので、last=無限大(0xffff)のホールを修正
-static void modify_inf_holelist(struct list_head *head, u16 newsize){
+void modify_inf_holelist(struct list_head *head, u16 newsize){
   struct list_head *p, *tmp;
   list_foreach_safe(p, tmp, head){
     struct hole *hole = list_entry(p, struct hole, link);
@@ -251,7 +250,7 @@ exit:
   pktbuf_free(pkt);
 }
 
-static void fill_iphdr(struct ip_hdr *iphdr, u16 datalen, u16 id,
+void fill_iphdr(struct ip_hdr *iphdr, u16 datalen, u16 id,
           int mf, u16 offset, u8 proto, in_addr_t dstaddr, devno_t devno) {
   iphdr->ip_v = 4;
   iphdr->ip_hl = sizeof(struct ip_hdr)/4;
@@ -278,7 +277,7 @@ in_addr_t ip_get_defaultgw() {
   return defaultgw;
 }
 
-static int ip_routing_src(in_addr_t orig_src, in_addr_t orig_dst, in_addr_t *src, in_addr_t *dst, devno_t *devno) {
+int ip_routing_src(in_addr_t orig_src, in_addr_t orig_dst, in_addr_t *src, in_addr_t *dst, devno_t *devno) {
   struct list_head *p;
   list_foreach(p, &ifaddr_tbl[PF_INET]) {
     struct ifaddr_in *inaddr = list_entry(p, struct ifaddr_in, family_link);

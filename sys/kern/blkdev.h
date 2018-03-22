@@ -14,14 +14,14 @@ struct blkdev_ops {
 };
 
 enum blkbuf_flags {
-  BB_ABSENT		= 1,
-  BB_DIRTY		= 2,
+  BB_ERROR		= 0x1,
+  BB_DIRTY		= 0x2,
 };
 
 enum blkbuf_state {
-  BB_DONE			= 0,
+  BB_ABSENT		= 0,
   BB_PENDING	= 1,
-  BB_ERROR		= 2,
+  BB_DONE			= 2,
 };
 
 struct blkbuf {
@@ -45,4 +45,15 @@ struct blkbuf *blkbuf_get(devno_t devno, blkno_t blkno);
 void blkbuf_release(struct blkbuf *buf);
 void blkbuf_markdirty(struct blkbuf *buf);
 int blkdev_wait(struct blkbuf *buf);
-int blkbuf_sync(struct blkbuf *buf);
+int blkbuf_read_async(struct blkbuf *buf);
+int blkbuf_read(struct blkbuf *buf);
+int blkbuf_readahead(struct blkbuf *buf, blkno_t ablk);
+int blkbuf_write_async(struct blkbuf *buf);
+int blkbuf_write(struct blkbuf *buf);
+int blkdev_sync(devno_t devno);
+int blkdev_sync_all(void);
+int blkbuf_flush(struct blkbuf *buf);
+void blkbuf_iodone(struct blkbuf *buf);
+void blkbuf_readerror(struct blkbuf *buf);
+void blkbuf_writeerror(struct blkbuf *buf);
+

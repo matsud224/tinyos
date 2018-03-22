@@ -11,6 +11,8 @@
 #include <kern/timer.h>
 #include <kern/lock.h>
 #include <kern/elf.h>
+#include <kern/file.h>
+#include <kern/fs.h>
 
 #include <net/socket/socket.h>
 #include <net/inet/inet.h>
@@ -141,17 +143,16 @@ puts("tcp connection closed.");
 
 
 void thread_b(void *arg) {
-  
   if(fs_mountroot(ROOTFS_TYPE, ROOTFS_DEV))
     puts("fs: failed to mount");
   else
     puts("fs: mount succeeded");
 
 
-  thread_run(kthread_new(thread_a, 3, "thread_a"));
+  //thread_run(kthread_new(thread_a, 3, "thread_a"));
   thread_run(kthread_new(thread_echo, NULL, "echo task"));
-  thread_run(kthread_new(thread_test, NULL, "udp test task"));
-  thread_run(kthread_new(thread_test2, NULL, "tcp test task"));
+  //thread_run(kthread_new(thread_test, NULL, "udp test task"));
+  //thread_run(kthread_new(thread_test2, NULL, "tcp test task"));
   
   struct file *f = open("/wamcompiler.lisp", O_RDWR);
   if(f == NULL) {
@@ -160,7 +161,7 @@ void thread_b(void *arg) {
   } else {
     puts("open succeeded.");
   }
-  char buf[512];
+  char buf[128];
   size_t count;
   lseek(f, 0, SEEK_SET);
   count = read(f, buf, 20);
@@ -168,9 +169,17 @@ void thread_b(void *arg) {
   for(int i=0; i<count; i++)
     printf("%c", buf[i]);
   lseek(f, 0, SEEK_SET);
+puts("lseek ok");
   char str[] = "write call test!!!";
-  write(f, str, sizeof(str));
+  while(1) {
+    lseek(f, 0, SEEK_SET);
+puts("lseek ok");
+    write(f, str, sizeof(str));
+puts("write ok");
+  }
+puts("write ok");
   lseek(f, 0, SEEK_SET);
+puts("lseek ok");
   count = read(f, buf, 20);
   printf("(2nd) %d bytes read.\n", count);
   for(int i=0; i<count; i++)
@@ -183,6 +192,17 @@ stattest:
   else
     printf("stat: mode=%x, devno=%x, size=%d\n",
       st.st_mode, st.st_dev, st.st_size);
+  printf("kstack limit = %x\n", current->kstack);
+
+  struct file *f2 = open("/", O_RDWR | O_DIRECTORY);
+  struct dirent dirents[10];
+  size_t bytes = getdents(f2, dirents, sizeof(dirents));
+  printf("%d bytes dirent read. %d entries\n", bytes, bytes/sizeof(struct dirent));
+  for(int i=0; i<bytes/sizeof(struct dirent); i++) {
+    //cli();while(1);
+    printf("%d %s\n", (u32)dirents[i].d_vno, dirents[i].d_name);
+  }
+  puts("---end---");
 }
 
 void thread_idle(void *arg) {

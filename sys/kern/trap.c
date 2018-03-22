@@ -24,7 +24,6 @@ void pf_isr(vaddr_t addr, u32 eip, u32 esp) {
   struct vm_area *varea = vm_findarea(current->vmmap, addr);
   if(varea == NULL) {
     printf("Segmentation Fault in thread#%d\n", current->pid);
-  while(1);
     thread_exit();
   } else {
     u32 paddr = varea->mapper->ops->request(varea->mapper, addr - varea->start);

@@ -128,10 +128,12 @@ struct fat32_vnode {
 
 int fat32_read(struct file *f, void *buf, size_t count);
 int fat32_lseek(struct file *f, off_t offset, int whence);
+int fat32_getdents(struct file *f, struct dirent *dirp, size_t count);
 
 static const struct file_ops fat32_file_ops = {
   .read = fat32_read,
   .lseek = fat32_lseek, 
+  .getdents = fat32_getdents,
 };
 
 int fat32_lookup(struct vnode *vno, const char *name, struct vnode **found);
@@ -162,7 +164,7 @@ static struct fs *fat32_mount(devno_t devno) {
   fat32->devno = devno;
 
   struct blkbuf *bbuf = blkbuf_get(devno, FAT32_BOOT);
-  blkbuf_sync(bbuf);
+  blkbuf_read(bbuf);
   fat32->boot = *(struct fat32_boot *)(bbuf->addr);
   struct fat32_boot *boot = &(fat32->boot);
   blkbuf_release(bbuf);
@@ -210,7 +212,7 @@ static u32 fatent_read(struct fat32_fs *fat32, u32 index) {
   u32 sector = fat32->fatstart + (index*4/boot->BPB_BytsPerSec);
   u32 offset = index * 4 % boot->BPB_BytsPerSec;
   struct blkbuf *bbuf = blkbuf_get(fat32->devno, sector);
-  blkbuf_sync(bbuf);
+  blkbuf_read(bbuf);
   u32 entry = *((u32*)((u8*)(bbuf->addr) + offset)) & 0x0fffffff;
   blkbuf_release(bbuf);
   return entry;
@@ -221,10 +223,11 @@ static u32 fatent_write(struct fat32_fs *fat32, u32 index, u32 value) {
   u32 sector = fat32->fatstart + (index*4/boot->BPB_BytsPerSec);
   u32 offset = index * 4 % boot->BPB_BytsPerSec;
   struct blkbuf *bbuf = blkbuf_get(fat32->devno, sector);
-  blkbuf_sync(bbuf);
+  blkbuf_read(bbuf);
   u32 entry = *((u32*)((u8*)(bbuf->addr) + offset));
   entry = (entry & 0xf0000000) | (value & 0x0fffffff);
   *((u32*)((u8*)(bbuf->addr) + offset)) = entry;
+  blkbuf_markdirty(bbuf);
   blkbuf_release(bbuf);
   return entry;
 }
@@ -351,7 +354,7 @@ int fat32_lookup(struct vnode *vno, const char *name, struct vnode **found) {
   for(int blkno = fat32_firstblk(vno, current_cluster);
        is_active_cluster(current_cluster); ) {
     struct blkbuf *bbuf = blkbuf_get(fat32->devno, blkno);
-    blkbuf_sync(bbuf);
+    blkbuf_read(bbuf);
 
     for(u32 i=0; i<BLOCKSIZE; i+=sizeof(struct fat32_dent)) {
       struct fat32_dent *dent = (struct fat32_dent*)(bbuf->addr + i);
@@ -377,7 +380,7 @@ int fat32_lookup(struct vnode *vno, const char *name, struct vnode **found) {
 
         *found = fat32_vnode_new(&fat32->fs, dent->DIR_Attr, 
                                   dent->DIR_FileSize, dent_clus);
-        goto exit;
+        goto found;
       }
     }
 
@@ -387,7 +390,7 @@ int fat32_lookup(struct vnode *vno, const char *name, struct vnode **found) {
   
   return LOOKUP_NOTFOUND;
 
-exit:
+found:
   if(bbuf != NULL)
     blkbuf_release(bbuf);
 
@@ -415,7 +418,7 @@ int fat32_read(struct file *f, void *buf, size_t count) {
        is_active_cluster(current_cluster); 
        blkno = fat32_nextblk(vno, blkno, &current_cluster)) {
     struct blkbuf *bbuf = blkbuf_get(fat32->devno, blkno);
-    blkbuf_sync(bbuf);
+    blkbuf_readahead(bbuf, blkno+1);
     u32 copylen = MIN(BLOCKSIZE - inblk_off, remain);
     memcpy(buf, bbuf->addr + inblk_off, copylen);
     blkbuf_release(bbuf);
@@ -472,7 +475,7 @@ int fat32_getdents(struct file *f, struct dirent *dirp, size_t count) {
        is_active_cluster(current_cluster);
        blkno = fat32_nextblk(vno, blkno, &current_cluster)) {
     struct blkbuf *bbuf = blkbuf_get(fat32->devno, blkno);
-    blkbuf_sync(bbuf);
+    blkbuf_readahead(bbuf, blkno+1);
 
     u32 inblk_rem = BLOCKSIZE - inblk_off;
     struct fat32_dent *dent = (struct fat32_dent *)(bbuf->addr);

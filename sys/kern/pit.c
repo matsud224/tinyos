@@ -26,7 +26,7 @@ void pit_inthandler(void);
 
 void pit_isr() {
   timer_tick();
-  pic_sendeoi();
+  pic_sendeoi(PIT_IRQ);
   thread_yield();
 }
 

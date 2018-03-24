@@ -4,7 +4,7 @@ CFLAGS		= -std=gnu99 -O2 -Wall -Wextra -g
 OBJCOPY		= i686-elf-objcopy
 QEMU			= qemu-system-i386 
 SUDO			= sudo
-QEMUFLAGS			= -m 512 -hda disk/fat32disk -hdb disk/sample -hdc disk/minixdisk -boot a -serial stdio -monitor telnet:127.0.0.1:11111,server,nowait
+QEMUFLAGS			= -m 512 -hda disk/minixdisk -hdb disk/sample -hdc disk/fat32disk -boot a -serial stdio -monitor telnet:127.0.0.1:11111,server,nowait
 QEMUNETFLAGS	= -net nic,model=rtl8139 -net tap,ifname=tap0,script=ifup.sh
 RM						= rm -f
 

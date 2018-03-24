@@ -149,10 +149,10 @@ void thread_b(void *arg) {
     puts("fs: mount succeeded");
 
 
-  //thread_run(kthread_new(thread_a, 3, "thread_a"));
+  thread_run(kthread_new(thread_a, 3, "thread_a"));
   thread_run(kthread_new(thread_echo, NULL, "echo task"));
-  //thread_run(kthread_new(thread_test, NULL, "udp test task"));
-  //thread_run(kthread_new(thread_test2, NULL, "tcp test task"));
+  thread_run(kthread_new(thread_test, NULL, "udp test task"));
+  thread_run(kthread_new(thread_test2, NULL, "tcp test task"));
   
   struct file *f = open("/wamcompiler.lisp", O_RDWR);
   if(f == NULL) {
@@ -171,9 +171,10 @@ void thread_b(void *arg) {
   lseek(f, 0, SEEK_SET);
 puts("lseek ok");
   char str[] = "write call test!!!";
+  int a=0;
   while(1) {
     lseek(f, 0, SEEK_SET);
-puts("lseek ok");
+printf("lseek ok [%d]\n", a++);
     write(f, str, sizeof(str));
 puts("write ok");
   }

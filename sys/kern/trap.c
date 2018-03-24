@@ -21,6 +21,7 @@ void gpe_isr(int errcode) {
 
 void pf_isr(vaddr_t addr, u32 eip, u32 esp) {
   printf("\nPage fault addr = 0x%x (eip = 0x%x, esp = 0x%x)\n", addr, eip, esp);
+  while(1);
   struct vm_area *varea = vm_findarea(current->vmmap, addr);
   if(varea == NULL) {
     printf("Segmentation Fault in thread#%d\n", current->pid);
@@ -42,3 +43,11 @@ u32 syscall_isr(u32 eax, u32 ebx, u32 ecx, u32 edx, u32 esi, u32 edi) {
   }
   return syscall_table[eax](ebx, ecx, edx, esi, edi);
 }
+
+void spurious_isr() {
+  puts("spurious interrupt!");
+  while(1);
+  thread_exit();
+}
+
+

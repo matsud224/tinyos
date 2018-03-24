@@ -127,7 +127,7 @@ void serial_isr_common(int port) {
     }
   }
   
-  pic_sendeoi();
+  pic_sendeoi(comport[port].irq);
   thread_yield();
 }
 

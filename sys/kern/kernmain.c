@@ -29,6 +29,8 @@ KERNENTRY void kernel_main(void) {
 	puts("Starting kernel...");
   page_init();
   idt_init();
+  //for(int i=0; i<=0xff; i++)
+    //idt_register(i, IDT_INTGATE, spurious_inthandler);
   idt_register(13, IDT_INTGATE, gpe_inthandler);
   idt_register(14, IDT_INTGATE, pf_inthandler);
   idt_register(0x80, IDT_INTGATE, syscall_inthandler);

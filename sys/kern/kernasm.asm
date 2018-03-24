@@ -198,6 +198,7 @@ _thread_yield:
 ;call scheduler
   call thread_sched
   call kstack_setaddr
+; save cr3???
 ;switch stack
   mov eax, [current]
   mov esp, [eax] ;new esp

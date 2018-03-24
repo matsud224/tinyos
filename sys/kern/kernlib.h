@@ -23,7 +23,7 @@
 #define MAX(a, b) ((a)>(b)?(a):(b))
 #define MIN(a, b) ((a)<(b)?(a):(b))
 
-#define IRQ_DISABLE do{ int __ie = geteflags()&0x200; cli();
+#define IRQ_DISABLE do{ int __ie = geteflags()&0x200; if(__ie) cli();
 #define IRQ_RESTORE if(__ie) sti(); }while(0);
 
 #define pagealign(a) ((a)&~(PAGESIZE-1))

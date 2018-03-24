@@ -37,4 +37,4 @@
 
 
 #define ROOTFS_TYPE "minix3"
-#define ROOTFS_DEV DEVNO(1, 2)
+#define ROOTFS_DEV DEVNO(1, 0)

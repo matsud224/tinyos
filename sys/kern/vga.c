@@ -25,8 +25,8 @@ void vga_init() {
 	}
 }
  
-void vga_setcolor(u8 color) {
-	vga.color = color;
+void vga_setcolor(u8 fg, u8 bg) {
+	vga.color = VGAENTRY_COLOR(fg, bg);
 }
  
 static void vga_putentryat(char c, u8 color, size_t x, size_t y) {

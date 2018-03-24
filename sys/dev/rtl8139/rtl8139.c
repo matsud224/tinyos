@@ -334,7 +334,7 @@ void rtl8139_isr() {
   if(isr & (ISR_FOVW|ISR_RXOVW|ISR_ROK))
     out16(RTLREG(ISR), ISR_FOVW|ISR_RXOVW|ISR_ROK);
 
-  pic_sendeoi();
+  pic_sendeoi(rtldev.irq);
 }
 
 static int rtl8139_check_minor(int minor) {

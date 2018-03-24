@@ -67,7 +67,8 @@ void pic_clearmask(int irq) {
   }
 }
 
-void pic_sendeoi() {
+void pic_sendeoi(int irq) {
+  if(irq >= 8)
+    out8(SLAVE_CMD, 0x20);
   out8(MASTER_CMD, 0x20);
-  out8(SLAVE_CMD, 0x20);
 }

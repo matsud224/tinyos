@@ -25,6 +25,13 @@ pit_inthandler:
   call pit_isr
   handler_leave
 
+extern spurious_isr
+global spurious_inthandler
+spurious_inthandler:
+  handler_enter
+  call spurious_isr
+  handler_leave
+
 extern ide1_isr
 global ide1_inthandler
 ide1_inthandler:

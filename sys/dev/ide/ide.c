@@ -11,6 +11,7 @@
 #include <kern/thread.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <kern/vga.h>
 
 enum sr {
   SR_BSY     = 0x80,    // Busy
@@ -243,7 +244,6 @@ void wait400ns(u8 chan) {
 }
 
 void ide_wait(u8 chan, u8 flag, u8 cond) {
-  wait400ns(chan);
   if(cond)
     while((ide_in8(chan, STATUS) & flag) == 0);
   else
@@ -251,11 +251,10 @@ void ide_wait(u8 chan, u8 flag, u8 cond) {
 }
 
 void ide_drivesel(u8 chan, u8 drv) {
-  ide_wait(chan, SR_BSY, 0);
-  ide_wait(chan, SR_DRQ, 0);
-  ide_out8(chan, HDDEVSEL, 0xa0 | (drv<<4));
-  ide_wait(chan, SR_BSY, 0);
-  ide_wait(chan, SR_DRQ, 0);
+  while(ide_in8(chan, STATUS) & (SR_BSY|SR_DRQ));
+  ide_out8(chan, HDDEVSEL, drv<<4);
+  wait400ns(chan);
+  while(ide_in8(chan, STATUS) & (SR_BSY|SR_DRQ));
 }
 
 void ide_sendcmd(u8 chan, u8 cmd) {
@@ -357,7 +356,6 @@ int ide_ata_access(u8 dir, u8 drv, u32 lba, u8 nsect) {
   if((ide_dev[drv].capabilities & 0x100) == 0)
     puts("ide: DMA is not supported!");
 
-  ide_clrnien(chan);
 
   lba_mode = ide_judge_lbamode(lba);
   if(lba_mode == 2) {
@@ -383,16 +381,12 @@ int ide_ata_access(u8 dir, u8 drv, u32 lba, u8 nsect) {
     return -3;
   }
  
-  ide_wait(chan, SR_BSY, 0);
-  //ide_drivesel(chan, slave);
+  ide_clrnien(chan);
 
   if(lba_mode == 0)
     ide_out8(chan, HDDEVSEL, 0xa0 | (slave<<4) | head);
   else
     ide_out8(chan, HDDEVSEL, 0xe0 | (slave<<4) | head);
-
-  //ide_wait(chan, SR_BSY, 0);
-  //ide_wait(chan, SR_DRQ, 0);
 
   if (lba_mode == 2) {
     ide_out8(chan, SECCOUNT1,   0);
@@ -410,8 +404,8 @@ int ide_ata_access(u8 dir, u8 drv, u32 lba, u8 nsect) {
   else if (lba_mode == 2 && dir == 0)	cmd = ATACMD_READ_PIO_EXT;
   else if (lba_mode == 1 && dir == 1)	cmd = ATACMD_WRITE_PIO;
   else if (lba_mode == 2 && dir == 1)	cmd = ATACMD_WRITE_PIO_EXT;
-  //ide_wait(chan, SR_BSY, 0);
-  //ide_wait(chan, SR_DRDY, 1);
+
+  ide_wait(chan, SR_DRDY, 1);
   ide_sendcmd(chan, cmd);
 
   return 0;
@@ -425,7 +419,6 @@ IRQ_DISABLE
   list_pushback(&req->link, &ide_channel[chan].req_queue);
   ide_procnext(chan);
 IRQ_RESTORE
-  return;
 }
 
 void ide_read_from_datareg(struct request *req, u8 chan) {
@@ -440,7 +433,12 @@ void ide_write_to_datareg(struct request *req, u8 chan) {
     out16(ide_channel[chan].base + DATA, *(u16 *)req->next_addr);
     req->next_addr += sizeof(u16);
   }
- 
+}
+   
+void ide_cache_flush(struct request *req, u8 chan) {
+  struct ide_dev *dev = &ide_dev[DEV_MINOR(req->buf->devno)];
+  ide_drivesel(chan, dev->drive & 1);
+
   u8 lbamode = ide_judge_lbamode(req->buf->blkno + (req->nsect - req->rem_nsect));
   if(lbamode == 1) {
     ide_sendcmd(chan, ATACMD_CACHE_FLUSH);
@@ -448,7 +446,6 @@ void ide_write_to_datareg(struct request *req, u8 chan) {
     ide_sendcmd(chan, ATACMD_CACHE_FLUSH_EXT);
   }
 }
-   
 
 void ide_procnext(u8 chan) {
   if(list_is_empty(&ide_channel[chan].req_queue)) {
@@ -469,25 +466,39 @@ void dequeue_and_next(u8 chan) {
     struct request *req = container_of(head, struct request, link);
     thread_wakeup(req->buf);
     free(req);
+    ide_procnext(chan);
   }
-  ide_procnext(chan);
 }
 
 void ide_isr_common(u8 chan) {
+  if(list_is_empty(&ide_channel[chan].req_queue)) {
+    goto exit;
+  }
+
   struct request *req = container_of(ide_channel[chan].req_queue.next, struct request, link);
+
   if((ide_in8(chan, STATUS) & SR_ERR) == 0) {
-    if(req != NULL) {
+    if(req->rem_nsect > 0) {
       if(req->dir == ATA_READ) {
         ide_read_from_datareg(req, chan);
       }
 
       req->rem_nsect--;
+
       if(req->rem_nsect == 0) {
-        blkbuf_iodone(req->buf);
-        dequeue_and_next(chan);
+        if(req->dir == ATA_READ) {
+          ide_in8(chan, ALTSTATUS);
+          blkbuf_iodone(req->buf);
+          dequeue_and_next(chan);
+        } else if(req->dir == ATA_WRITE) {
+          ide_cache_flush(req, chan);
+        }
       } else if(req->dir == ATA_WRITE) {
         ide_write_to_datareg(req, chan);
       }
+    } else {
+      blkbuf_iodone(req->buf);
+      dequeue_and_next(chan);
     }
   } else {
     puts("ide: error!");
@@ -497,9 +508,9 @@ void ide_isr_common(u8 chan) {
       blkbuf_writeerror(req->buf);
     dequeue_and_next(chan);
   }
+exit:
   ide_in8(chan, STATUS);
-  pic_sendeoi();
-  thread_yield();
+  pic_sendeoi(ide_channel[chan].irq);
 }
 
 void ide1_isr() {
@@ -534,6 +545,7 @@ static int ide_readblk(struct blkbuf *buf) {
   req->nsect = req->rem_nsect = 1;
   req->next_addr = buf->addr;
   req->dir = ATA_READ;
+puts("read req");
   ide_request(req);
   return 0;
 }
@@ -547,6 +559,7 @@ static int ide_writeblk(struct blkbuf *buf) {
   req->nsect = req->rem_nsect = 1;
   req->next_addr = buf->addr;
   req->dir = ATA_WRITE;
+puts("write req");
   ide_request(req);
   return 0;
 }

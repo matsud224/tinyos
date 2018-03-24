@@ -149,61 +149,54 @@ void thread_b(void *arg) {
     puts("fs: mount succeeded");
 
 
-  thread_run(kthread_new(thread_a, 3, "thread_a"));
+  //thread_run(kthread_new(thread_a, 3, "thread_a"));
   thread_run(kthread_new(thread_echo, NULL, "echo task"));
-  thread_run(kthread_new(thread_test, NULL, "udp test task"));
-  thread_run(kthread_new(thread_test2, NULL, "tcp test task"));
-  
-  struct file *f = open("/wamcompiler.lisp", O_RDWR);
+  //thread_run(kthread_new(thread_test, NULL, "udp test task"));
+  //thread_run(kthread_new(thread_test2, NULL, "tcp test task"));
+
+  struct file *f3 = open("/wamcompiler.lisp", O_RDWR);
+  if(f3 == NULL) {
+    puts("open failed.");
+    return;
+  }
+ 
+  struct file *f = open("/big.txt", O_RDWR);
   if(f == NULL) {
     puts("open failed.");
-    goto stattest;
-  } else {
-    puts("open succeeded.");
+    return;
   }
+
   char buf[128];
   size_t count;
-  lseek(f, 0, SEEK_SET);
+  off_t off = 0x620000;
+  lseek(f, off, SEEK_SET);
   count = read(f, buf, 20);
   printf("%d bytes read.\n", count);
   for(int i=0; i<count; i++)
     printf("%c", buf[i]);
-  lseek(f, 0, SEEK_SET);
-puts("lseek ok");
+  lseek(f, off, SEEK_SET);
   char str[] = "write call test!!!";
-  int a=0;
-  while(1) {
-    lseek(f, 0, SEEK_SET);
-printf("lseek ok [%d]\n", a++);
-    write(f, str, sizeof(str));
-puts("write ok");
-  }
-puts("write ok");
-  lseek(f, 0, SEEK_SET);
-puts("lseek ok");
+  printf("\nwrite : %x\n", write(f, str, sizeof(str)));
+  lseek(f, off, SEEK_SET);
   count = read(f, buf, 20);
-  printf("(2nd) %d bytes read.\n", count);
+  printf("\n\n(2nd) %d bytes read.\n", count);
   for(int i=0; i<count; i++)
     printf("%c", buf[i]);
-stattest:
-  puts("");
-  struct stat st;
-  if(stat("/wamcompiler.lisp", &st))
-    puts("stat failed");
-  else
-    printf("stat: mode=%x, devno=%x, size=%d\n",
-      st.st_mode, st.st_dev, st.st_size);
-  printf("kstack limit = %x\n", current->kstack);
-
+  printf("unlink: %d\n", unlink("/hello"));
+  //printf("mknod: %d\n", mknod("/foo", S_IFREG, 0));
   struct file *f2 = open("/", O_RDWR | O_DIRECTORY);
-  struct dirent dirents[10];
-  size_t bytes = getdents(f2, dirents, sizeof(dirents));
-  printf("%d bytes dirent read. %d entries\n", bytes, bytes/sizeof(struct dirent));
-  for(int i=0; i<bytes/sizeof(struct dirent); i++) {
-    //cli();while(1);
-    printf("%d %s\n", (u32)dirents[i].d_vno, dirents[i].d_name);
+  struct dirent dirents[3];
+  size_t bytes;
+  if(!f2) {
+    puts("open failed");
   }
-  puts("---end---");
+  puts("");
+
+  while(bytes = getdents(f2, dirents, sizeof(dirents))) {
+    for(int i=0; i<bytes/sizeof(struct dirent); i++) {
+      printf("%d %s\n", (u32)dirents[i].d_vno, dirents[i].d_name);
+    }
+  }
 }
 
 void thread_idle(void *arg) {

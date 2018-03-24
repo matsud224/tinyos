@@ -75,9 +75,7 @@ void vnode_release(struct vnode *vno) {
 void vnode_markdirty(struct vnode *vno) {
   if(vno == NULL)
     return;
-  vnode_lock(vno);
   vno->flags |= V_DIRTY;
-  vnode_unlock(vno);
 }
 
 void vnode_sync(struct vnode *vno) {

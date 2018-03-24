@@ -202,15 +202,15 @@ static struct vnode *minix3_vnode_get(struct minix3_fs *minix3, u32 number) {
 
 static int ffz_byte(u8 byte) {
   int num = 0;
-  if((byte & 0xf) == 0) {
+  if((byte & 0xf) == 0xf) {
     num += 4;
     byte >>= 4;
   }
-  if((byte & 0x3) == 0) {
+  if((byte & 0x3) == 0x3) {
     num += 2;
     byte >>= 2;
   }
-  if((byte & 0x1) == 0) {
+  if((byte & 0x1) == 0x1) {
     num += 1;
     byte >>= 1;
   }
@@ -221,13 +221,13 @@ static u32 bitmap_get(struct minix3_fs *minix3, blkno_t startblk, blkno_t *pos, 
   u8 bits;
   u32 acc = 0;
   struct blkbuf *bbuf;
-  size_t i;
+  size_t i, j;
   int first;
   for(i = 0; i < nblocks; i++){
     bbuf = blkbuf_get(minix3->devno, *pos++);
     blkbuf_read(bbuf);
-    for(u32 i=0; i< BITS_PER_BLOCK; i++) {
-      if((bits = ((u8 *)bbuf->addr)[i]) != 0xff)
+    for(j=0; j < BLOCKSIZE; j++) {
+      if((bits = ((u8 *)bbuf->addr)[j]) != 0xff)
         goto exit;
       acc += 8;
     }
@@ -239,10 +239,10 @@ static u32 bitmap_get(struct minix3_fs *minix3, blkno_t startblk, blkno_t *pos, 
 
 exit:
   first = ffz_byte(bits);
-  ((u8 *)bbuf->addr)[i] |= (1 << (first-1));
-  blkbuf_markdirty(bbuf);
+  ((u8 *)bbuf->addr)[j] |= (1 << first);
+  blkbuf_write(bbuf);
   blkbuf_release(bbuf);
-  return acc + first;
+  return acc + first + 1;
 }
 
 static ino_t minix3_inumber_get(struct minix3_fs *minix3) {
@@ -361,7 +361,6 @@ static zone_t zone_vtop(struct minix3_vnode *m3vno, zone_t vzone, int is_write_a
     puts("minix3fs: block number too large.");
     return 0;
   }
-
   vzone -= minix3->zone_boundary[depth-1];
   divisor = minix3->zone_divisor[depth-1];
 
@@ -510,21 +509,22 @@ static struct vnode *minix3_getroot(struct fs *fs) {
 static int minix3_firstblk(struct minix3_vnode *m3vno, size_t file_off, int is_write_access) {
   struct minix3_fs *minix3 = container_of(m3vno->vnode.fs, struct minix3_fs, fs);
   zone_t vzone = file_off / minix3->zone_size;
+  u32 remblk = file_off % minix3->zone_size / BLOCKSIZE;
   zone_t current_zone = zone_vtop(m3vno, vzone, is_write_access);
 
   if(current_zone == MINIX3_INVALID_ZONE)
     return -1;
 
-  return zone_to_blk(&minix3->sb, current_zone); 
+  return zone_to_blk(&minix3->sb, current_zone) + remblk; 
 }
 
-static int minix3_nextblk(struct minix3_vnode *m3vno, size_t offset, int prevblk, int is_write_access) {
+static int minix3_nextblk(struct minix3_vnode *m3vno, int prevblk, int is_write_access) {
   struct minix3_fs *minix3 = container_of(m3vno->vnode.fs, struct minix3_fs, fs);
   if(prevblk % minix3->blocks_in_zone != minix3->blocks_in_zone-1) {
     return prevblk+1;
   } else {
     //go over a zone boundary
-    return minix3_firstblk(m3vno, offset, is_write_access);
+    return minix3_firstblk(m3vno, 0, is_write_access);
   }
 }
 
@@ -562,7 +562,7 @@ static struct vnode *minix3_dentop(struct vnode *vnode, const char *name, int op
     m3vno->minix3.i_size += minix3->zone_size;
     vnode_markdirty(vnode);
   }
-
+printf("vnode=%x\n", vnode);
   while(remain > 0) {
     if(current_zone == 0) {
       if(status != NULL)
@@ -574,9 +574,14 @@ static struct vnode *minix3_dentop(struct vnode *vnode, const char *name, int op
     for(u32 blk = 0; remain > 0 && blk < minix3->blocks_in_zone; blk++) {
       bbuf = blkbuf_get(minix3->devno, zone_firstblk + blk);
       blkbuf_read(bbuf);
+printf("addr=0x%xremain=%d\n", (zone_firstblk+blk)*512, remain);
       for(u32 i=0; i < MINIX3_DENTS_PER_BLOCK && remain > 0; 
             i++, remain -= sizeof(struct minix3_dent)) {
         struct minix3_dent *dent = &(((struct minix3_dent *)bbuf->addr)[i]);
+      if(dent->inode != 0)
+        printf("entry: %s\n", dent->name);
+      else
+        puts("entry: -----");
         switch(op) {
         case OP_LOOKUP:
           if(dent->inode == 0)
@@ -601,30 +606,30 @@ static struct vnode *minix3_dentop(struct vnode *vnode, const char *name, int op
             break;
           if(strncmp(name, dent->name, MINIX3_MAX_NAME_LEN) == 0) {
             dent->inode = MINIX3_INVALID_INODE;
-            blkbuf_markdirty(bbuf);
+            blkbuf_write(bbuf);
             result = vnode;
             goto exit;
           }
           break;
         case OP_ADD:
-          if(dent->inode != 0)
+          if(dent->inode != 0) {
             break;
+          }
           strncpy(dent->name, name, MINIX3_MAX_NAME_LEN);
           dent->inode = number;
-          blkbuf_markdirty(bbuf);
+          blkbuf_write(bbuf);
           result = vnode;
           goto exit;
         }
       }
       blkbuf_release(bbuf);
     }
-
     current_zone = zone_vtop(m3vno, ++vzone, is_write_access);
-    if(op == OP_ADD && remain == 0) {
+    /*if(op == OP_ADD && remain == 0) {
       remain += minix3->zone_size;
       m3vno->minix3.i_size += minix3->zone_size;
       vnode_markdirty(vnode);
-    }
+    }*/
   }
 
   if(status != NULL)
@@ -663,7 +668,7 @@ int minix3_read(struct file *f, void *buf, size_t count) {
   for(int blkno = minix3_firstblk(m3vno, pos, 0);
         blkno > 0 && remain > 0; ) {
     struct blkbuf *bbuf = blkbuf_get(minix3->devno, blkno);
-    blkno = minix3_nextblk(m3vno, pos, blkno, 0);
+    blkno = minix3_nextblk(m3vno, blkno, 0);
     blkbuf_readahead(bbuf, blkno);
     u32 inblk_off = pos % BLOCKSIZE;
     u32 copylen = MIN(BLOCKSIZE - inblk_off, remain);
@@ -716,7 +721,7 @@ int minix3_write(struct file *f, const void *buf, size_t count) {
     pos += copylen;
     remain -= copylen;
     
-    blkno = minix3_nextblk(m3vno, pos, blkno, 1);
+    blkno = minix3_nextblk(m3vno, blkno, 1);
   }
 
   u32 wrote_bytes = (tail - offset) - remain;
@@ -787,40 +792,42 @@ int minix3_getdents(struct file *f, struct dirent *dirp, size_t count) {
     return 0;
   }
 
-  size_t buf_remain = count;
+  size_t nbufent = count / sizeof(struct dirent);
+  size_t nfoundent = 0;
 
   u32 pos = offset;
   for(int blkno = minix3_firstblk(m3vno, pos, 0);
-        blkno > 0 && remain > 0 && buf_remain >= sizeof(struct dirent); ) {
+        blkno > 0 && remain > 0 && nbufent > 0; ) {
     struct blkbuf *bbuf = blkbuf_get(minix3->devno, blkno);
-    blkno = minix3_nextblk(m3vno, pos, blkno, 0);
-    blkbuf_readahead(bbuf, blkno);
+    blkno = minix3_nextblk(m3vno, blkno, 0);
+    blkbuf_readahead(bbuf, blkno + 1);
     u32 inblk_off = pos % BLOCKSIZE;
-    u32 inblk_remain = BLOCKSIZE - inblk_off;
+    u32 inblk_remain = MIN(BLOCKSIZE - inblk_off, remain);
     struct minix3_dent *dent = (struct minix3_dent *)(bbuf->addr + inblk_off);
 
     while(inblk_remain >= MINIX3_DENT_SIZE
-              && buf_remain >= sizeof(struct dirent)) {
+              && nbufent > 0) {
       if(dent->inode != MINIX3_INVALID_INODE) {
         dirp->d_vno = dent->inode;
         strncpy(dirp->d_name, dent->name, MINIX3_MAX_NAME_LEN+1);
         dirp++;
-        buf_remain -= sizeof(struct dirent);
+        nbufent--;
+        nfoundent++;
       }
       dent++;
       inblk_remain -= MINIX3_DENT_SIZE;
+      pos += MINIX3_DENT_SIZE;
+      remain -= MINIX3_DENT_SIZE;
     }
 
     blkbuf_release(bbuf);
-    pos += MIN(BLOCKSIZE - inblk_off, remain);
-    remain -= MIN(BLOCKSIZE - inblk_off, remain);
   }
 
   u32 read_bytes = (tail - offset) - remain;
   f->offset += read_bytes;
 
   vnode_unlock(vno);
-  return count - buf_remain;
+  return nfoundent * sizeof(struct dirent);
 }
 
 int minix3_lookup(struct vnode *vno, const char *name, struct vnode **found) {
@@ -859,30 +866,32 @@ int minix3_mknod(struct vnode *parent, const char *name, int mode, devno_t devno
   struct vnode *vno = minix3_vnode_get(minix3, number);
   if(vno == NULL)
     return -1;
-
   struct minix3_vnode *m3vno = container_of(vno, struct minix3_vnode, vnode);
   m3vno->minix3 = inode;
   vnode_markdirty(vno);
-
+puts("linking...");
   if(minix3_link(parent, name, vno)) {
+puts("link failed");
     minix3_vnode_destroy(minix3, vno);
     return -1;
   }
 
+
+puts("link ok");
   switch(mode & S_IFMT) {
   case S_IFDIR:
     minix3_link(vno, ".", vno);
     minix3_link(vno, "..", parent);
     break;
   }
-
+puts("dot entry created");
   return 0;
 }
 
 int minix3_link(struct vnode *parent, const char *name, struct vnode *vno) {
   if(minix3_dentop(parent, name, OP_ADD, vno->number, NULL) == NULL)
     return -1;
-
+puts("dentop success");
   return minix3_vnode_link_inc(vno);
 }
 
@@ -898,8 +907,10 @@ int minix3_unlink(struct vnode *parent, const char *name, struct vnode *vno) {
     }
     minix3_vnode_link_dec(container_of(vno->fs, struct minix3_fs, fs), vno); // .
   }
+puts("dentop start");
   if(minix3_dentop(parent, name, OP_REMOVE, 0, NULL) == NULL)
     return -1;
+puts("dentop end");
   
   struct minix3_fs *minix3 = container_of(vno->fs, struct minix3_fs, fs);
   minix3_vnode_link_dec(minix3, vno);

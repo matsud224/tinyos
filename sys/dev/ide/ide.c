@@ -501,7 +501,7 @@ void ide_isr_common(u8 chan) {
       dequeue_and_next(chan);
     }
   } else {
-    puts("ide: error!");
+    printf("ide: error in block %x\n", req->buf->blkno);
     if(req->dir == ATA_READ)
       blkbuf_readerror(req->buf);
     else
@@ -545,7 +545,6 @@ static int ide_readblk(struct blkbuf *buf) {
   req->nsect = req->rem_nsect = 1;
   req->next_addr = buf->addr;
   req->dir = ATA_READ;
-puts("read req");
   ide_request(req);
   return 0;
 }
@@ -559,7 +558,6 @@ static int ide_writeblk(struct blkbuf *buf) {
   req->nsect = req->rem_nsect = 1;
   req->next_addr = buf->addr;
   req->dir = ATA_WRITE;
-puts("write req");
   ide_request(req);
   return 0;
 }

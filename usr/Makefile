@@ -22,12 +22,12 @@ clean:
 install: all
 	sudo mkdir -p $(MNTDIR)
 	sudo mount -t $(DISKTYPE) -o loop $(DISKIMG) $(MNTDIR)
-	sudo rm -r $(MNTDIR)/*
+	sudo rm -rf $(MNTDIR)/*
 	sudo cp -r ./fat32/* $(MNTDIR)
 	sudo umount $(MNTDIR)
 	sudo mkdir -p $(MNTDIR2)
 	sudo mount -t $(DISKTYPE2) -o loop $(DISKIMG2) $(MNTDIR2)
-	sudo rm -r $(MNTDIR2)/*
+	sudo rm -rf $(MNTDIR2)/*
 	sudo cp -r ./minix/* $(MNTDIR2)
 	sudo umount $(MNTDIR2)
 

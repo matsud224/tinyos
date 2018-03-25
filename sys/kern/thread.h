@@ -2,6 +2,7 @@
 
 #include <kern/vmem.h>
 #include <kern/list.h>
+#include <kern/file.h>
 #include <stdint.h>
 #include <stddef.h>
 
@@ -48,7 +49,7 @@ struct thread_state {
 #define TASK_STATE_EXITED		2
 
 struct thread {
-  struct thread_state regs; //do not move
+  struct thread_state regs; //do not move from here
   struct list_head link;
   void *kstack;
   size_t kstacksize;
@@ -58,6 +59,7 @@ struct thread {
   pid_t pid;
   const void *waitcause;
   const char *name;
+  struct file *files[MAX_FILES];
 };
 
 void dispatcher_init(void);

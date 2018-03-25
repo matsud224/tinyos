@@ -18,6 +18,7 @@
 #define MAX_NETDEV		64 
 #define MAX_FSTYPE		32
 #define MAX_MOUNT			32
+#define MAX_FILES			256
 
 #define MAX_FILENAME_LEN 255 //null is not contained
 

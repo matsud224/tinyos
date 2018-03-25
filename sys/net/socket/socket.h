@@ -50,3 +50,13 @@ struct file *accept(struct file *f, struct sockaddr *client_addr);
 int send(struct file *f, const char *msg, size_t len, int flags);
 int recv(struct file *f, char *buf, size_t len, int flags);
 
+int sys_socket(int domain, int type);
+int sys_bind(int fd, const struct sockaddr *addr);
+int sys_sendto(int fd, const char *msg, size_t len, int flags, const struct sockaddr *to_addr);
+int sys_recvfrom(int fd, char *buf, size_t len, int flags, struct sockaddr *from_addr);
+int sys_connect(int fd, const struct sockaddr *to_addr);
+int sys_listen(int fd, int backlog);
+int sys_accept(int fd, struct sockaddr *client_addr);
+int sys_send(int fd, const char *msg, size_t len, int flags);
+int sys_recv(int fd, char *buf, size_t len, int flags);
+ 

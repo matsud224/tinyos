@@ -3,6 +3,8 @@
 #include <kern/blkdev.h>
 #include <kern/chardev.h>
 #include <kern/file.h>
+#include <kern/syscalls.h>
+#include <kern/thread.h>
 
 struct fstype {
   const char *name;
@@ -310,7 +312,7 @@ struct file *open(const char *path, int flags) {
   if(name != NULL)
     free(name);
 
-  f = file_new(vno, vno->file_ops, flags);
+  f = file_new(vno, vno->file_ops, FILE_VNODE, flags);
 
   if(flags & _FAPPEND)
     lseek(f, 0, SEEK_END);
@@ -444,4 +446,65 @@ err:
     vnode_release(vno);
   }
   return ret;
+}
+
+int fstat(struct file *f, struct stat *buf) {
+  if(f->type != FILE_VNODE)
+    return -1;
+
+  struct vnode *vno = (struct vnode *)f->data;
+  int ret = -1;
+  if(vno == NULL)
+    return ret;
+  if(!vno->ops->stat)
+    return ret;
+
+  vnode_lock(vno);
+  ret = vno->ops->stat(vno, buf);
+  vnode_unlock(vno);
+
+  return ret;
+}
+
+
+int sys_open(const char *path, int flags) {
+  if(address_check(path))
+    return -1;
+  int fd = fd_get();
+  if(fd < 0)
+    return -1;
+  current->files[fd] = open(path, flags);
+  if(current->files[fd] != NULL)
+    return -1;
+  return 0;
+}
+
+int sys_mknod(const char *path, int mode, devno_t devno) {
+  if(address_check(path))
+    return -1;
+  return mknod(path, mode, devno);
+}
+
+int sys_link(const char *oldpath, const char *newpath) {
+  if(address_check(oldpath) || address_check(newpath))
+    return -1;
+  return link(oldpath, newpath);
+}
+
+int sys_unlink(const char *path) {
+  if(address_check(path))
+    return -1;
+  return unlink(path);
+}
+
+int sys_stat(const char *path, struct stat *buf) {
+  if(address_check(path) || buffer_check(buf, sizeof(struct stat)))
+    return -1;
+  return stat(path, buf);
+}
+
+int sys_fstat(int fd, struct stat *buf) {
+  if(fd_check(fd) || buffer_check(buf, sizeof(struct stat)))
+    return -1;
+  return fstat(current->files[fd], buf);
 }

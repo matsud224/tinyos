@@ -7,6 +7,7 @@
 #include <kern/vmem.h>
 #include <kern/kernlib.h>
 #include <kern/chardev.h>
+#include <kern/blkdev.h>
 #include <kern/netdev.h>
 #include <kern/timer.h>
 #include <kern/lock.h>

@@ -25,11 +25,15 @@ struct file_ops;
 struct file {
   struct list_head link;
   const struct file_ops *ops;
+  int type;
   int ref;
   void *data;
   off_t offset;
   int flags;
 };
+
+#define FILE_VNODE		0
+#define FILE_SOCKET		1
 
 struct file_ops {
   int (*open)(struct file *f, int flags);
@@ -48,7 +52,9 @@ enum seek_whence {
   SEEK_END,
 };
 
-struct file *file_new(void *data, const struct file_ops *ops, int flags);
+int fd_check(int fd);
+int fd_get(void);
+struct file *file_new(void *data, const struct file_ops *ops, int type, int flags);
 int read(struct file *f, void *buf, size_t count);
 int write(struct file *f, const void *buf, size_t count);
 int lseek(struct file *f, off_t offset, int whence);
@@ -57,3 +63,10 @@ int sync(struct file *f);
 int truncate(struct file *f, size_t size);
 int getdents(struct file *f, struct dirent *dirp, size_t count);
 
+int sys_close(int fd);
+int sys_read(int fd, void *buf, size_t count);
+int sys_write(int fd, const void *buf, size_t count);
+int sys_lseek(int fd, off_t offset, int whence);
+int sys_fsync(int fd);
+int sys_truncate(int fd, size_t size);
+int sys_getdents(int fd, struct dirent *dirp, size_t count);

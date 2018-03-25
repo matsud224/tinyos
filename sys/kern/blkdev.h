@@ -56,4 +56,3 @@ int blkbuf_flush(struct blkbuf *buf);
 void blkbuf_iodone(struct blkbuf *buf);
 void blkbuf_readerror(struct blkbuf *buf);
 void blkbuf_writeerror(struct blkbuf *buf);
-

@@ -3,6 +3,8 @@
 #include <kern/lock.h>
 #include <kern/kernlib.h>
 #include <kern/file.h>
+#include <kern/thread.h>
+#include <kern/syscalls.h>
 
 static struct list_head socket_list;
 
@@ -62,11 +64,11 @@ struct file *socket(int domain, int type) {
   if(s == NULL)
     return NULL;
   s->pcb = s->ops->init();
-  return file_new(s, &sock_file_ops, _FREAD | _FWRITE);
+  return file_new(s, &sock_file_ops, FILE_SOCKET, _FREAD | _FWRITE);
 }
 
 static int is_sock_file(struct file *f) {
-  return f->ops == &sock_file_ops;
+  return f->type == FILE_SOCKET;
 }
 
 int bind(struct file *f, const struct sockaddr *addr) {
@@ -128,7 +130,7 @@ struct file *accept(struct file *f, struct sockaddr *client_addr) {
 
   struct socket *s2 = _socket(s->domain, s->type);
   s2->pcb = s->ops->accept(s->pcb, client_addr);
-  return file_new(s2, &sock_file_ops, _FREAD | _FWRITE);
+  return file_new(s2, &sock_file_ops, FILE_SOCKET, _FREAD | _FWRITE);
 }
 
 int send(struct file *f, const char *msg, size_t len, int flags) {
@@ -173,5 +175,67 @@ int sock_close(struct file *f) {
   return retval;
 }
 
+int sys_socket(int domain, int type) {
+  int fd = fd_get();
+  if(fd < 0)
+    return -1;
+  current->files[fd] = socket(domain, type);
+  if(current->files[fd] == NULL)
+    return -1;
+  return fd;
+}
 
+int sys_bind(int fd, const struct sockaddr *addr) {
+  if(fd_check(fd) || buffer_check(addr, sizeof(struct sockaddr)))
+    return -1;
+  return bind(current->files[fd], addr);
+}
+
+int sys_sendto(int fd, const char *msg, size_t len, int flags, const struct sockaddr *to_addr) {
+  if(fd_check(fd) || buffer_check(msg, len) || buffer_check(to_addr, sizeof(struct sockaddr)))
+    return -1;
+  return sendto(current->files[fd], msg, len, flags, to_addr);
+}
+
+int sys_recvfrom(int fd, char *buf, size_t len, int flags, struct sockaddr *from_addr) {
+  if(fd_check(fd) || buffer_check(buf, len) || buffer_check(from_addr, sizeof(struct sockaddr)))
+    return -1;
+  return recvfrom(current->files[fd], buf, len, flags, from_addr);
+}
+
+int sys_connect(int fd, const struct sockaddr *to_addr) {
+  if(fd_check(fd) || buffer_check(to_addr, sizeof(struct sockaddr)))
+    return -1;
+  return connect(current->files[fd], to_addr);
+}
+
+int sys_listen(int fd, int backlog){
+  if(fd_check(fd))
+    return -1;
+  return listen(current->files[fd], backlog);
+}
+
+int sys_accept(int fd, struct sockaddr *client_addr) {
+  if(fd_check(fd) || buffer_check(client_addr, sizeof(struct sockaddr)))
+    return -1;
+  int newfd = fd_get();
+  if(newfd < 0)
+    return -1;
+  current->files[newfd] = accept(current->files[fd], client_addr);
+  if(current->files[newfd] == NULL)
+    return -1;
+  return newfd;
+}
+
+int sys_send(int fd, const char *msg, size_t len, int flags) {
+  if(fd_check(fd) || buffer_check(msg, len))
+    return -1;
+  return send(current->files[fd], msg, len, flags);
+}
+
+int sys_recv(int fd, char *buf, size_t len, int flags) {
+  if(fd_check(fd) || buffer_check(buf, len))
+    return -1;
+  return recv(current->files[fd], buf, len, flags);
+}
 

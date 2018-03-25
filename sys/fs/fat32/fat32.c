@@ -327,7 +327,7 @@ static char *get_lfn(struct fat32_dent *sfnent, size_t sfnoff,  struct fat32_den
   while(1) {
     if(!is_prev_blk && (sfnoff & (BLOCKSIZE-1)) == 0) {
       //block boundary
-      lfnent = prevblk_dent;
+      lfnent = (struct fat32_lfnent *)prevblk_dent;
       is_prev_blk = 1;
     } else {
       lfnent--;
@@ -538,7 +538,7 @@ int fat32_getdents(struct file *f, struct dirent *dirp, size_t count) {
     u32 scanlen = 0;
     struct fat32_dent *dent = (struct fat32_dent *)(bbuf->addr+inblk_off);
 
-    for(int i=0; i<inblk_entries && nbufent > 0; i++, dent++, 
+    for(u32 i=0; i<inblk_entries && nbufent > 0; i++, dent++, 
                              scanlen+=sizeof(struct fat32_dent)) {
       if(dent->DIR_Name[0] == 0x00)
         break;

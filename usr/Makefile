@@ -43,3 +43,9 @@ umount:
 	-sudo umount $(MNTDIR)
 	-sudo umount $(MNTDIR2)
 
+.PHONY: init
+init:
+	sudo losetup /dev/loop0 $(DISKIMG2)
+	sudo mkfs.minix -3 /dev/loop0
+	sudo losetup -d /dev/loop0
+

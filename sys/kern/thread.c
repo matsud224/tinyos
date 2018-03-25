@@ -154,13 +154,8 @@ void thread_b(void *arg) {
   //thread_run(kthread_new(thread_test, NULL, "udp test task"));
   //thread_run(kthread_new(thread_test2, NULL, "tcp test task"));
 
-  struct file *f3 = open("/wamcompiler.lisp", O_RDWR);
-  if(f3 == NULL) {
-    puts("open failed.");
-    return;
-  }
- 
-  struct file *f = open("/big.txt", O_RDWR);
+  //printf("unlink: %d\n", unlink("/foo"));
+  /*struct file *f = open("/foo4", O_RDWR | O_CREAT);
   if(f == NULL) {
     puts("open failed.");
     return;
@@ -168,35 +163,40 @@ void thread_b(void *arg) {
 
   char buf[128];
   size_t count;
-  off_t off = 0x620000;
+  off_t off = 0x00;
   lseek(f, off, SEEK_SET);
   count = read(f, buf, 20);
   printf("%d bytes read.\n", count);
   for(int i=0; i<count; i++)
     printf("%c", buf[i]);
   lseek(f, off, SEEK_SET);
-  char str[] = "write call test!!!";
-  printf("\nwrite : %x\n", write(f, str, sizeof(str)));
-  lseek(f, off, SEEK_SET);
-  count = read(f, buf, 20);
-  printf("\n\n(2nd) %d bytes read.\n", count);
-  for(int i=0; i<count; i++)
-    printf("%c", buf[i]);
-  printf("unlink: %d\n", unlink("/hello"));
-  //printf("mknod: %d\n", mknod("/foo", S_IFREG, 0));
-  struct file *f2 = open("/", O_RDWR | O_DIRECTORY);
+  write(f, "!!!", 3);
+*/
+  //printf("link: %d\n", link("/Makefile", "/alias"));
+  printf("unlink: %d\n", unlink("/obj"));
+  printf("unlink: %d\n", unlink("/obj/main.o"));
+  printf("unlink: %d\n", unlink("/obj/a.o"));
+  printf("unlink: %d\n", unlink("/obj/syscall.o"));
+  //printf("mknod: %d\n", mknod("/dir3", S_IFDIR, 0));
+  struct file *f2 = open("/obj", O_RDWR | O_DIRECTORY);
   struct dirent dirents[3];
   size_t bytes;
   if(!f2) {
     puts("open failed");
   }
   puts("");
+  struct stat stbuf;
+  stat("/", &stbuf);
+  printf("size=%d\n", stbuf.st_size);
 
   while(bytes = getdents(f2, dirents, sizeof(dirents))) {
     for(int i=0; i<bytes/sizeof(struct dirent); i++) {
       printf("%d %s\n", (u32)dirents[i].d_vno, dirents[i].d_name);
     }
   }
+
+  vsync();
+  blkdev_sync_all();
 }
 
 void thread_idle(void *arg) {

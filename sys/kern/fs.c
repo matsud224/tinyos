@@ -40,6 +40,7 @@ void vnode_init(struct vnode *vno, vno_t number, struct fs *fs, const struct vno
   bzero(vno, sizeof(struct vnode));
   mutex_init(&vno->mtx);
   vno->ref = 1;
+printf("init: number=%u\n", number);
   vno->number = number;
   vno->fs = fs;
   vno->ops = ops;
@@ -149,6 +150,21 @@ void vcache_remove(struct vnode *vno) {
   }
   mutex_unlock(&vcache_mtx);
 }
+
+void vsync() {
+  mutex_lock(&vcache_mtx);
+  for(int i=0; i<NVCACHE; i++) {
+    if(vcache[i] && vcache[i]->ops->vsync) {
+      vnode_hold(vcache[i]);
+      vnode_lock(vcache[i]);
+      vcache[i]->ops->vsync(vcache[i]);
+      vnode_unlock(vcache[i]);
+      vnode_release(vcache[i]);
+    }
+  }
+  mutex_unlock(&vcache_mtx);
+}
+
 
 int fs_mountroot(const char *name, devno_t devno) {
   printf("fs: mounting rootfs(fstype=%s, devno=0x%x) ...\n", name, devno);
@@ -270,6 +286,13 @@ struct file *open(const char *path, int flags) {
       if(parent && parent->ops->mknod) {
         if(parent->ops->mknod(parent, name, S_IFREG, 0))
           goto err;
+        if(parent != NULL) {
+          vnode_unlock(parent);
+          vnode_release(parent);
+        }
+        if(name != NULL)
+          free(name);
+        vno = name_to_vnode(path, &parent, &name);
       } else {
         goto err;
       }

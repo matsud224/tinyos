@@ -22,10 +22,6 @@ struct vm_area {
   struct vm_area *next;
 };
 
-struct mapper_ops {
-  void *(*request)(struct mapper *m, off_t offset);
-};
-
 struct mapper {
   const struct mapper_ops *ops;
   struct vm_area *area;

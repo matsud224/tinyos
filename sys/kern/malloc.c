@@ -3,24 +3,23 @@
 #include <kern/malloc.h>
 #include <kern/page.h>
 #include <kern/params.h>
+#include <kern/kernlib.h>
 
-#define SIZE_BASE 8 
-#define MAX_BIN 400 
-// TODO: SIZE_BASE*MAX_BIN以上のアロケーションに対応する
-// chunk = 1page
-// chunk consists of objects
+#define SIZE_BASE		8 
+#define MAX_BIN			((PAGESIZE - sizeof(struct chunkhdr)) >> 1)
+
 struct chunkhdr {
-  void *next_chunk;
+  struct list_head link;
   void *freelist;
   int nobjs;
   int nfree;
 };
 
-struct chunkhdr *bin[MAX_BIN];
+struct list_head bin[MAX_BIN];
 
 void malloc_init() {
   for(int i=0; i<MAX_BIN; i++)
-    bin[i] = NULL;
+    list_init(&bin[i]);
 }
 
 static struct chunkhdr *getnewchunk(size_t objsize) {
@@ -31,7 +30,7 @@ static struct chunkhdr *getnewchunk(size_t objsize) {
   struct chunkhdr *newchunk = (struct chunkhdr *)page_alloc();
   if(newchunk == NULL)
    puts("malloc: page_alloc failed.");
-  newchunk->next_chunk = NULL;
+
   newchunk->freelist = NULL;
   int nobjs = (PAGESIZE - sizeof(struct chunkhdr)) / objsize;
   newchunk->nobjs = newchunk->nfree = nobjs;
@@ -47,23 +46,23 @@ static struct chunkhdr *getnewchunk(size_t objsize) {
 
 static void *getobj(int binindex) {
   struct chunkhdr *ch;
+  struct list_head *p;
 retry:
-  ch = bin[binindex];
-  while(ch != NULL) {
+  list_foreach(p, &bin[binindex]) {
+    struct chunkhdr *ch = list_entry(p, struct chunkhdr, link);
     if(ch->nfree > 0) {
       void *obj = ch->freelist;
       ch->freelist = *(void **)obj;
       ch->nfree--;
       return obj;
     }
-    ch = ch->next_chunk;
   }
 
   struct chunkhdr *newch = getnewchunk(binindex * SIZE_BASE);
   if(newch == NULL)
     return NULL;
-  newch->next_chunk = bin[binindex];
-  bin[binindex] = newch;
+
+  list_pushback(&newch->link, &bin[binindex]);
 
   goto retry;
 }
@@ -72,7 +71,9 @@ void *malloc(size_t request) {
   void *m = NULL;
 IRQ_DISABLE
   size_t size = (request + (SIZE_BASE-1)) & ~(SIZE_BASE-1);
-  if(size > SIZE_BASE * MAX_BIN) {
+  if(size > SIZE_BASE * MAX_BIN && size <= PAGESIZE) {
+    m = page_get();
+  }else if(size > SIZE_BASE * MAX_BIN) {
     printf("malloc: objsize=%d byte is not supported.", size);
   }else {
     m = getobj(size/SIZE_BASE);
@@ -85,9 +86,15 @@ IRQ_RESTORE
 
 void free(void *addr) {
 IRQ_DISABLE
-  struct chunkhdr *ch = (struct chunkhdr *)((u32)addr&~(PAGESIZE-1));
-  *(void **)addr = ch->freelist;
-  ch->freelist = addr;
-  ch->nfree++;
+  if(addr & (PAGESIZE-1) == 0) {
+    page_free(addr);
+  } else {
+    struct chunkhdr *ch = (struct chunkhdr *)((u32)addr&~(PAGESIZE-1));
+    *(void **)addr = ch->freelist;
+    ch->freelist = addr;
+    ch->nfree++;
+    if(ch->nfree == ch->nobj)
+      ch->
+  }
 IRQ_RESTORE
 }

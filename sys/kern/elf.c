@@ -19,9 +19,10 @@ int elf32_is_valid_exec(struct elf32_hdr *hdr) {
 }
 
 
-void *elf32_load(struct vnode *vno) {
+void *elf32_load(struct file *f) {
+  puts("checking elf32");
   struct elf32_hdr *ehdr = malloc(sizeof(struct elf32_hdr));
-  //fs_read(vno, ehdr, 0, sizeof(struct elf32_hdr));
+  read(f, ehdr, sizeof(struct elf32_hdr));
   if(elf32_is_valid_exec(ehdr)) {
     puts("invalid elf32 executable.");
     free(ehdr);
@@ -30,14 +31,15 @@ void *elf32_load(struct vnode *vno) {
   puts("valid elf32 executable.");
   u32 phdr_table_size = ehdr->e_phentsize * ehdr->e_phnum;
   struct elf32_phdr *phdr_table = malloc(phdr_table_size);
-  //fs_read(vno, phdr_table, ehdr->e_phoff, phdr_table_size);
+  lseek(f, ehdr->e_phoff, SEEK_SET);
+  read(f, phdr_table, phdr_table_size);
   printf("e_phnum = %d\n", ehdr->e_phnum);
 
   for(int i=0; i < ehdr->e_phnum; i++) {
     struct elf32_phdr *phdr = (struct elf32_phdr *)((u8 *)phdr_table + ehdr->e_phentsize*i);
     switch(phdr->p_type) {
     case PT_LOAD:
-      vm_add_area(current->vmmap, phdr->p_vaddr, phdr->p_memsz, vnode_mapper_new(vno, phdr->p_offset, phdr->p_filesz), 0);
+      vm_add_area(current->vmmap, phdr->p_vaddr, phdr->p_memsz, file_mapper_new(f, phdr->p_offset, phdr->p_filesz), 0);
       printf("loaded: %x - %x (file mapping)\n", phdr->p_vaddr, phdr->p_vaddr + phdr->p_filesz);
       break;
     }
@@ -46,6 +48,6 @@ void *elf32_load(struct vnode *vno) {
   free(phdr_table);
   free(ehdr);
   printf("entry point: %x\n", ehdr->e_entry);
-  return ehdr->e_entry;
+  return (void *)ehdr->e_entry;
 }
 

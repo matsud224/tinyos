@@ -7,6 +7,6 @@
 
 struct timer_entry;
 
-void timer_start(u32 ticks, void (*func)(void *), void *arg);
+void timer_start(u32 ticks, void (*func)(const void *), void *arg);
 void timer_tick(void);
 void *timer_getarg(struct timer_entry *t);

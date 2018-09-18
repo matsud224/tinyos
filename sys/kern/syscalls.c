@@ -35,7 +35,7 @@ u32 syscall_recv(u32, u32, u32, u32, u32);
 u32 syscall_sync(u32, u32, u32, u32, u32);
 u32 syscall_truncate(u32, u32, u32, u32, u32);
 u32 syscall_getdents(u32, u32, u32, u32, u32);
- 
+
 u32 (*syscall_table[NSYSCALLS])(u32, u32, u32, u32, u32) = {
   syscall_exit,
   syscall_write,
@@ -80,7 +80,7 @@ u32 syscall_exit(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32
   return 0;
 }
 
-u32 syscall_write(u32 a0, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
+u32 syscall_write(u32 a0, u32 a1, u32 a2, u32 a3 UNUSED, u32 a4 UNUSED) {
   return sys_write(a0, (void *)a1, a2);
 }
 
@@ -195,5 +195,5 @@ u32 syscall_getdents(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED,
 }
 
 
- 
- 
+
+

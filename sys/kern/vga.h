@@ -1,9 +1,9 @@
 #pragma once
 #include <kern/types.h>
 
-#define VRAM_COLOR 0xb8000 
-#define VGA_HEIGHT 25 
-#define VGA_WIDTH 80 
+#define VRAM_COLOR 0xb8000
+#define VGA_HEIGHT 25
+#define VGA_WIDTH 80
 #define VGA_TABWIDTH 2
 
 enum vga_color {
@@ -24,10 +24,11 @@ enum vga_color {
 	VGA_COLOR_LIGHT_BROWN		= 14,
 	VGA_COLOR_WHITE					= 15,
 };
- 
+
 void vga_init(void);
 void vga_setcolor(u8 fg, u8 bg);
 int putchar(int c);
 int puts(const char *str);
 void printf(const char *fmt, ...);
+void switch_to_chardev(void);
 

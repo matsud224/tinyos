@@ -2,11 +2,11 @@
 #include <kern/vga.h>
 #include <kern/trap.h>
 #include <kern/page.h>
-#include <kern/idt.h> 
-#include <kern/pic.h> 
-#include <kern/pci.h> 
-#include <kern/pit.h> 
-#include <kern/malloc.h> 
+#include <kern/idt.h>
+#include <kern/pic.h>
+#include <kern/pci.h>
+#include <kern/pit.h>
+#include <kern/malloc.h>
 #include <kern/kernasm.h>
 #include <kern/pagetbl.h>
 #include <kern/vmem.h>
@@ -27,6 +27,7 @@ KERNENTRY void kernel_main(void) {
   a20_enable();
 	vga_init();
 	puts("Starting kernel...");
+  malloc_init();
   page_init();
   idt_init();
   //for(int i=0; i<=0xff; i++)
@@ -36,11 +37,12 @@ KERNENTRY void kernel_main(void) {
   idt_register(0x80, IDT_INTGATE, syscall_inthandler);
   pic_init();
   pagetbl_init();
-  vmem_init();
   dispatcher_init();
+  vmem_init();
   pci_init();
   blkdev_init();
   chardev_init();
+  switch_to_chardev();
   netdev_init();
   fs_init();
 

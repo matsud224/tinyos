@@ -38,7 +38,7 @@ struct workqueue *workqueue_new(const char *name) {
   return wq;
 }
 
-static void _workqueue_add(void *arg) {
+static void _workqueue_add(const void *arg) {
   struct work *w = (struct work *)arg;
 IRQ_DISABLE
   list_pushfront(&w->link, &w->wq->queue);

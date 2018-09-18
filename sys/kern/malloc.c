@@ -5,8 +5,8 @@
 #include <kern/params.h>
 #include <kern/kernlib.h>
 
-#define SIZE_BASE		8 
-#define MAX_BIN			((PAGESIZE - sizeof(struct chunkhdr)) >> 1)
+#define SIZE_BASE		8
+#define MAX_BIN			(((PAGESIZE - sizeof(struct chunkhdr)) >> 1) / SIZE_BASE)
 
 struct chunkhdr {
   struct list_head link;
@@ -18,7 +18,7 @@ struct chunkhdr {
 struct list_head bin[MAX_BIN];
 
 void malloc_init() {
-  for(int i=0; i<MAX_BIN; i++)
+  for(unsigned int i=0; i<MAX_BIN; i++)
     list_init(&bin[i]);
 }
 
@@ -45,7 +45,6 @@ static struct chunkhdr *getnewchunk(size_t objsize) {
 }
 
 static void *getobj(int binindex) {
-  struct chunkhdr *ch;
   struct list_head *p;
 retry:
   list_foreach(p, &bin[binindex]) {
@@ -72,7 +71,7 @@ void *malloc(size_t request) {
 IRQ_DISABLE
   size_t size = (request + (SIZE_BASE-1)) & ~(SIZE_BASE-1);
   if(size > SIZE_BASE * MAX_BIN && size <= PAGESIZE) {
-    m = page_get();
+    m = page_alloc();
   }else if(size > SIZE_BASE * MAX_BIN) {
     printf("malloc: objsize=%d byte is not supported.", size);
   }else {
@@ -86,15 +85,18 @@ IRQ_RESTORE
 
 void free(void *addr) {
 IRQ_DISABLE
-  if(addr & (PAGESIZE-1) == 0) {
+  /*if(((vaddr_t)addr & (PAGESIZE-1)) == 0) {
     page_free(addr);
-  } else {
+  } else */{
     struct chunkhdr *ch = (struct chunkhdr *)((u32)addr&~(PAGESIZE-1));
-    *(void **)addr = ch->freelist;
-    ch->freelist = addr;
     ch->nfree++;
-    if(ch->nfree == ch->nobj)
-      ch->
+    if(ch->nfree == ch->nobjs) {
+      list_remove(&ch->link);
+      page_free(ch);
+    } else {
+      *(void **)addr = ch->freelist;
+      ch->freelist = addr;
+    }
   }
 IRQ_RESTORE
 }

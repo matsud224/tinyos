@@ -22,16 +22,21 @@
 static struct tss tss;
 
 struct thread *current = NULL;
-static pid_t pid_next = 0; 
+static pid_t pid_next = 0;
 
 static struct list_head run_queue;
 static struct list_head wait_queue;
 
 void thread_a(void *arg) {
   printf("arg = %d\n", (int)arg);
+  if(thread_exec("/hello") == 0)
+    puts("exec ok");
+  else
+    puts("exec failed");
 }
 
-void thread_echo(void *arg) {
+void thread_echo(UNUSED void *arg) {
+  puts("echo thread start");
   char data;
   while(1) {
     if(chardev_read(DEVNO(1, 0), &data, 1) == 1) {
@@ -75,7 +80,7 @@ void thread_echo(void *arg) {
 */
 }
 
-void thread_test(void *arg) {
+void thread_test(UNUSED void *arg) {
   struct file *sock;
   struct sockaddr_in addr;
 
@@ -104,7 +109,7 @@ void thread_test(void *arg) {
   close(sock);
 }
 
-void thread_test2(void *arg) {
+void thread_test2(UNUSED void *arg) {
   struct file *sock0;
   struct sockaddr_in addr;
   struct sockaddr_in client;
@@ -125,7 +130,7 @@ void thread_test2(void *arg) {
   sock = accept(sock0, (struct sockaddr *)&client);
   puts("accepted");
 
-  u8 buf[2048];
+  char buf[2048];
   int len;
   while((len = recv(sock, buf, sizeof(buf), 0)) > 0) {
     printf("tcp: received %d byte\n", len);
@@ -143,15 +148,15 @@ puts("tcp connection closed.");
 }
 
 
-void thread_b(void *arg) {
+void thread_b(UNUSED void *arg) {
   if(fs_mountroot(ROOTFS_TYPE, ROOTFS_DEV))
     puts("fs: failed to mount");
   else
     puts("fs: mount succeeded");
 
 
-  //thread_run(kthread_new(thread_a, 3, "thread_a"));
   thread_run(kthread_new(thread_echo, NULL, "echo task"));
+  thread_run(kthread_new(thread_a, 3, "thread_a"));
   //thread_run(kthread_new(thread_test, NULL, "udp test task"));
   //thread_run(kthread_new(thread_test2, NULL, "tcp test task"));
 
@@ -162,18 +167,22 @@ void thread_b(void *arg) {
     return;
   }
 
+  */
+  /*struct file *f = open("/wamcompiler.lisp", O_RDWR);
   char buf[128];
   size_t count;
-  off_t off = 0x00;
+  off_t off = 0x13104;
   lseek(f, off, SEEK_SET);
   count = read(f, buf, 20);
   printf("%d bytes read.\n", count);
   for(int i=0; i<count; i++)
     printf("%c", buf[i]);
-  lseek(f, off, SEEK_SET);
-  write(f, "!!!", 3);
-*/
+  close(f);
+  //lseek(f, off, SEEK_SET);
+  //write(f, "!!!", 3);
   //printf("link: %d\n", link("/Makefile", "/alias"));
+  */
+  /*
   printf("unlink: %d\n", unlink("/obj"));
   printf("unlink: %d\n", unlink("/obj/main.o"));
   printf("unlink: %d\n", unlink("/obj/a.o"));
@@ -190,17 +199,18 @@ void thread_b(void *arg) {
   stat("/", &stbuf);
   printf("size=%d\n", stbuf.st_size);
 
-  while(bytes = getdents(f2, dirents, sizeof(dirents))) {
-    for(int i=0; i<bytes/sizeof(struct dirent); i++) {
+  while((bytes = getdents(f2, dirents, sizeof(dirents)))) {
+    for(size_t i=0; i < bytes/sizeof(struct dirent); i++) {
       printf("%d %s\n", (u32)dirents[i].d_vno, dirents[i].d_name);
     }
   }
+  */
 
   vsync();
   blkdev_sync_all();
 }
 
-void thread_idle(void *arg) {
+void thread_idle(UNUSED void *arg) {
   while(1)
     cpu_halt();
 }
@@ -216,7 +226,6 @@ void dispatcher_init() {
   gdt_init();
   gdt_settssbase(&tss);
   ltr(GDT_SEL_TSS);
-
   thread_run(kthread_new(thread_idle, NULL, "idle task"));
   thread_run(kthread_new(thread_b, NULL, "fs test thread"));
 }
@@ -256,7 +265,11 @@ struct thread *kthread_new(void (*func)(void *), void *arg, const char *name) {
 #define USER_STACK_SIZE ((size_t)0x1000)
 
 int thread_exec(const char *path) {
-  /*int (*entrypoint)(void) = elf32_load(vno);
+  struct file *f = open(path, O_RDONLY);
+  if(f == NULL)
+    return -1;
+
+  int (*entrypoint)(void) = elf32_load(f);
   if(entrypoint == NULL)
     return -1;
 
@@ -264,9 +277,12 @@ int thread_exec(const char *path) {
   vm_add_area(current->vmmap, USER_STACK_BOTTOM-USER_STACK_SIZE, USER_STACK_SIZE, anon_mapper_new(), 0);
   printf("loaded: %x - %x (stack, anon mapping)\n", USER_STACK_BOTTOM-USER_STACK_SIZE, USER_STACK_BOTTOM-USER_STACK_SIZE+USER_STACK_SIZE);
 
+  printf("value: %x\n", *((u8*)0x80480e0));
+  printf("value: %x\n", *((u8*)0x804840b));
+  printf("value: %x\n", *((u8*)0x8048430));
 
-  jmpto_userspace(entrypoint, USER_STACK_BOTTOM - 4);
-*/
+  jmpto_userspace(entrypoint, (void *)(USER_STACK_BOTTOM - 4));
+
   return 0;
 }
 
@@ -307,13 +323,13 @@ void thread_sched() {
 }
 
 void thread_yield() {
-  IRQ_DISABLE 
+  IRQ_DISABLE
   _thread_yield();
   IRQ_RESTORE
 }
 
 void thread_sleep(const void *cause) {
-  //printf("thread#%d sleep\n", current->pid);
+  printf("thread#%d sleep for %x\n", current->pid, cause);
   current->state = TASK_STATE_WAITING;
   current->waitcause = cause;
   thread_yield();
@@ -330,9 +346,9 @@ IRQ_RESTORE
 void thread_wakeup(const void *cause) {
   struct list_head *h, *tmp;
   list_foreach_safe(h, tmp, &wait_queue) {
-    struct thread *t = container_of(h, struct thread, link); 
+    struct thread *t = container_of(h, struct thread, link);
     if(t->waitcause == cause) {
-      //printf("thread#%d wakeup\n", t->pid);
+      printf("thread#%d wakeup for %x\n", t->pid, cause);
       t->state = TASK_STATE_RUNNING;
       list_remove(h);
       list_pushfront(h, &run_queue);

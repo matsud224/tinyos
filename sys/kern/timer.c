@@ -4,14 +4,14 @@
 
 struct timer_entry {
   struct timer_entry *next;
-  u32 expire; 
-  void (*func)(void *);
+  u32 expire;
+  void (*func)(const void *);
   void *arg;
 };
 
 static struct timer_entry *timer_head = NULL;
 
-void timer_start(u32 ticks, void (*func)(void *), void *arg) {
+void timer_start(u32 ticks, void (*func)(const void *), void *arg) {
   struct timer_entry *t = malloc(sizeof(struct timer_entry));
   t->expire = ticks;
   t->func = func;

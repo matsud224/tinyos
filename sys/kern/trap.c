@@ -21,22 +21,22 @@ void gpe_isr(int errcode) {
 
 void pf_isr(vaddr_t addr, u32 eip, u32 esp) {
   printf("\nPage fault addr = 0x%x (eip = 0x%x, esp = 0x%x)\n", addr, eip, esp);
-  while(1);
   struct vm_area *varea = vm_findarea(current->vmmap, addr);
   if(varea == NULL) {
     printf("Segmentation Fault in thread#%d\n", current->pid);
     thread_exit();
   } else {
-    u32 paddr = varea->mapper->ops->request(varea->mapper, addr - varea->start);
+    u32 paddr = (u32)(varea->mapper->ops->request(varea->mapper, addr - varea->start));
     /*for(int i=0; i<0xf; i++)
       printf("%x ", *(u8*)(paddr+i));
     puts("");*/
-    pagetbl_add_mapping(current->regs.cr3, addr, paddr);
+    pagetbl_add_mapping((u32 *)current->regs.cr3, addr, paddr);
+    printf("required page is loaded(*addr = %x)\n", *((u8*)paddr + (addr&(PAGESIZE-1))));
   }
 }
 
 u32 syscall_isr(u32 eax, u32 ebx, u32 ecx, u32 edx, u32 esi, u32 edi) {
-  //printf("syscall: %x,%x,%x,%x,%x,%x\n", eax, ebx, ecx, edx, esi, edi);
+  printf("syscall: %x,%x,%x,%x,%x,%x\n", eax, ebx, ecx, edx, esi, edi);
   if(eax >= NSYSCALLS) {
     printf("syscall#%d is invalid.\n", eax);
     thread_exit();

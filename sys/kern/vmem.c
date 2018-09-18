@@ -2,6 +2,7 @@
 #include <kern/vmem.h>
 #include <kern/page.h>
 #include <kern/fs.h>
+#include <kern/file.h>
 
 #define VM_AREA_HAVE_SUBMAP 0x1
 
@@ -9,8 +10,8 @@ struct anon_mapper {
   struct mapper mapper;
 };
 
-struct vnode_mapper {
-  struct vnode *vnode;
+struct file_mapper {
+  struct file *file;
   off_t file_off;
   size_t len;
   struct mapper mapper;
@@ -34,39 +35,43 @@ struct mapper *anon_mapper_new() {
   return &(m->mapper);
 }
 
-void *vnode_mapper_request(struct mapper *m, vaddr_t offset) {
+void *file_mapper_request(struct mapper *m, vaddr_t offset) {
   void *p = get_zeropage();
-  struct vnode_mapper *vm = container_of(m, struct vnode_mapper, mapper);
+  struct file_mapper *fm = container_of(m, struct file_mapper, mapper);
   vaddr_t st = pagealign(offset);
   vaddr_t end = pagealign(offset) + PAGESIZE;
   size_t readlen = PAGESIZE;
-  if(end > m->area->offset + vm->len)
-    readlen -= MIN(end - (m->area->offset + vm->len), PAGESIZE);
+  if(end > m->area->offset + fm->len)
+    readlen -= MIN(end - (m->area->offset + fm->len), PAGESIZE);
   if(offset < PAGESIZE)
     readlen -= m->area->offset;
-/*
+
   if(readlen != 0) {
+    int actually_read;
+    lseek(fm->file, st - m->area->offset + fm->file_off, SEEK_SET);
     if(offset < PAGESIZE)
-      fs_read(vm->vnode, p+m->area->offset, st - m->area->offset + vm->file_off, readlen);
+      actually_read = read(fm->file, p+m->area->offset, readlen);
     else
-      fs_read(vm->vnode, p, st - m->area->offset + vm->file_off, readlen);
-  }*/
-  return (u32)p;
+      actually_read = read(fm->file, p, readlen);
+
+    printf("required: %d, read: %d\n", readlen, actually_read);
+  }
+  return p;
 }
 
-static const struct mapper_ops vnode_mapper_ops = {
-  .request = vnode_mapper_request
+static const struct mapper_ops file_mapper_ops = {
+  .request = file_mapper_request
 };
 
-struct mapper *vnode_mapper_new(struct vnode *vnode, off_t file_off, size_t len) {
-  struct vnode_mapper *m;
-  if((m = malloc(sizeof(struct vnode_mapper))) == NULL)
+struct mapper *file_mapper_new(struct file *file, off_t file_off, size_t len) {
+  struct file_mapper *m;
+  if((m = malloc(sizeof(struct file_mapper))) == NULL)
     return NULL;
 
-  m->vnode = vnode;
+  m->file = file;
   m->file_off = file_off;
   m->len = len;
-  m->mapper.ops = &vnode_mapper_ops;
+  m->mapper.ops = &file_mapper_ops;
   return &(m->mapper);
 }
 
@@ -82,7 +87,7 @@ struct vm_map *vm_map_new() {
 }
 
 void vm_map_free(struct vm_map *vmmap) {
-  
+
 }
 
 int vm_add_area(struct vm_map *map, u32 start, size_t size, struct mapper *mapper, u32 flags UNUSED) {

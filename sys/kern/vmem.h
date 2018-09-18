@@ -9,7 +9,7 @@ struct vm_map;
 
 struct vm_map {
   struct vm_area *area_list;
-  u32 flags; 
+  u32 flags;
 };
 
 struct vm_area {
@@ -20,6 +20,10 @@ struct vm_area {
   u32 flags;
   struct mapper *mapper;
   struct vm_area *next;
+};
+
+struct mapper_ops {
+  void *(*request)(struct mapper *m, vaddr_t offset);
 };
 
 struct mapper {
@@ -33,4 +37,4 @@ struct vm_area *vm_findarea(struct vm_map *map, vaddr_t addr);
 void vmem_init(void);
 
 struct mapper *anon_mapper_new(void);
-struct mapper *vnode_mapper_new(struct vnode *vnode, off_t file_off, size_t len);
+struct mapper *file_mapper_new(struct file *file, off_t file_off, size_t len);

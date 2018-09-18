@@ -1,5 +1,6 @@
 #pragma once
 #include <kern/kernlib.h>
+#include <kern/addrspace.h>
 #include <kern/lock.h>
 
 #define MAX_FILE_NAME 255
@@ -28,6 +29,7 @@ struct vnode {
   u32 flags;
   vno_t number;
   mutex mtx;
+  //struct addrspace addrspace;
   struct list_head fs_link;
 };
 

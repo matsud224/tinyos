@@ -1,21 +1,6 @@
+/*
 #include <kern/kernlib.h>
-
-#define NDIRENT			1024
-#define NTABLEENT		1024
-
-struct addrspace {
-  struct list_head pagelist;
-};
-
-struct pageent {
-  vaddr_t addr;
-  void *page;
-  struct list_head link;
-};
-
-struct addrspace_ops {
-
-};
+#include <kern/addrspace.h>
 
 struct addrspace *addrspace_new(const struct addrspace_ops *ops) {
   struct addrspace *as = malloc(sizeof(struct addrspace));
@@ -34,7 +19,7 @@ void *addrspace_find(struct addrspace *as, vaddr_t addr) {
     if(ent->addr == addr)
       return ent->page;
   }
-  
+
   return NULL;
 }
 
@@ -43,7 +28,7 @@ void addrspace_add(struct addrspace *as, vaddr_t addr, void *page) {
   struct pageent *ent = malloc(sizeof(struct pageent));
   ent->addr = addr;
   ent->page = page;
-  
+
   list_pushback(&ent->link, &as->pagelist);
 }
 
@@ -60,3 +45,4 @@ void addrspace_remove(struct addrspace *as, vaddr_t addr) {
 }
 
 
+*/

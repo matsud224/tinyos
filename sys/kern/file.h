@@ -52,7 +52,7 @@ enum seek_whence {
   SEEK_END,
 };
 
-int fd_check(int fd);
+int is_invalid_fd(int fd);
 int fd_get(void);
 struct file *file_new(void *data, const struct file_ops *ops, int type, int flags);
 int read(struct file *f, void *buf, size_t count);

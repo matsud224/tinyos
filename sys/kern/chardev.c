@@ -129,7 +129,7 @@ static int chardev_check_major(devno_t devno) {
 
 int chardev_file_open(struct file *f) {
   struct vnode *vno = (struct vnode *)f->data;
-  if(chardev_check_major(DEV_MAJOR(vno->devno)))
+  if(chardev_check_major(vno->devno))
     return -1;
 
   return chardev_close(vno->devno);
@@ -137,7 +137,7 @@ int chardev_file_open(struct file *f) {
 
 int chardev_file_read(struct file *f, void *buf, size_t count) {
   struct vnode *vno = (struct vnode *)f->data;
-  if(chardev_check_major(DEV_MAJOR(vno->devno)))
+  if(chardev_check_major(vno->devno))
     return -1;
 
   return chardev_read(vno->devno, buf, count);
@@ -145,7 +145,7 @@ int chardev_file_read(struct file *f, void *buf, size_t count) {
 
 int chardev_file_write(struct file *f, const void *buf, size_t count) {
   struct vnode *vno = (struct vnode *)f->data;
-  if(chardev_check_major(DEV_MAJOR(vno->devno)))
+  if(chardev_check_major(vno->devno))
     return -1;
 
   return chardev_write(vno->devno, buf, count);
@@ -153,7 +153,7 @@ int chardev_file_write(struct file *f, const void *buf, size_t count) {
 
 int chardev_file_close(struct file *f) {
   struct vnode *vno = (struct vnode *)f->data;
-  if(chardev_check_major(DEV_MAJOR(vno->devno)))
+  if(chardev_check_major(vno->devno))
     return -1;
 
   return chardev_close(vno->devno);

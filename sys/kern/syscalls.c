@@ -37,33 +37,33 @@ u32 syscall_truncate(u32, u32, u32, u32, u32);
 u32 syscall_getdents(u32, u32, u32, u32, u32);
 
 u32 (*syscall_table[NSYSCALLS])(u32, u32, u32, u32, u32) = {
-  syscall_exit,
-  syscall_write,
-  syscall_read,
-  syscall_getpid,
-  syscall_isatty,
-  syscall_close,
-  syscall_execve,
-  syscall_fork,
-  syscall_stat,
-  syscall_fstat,
-  syscall_kill,
-  syscall_link,
-  syscall_lseek,
-  syscall_open,
-  syscall_sbrk,
-  syscall_times,
-  syscall_unlink,
-  syscall_wait,
-  syscall_socket,
-  syscall_bind,
-  syscall_connect,
-  syscall_listen,
-  syscall_accept,
-  syscall_sendto,
-  syscall_recvfrom,
-  syscall_send,
-  syscall_recv,
+  syscall_exit,     //0
+  syscall_write,    //1
+  syscall_read,     //2
+  syscall_getpid,   //3
+  syscall_isatty,   //4
+  syscall_close,    //5
+  syscall_execve,   //6
+  syscall_fork,     //7
+  syscall_stat,     //8
+  syscall_fstat,    //9
+  syscall_kill,     //10
+  syscall_link,     //11
+  syscall_lseek,    //12
+  syscall_open,     //13
+  syscall_sbrk,     //14
+  syscall_times,    //15
+  syscall_unlink,   //16
+  syscall_wait,     //17
+  syscall_socket,   //18
+  syscall_bind,     //19
+  syscall_connect,  //20
+  syscall_listen,   //21
+  syscall_accept,   //22
+  syscall_sendto,   //23
+  syscall_recvfrom, //24
+  syscall_send,     //25
+  syscall_recv,     //26
 };
 
 
@@ -84,7 +84,7 @@ u32 syscall_write(u32 a0, u32 a1, u32 a2, u32 a3 UNUSED, u32 a4 UNUSED) {
   return sys_write(a0, (void *)a1, a2);
 }
 
-u32 syscall_read(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
+u32 syscall_read(u32 a0, u32 a1, u32 a2, u32 a3 UNUSED, u32 a4 UNUSED) {
   return sys_read(a0, (void *)a1, a2);
 }
 
@@ -92,7 +92,8 @@ u32 syscall_getpid(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u
   return current->pid;
 }
 
-u32 syscall_isatty(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
+u32 syscall_isatty(u32 a0, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
+  return sys_isatty(a0);
 }
 
 u32 syscall_close(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
@@ -100,10 +101,11 @@ u32 syscall_close(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u3
 }
 
 u32 syscall_execve(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
+  return sys_execve(a0, a1, a2);
 }
 
 u32 syscall_fork(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
-
+  return sys_fork();
 }
 
 u32 syscall_stat(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
@@ -115,6 +117,7 @@ u32 syscall_fstat(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u3
 }
 
 u32 syscall_kill(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
+  return -1;
 }
 
 u32 syscall_link(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
@@ -131,11 +134,11 @@ u32 syscall_open(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32
 }
 
 u32 syscall_sbrk(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
-
+  return -1;
 }
 
 u32 syscall_times(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
-
+  return -1;
 }
 
 u32 syscall_unlink(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
@@ -143,7 +146,7 @@ u32 syscall_unlink(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u
 }
 
 u32 syscall_wait(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
-
+  return -1;
 }
 
 u32 syscall_socket(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {

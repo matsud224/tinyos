@@ -45,7 +45,7 @@ NET_INIT void arp_init() {
   for(int i=0;i<MAX_ARPTABLE;i++)
     list_init(&arptable[i].pending);
 
-  thread_run(kthread_new(arp_10sec_thread, NULL, "arp_thread"));
+  thread_run(kthread_new(arp_10sec_thread, NULL));
 }
 
 static struct pending_frame *pending_frame_new(struct pktbuf *frm, u16 proto, devno_t devno) {
@@ -151,7 +151,7 @@ void arp_rx(struct pktbuf *frm){
     struct list_head *p;
     int found = 0;
     list_foreach(p, &ifaddr_tbl[PF_INET]) {
-      struct ifaddr_in *inaddr = 
+      struct ifaddr_in *inaddr =
          list_entry(p, struct ifaddr_in, family_link);
       if(inaddr->addr == earp->arp_tpa) {
         devno = inaddr->devno;
@@ -207,10 +207,10 @@ static void arp_10sec_thread(void *arg UNUSED) {
   while(1) {
     thread_set_alarm(arp_10sec_thread, msecs_to_ticks(10000));
     thread_sleep(arp_10sec_thread);
-    
+
     mutex_lock(&arptbl_mtx);
     for(int i=0; i<MAX_ARPTABLE; i++) {
-      if(arptable[i].timeout > 0 && 
+      if(arptable[i].timeout > 0 &&
          arptable[i].timeout != ARPTBL_PERMANENT) {
         arptable[i].timeout--;
       }

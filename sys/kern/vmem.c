@@ -35,26 +35,26 @@ struct mapper *anon_mapper_new() {
   return &(m->mapper);
 }
 
-void *file_mapper_request(struct mapper *m, vaddr_t offset) {
+void *file_mapper_request(struct mapper *m, vaddr_t in_area_off) {
   void *p = get_zeropage();
   struct file_mapper *fm = container_of(m, struct file_mapper, mapper);
-  vaddr_t st = pagealign(offset);
-  vaddr_t end = pagealign(offset) + PAGESIZE;
+  vaddr_t st = pagealign(in_area_off);
+  vaddr_t end = pagealign(in_area_off) + PAGESIZE;
   size_t readlen = PAGESIZE;
-  if(end > m->area->offset + fm->len)
-    readlen -= MIN(end - (m->area->offset + fm->len), PAGESIZE);
-  if(offset < PAGESIZE)
+  if(st <= m->area->offset + fm->len && end > m->area->offset + fm->len)
+    readlen -= end - (m->area->offset + fm->len);
+  if(st <= m->area->offset && end > m->area->offset)
     readlen -= m->area->offset;
 
   if(readlen != 0) {
-    int actually_read;
-    lseek(fm->file, st - m->area->offset + fm->file_off, SEEK_SET);
-    if(offset < PAGESIZE)
-      actually_read = read(fm->file, p+m->area->offset, readlen);
+    int read_bytes;
+    lseek(fm->file, st + fm->file_off, SEEK_SET);
+    if(st <= m->area->offset && end > m->area->offset)
+      read_bytes = read(fm->file, p+m->area->offset, readlen);
     else
-      actually_read = read(fm->file, p, readlen);
+      read_bytes = read(fm->file, p, readlen);
 
-    printf("required: %d, read: %d\n", readlen, actually_read);
+    //printf("read: %x st: %x,areaoff: %x file_off: %x, len:%x, fileoff: %x\n", read_bytes, st, (u32)m->area->offset, (u32)fm->file_off, (u32)fm->len, (u32)(st - m->area->offset + fm->file_off));
   }
   return p;
 }
@@ -90,11 +90,22 @@ void vm_map_free(struct vm_map *vmmap) {
 
 }
 
+void vm_show_area(struct vm_map *map) {
+  struct vm_area *a;
+
+  for(a=map->area_list; a!=NULL; a=a->next) {
+    printf("vm_add_area: from %x size %x offset %x\n", a->start, a->size, a->offset);
+  }
+}
+
+
 int vm_add_area(struct vm_map *map, u32 start, size_t size, struct mapper *mapper, u32 flags UNUSED) {
   struct vm_area *a;
 
-  start = start & ~(PAGESIZE-1);
+  size += start & (PAGESIZE-1);
   size = (size+(PAGESIZE-1)) & ~(PAGESIZE-1);
+  size_t offset = start & (PAGESIZE-1);
+  start = start & ~(PAGESIZE-1);
 
   //check overlap
 
@@ -111,13 +122,13 @@ int vm_add_area(struct vm_map *map, u32 start, size_t size, struct mapper *mappe
   new->submap = NULL;
   new->start = start;
   new->size = size;
-  new->offset = start & (PAGESIZE-1);
+  new->offset = offset;
   new->flags = 0;
   new->mapper = mapper;
   new->next = map->area_list;
   map->area_list = new;
   mapper->area = new;
-printf("vm_add_area: from %x size %x(%x) offset %x\n", new->start, new->size, size, new->offset);
+//printf("vm_add_area: from %x size %x(%x) offset %x\n", new->start, new->size, size, new->offset);
   return 0;
 }
 

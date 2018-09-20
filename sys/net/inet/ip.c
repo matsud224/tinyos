@@ -79,7 +79,7 @@ void ip_10sec_thread(void *);
 NET_INIT void ip_init(){
   list_init(&reasm_ongoing);
   mutex_init(&reasm_ongoing_mtx);
-  thread_run(kthread_new(ip_10sec_thread, NULL, "ip_thread"));
+  thread_run(kthread_new(ip_10sec_thread, NULL));
 }
 
 void ip_10sec_thread(void *arg UNUSED) {
@@ -335,19 +335,19 @@ void ip_tx(struct pktbuf *data, in_addr_t srcaddr, in_addr_t dstaddr, u8 proto) 
   }
 
   if(sizeof(struct ip_hdr) + remainlen <= MTU){
-    fill_iphdr((struct ip_hdr *)pktbuf_add_header(data, sizeof(struct ip_hdr)), 
+    fill_iphdr((struct ip_hdr *)pktbuf_add_header(data, sizeof(struct ip_hdr)),
                  remainlen, currentid, 0, 0, proto, r_dst, devno);
     arp_tx(data, r_dst, ETHERTYPE_IP, devno);
   }else{
     while(remainlen > 0) {
-      size_t frag_totallen = 
+      size_t frag_totallen =
         MIN(remainlen + sizeof(struct ip_hdr), MTU);
       size_t frag_datalen = frag_totallen - sizeof(struct ip_hdr);
       u8 offset = datalen - remainlen;
       struct pktbuf *pkt = pktbuf_alloc(sizeof(struct ether_hdr) + frag_totallen);
       pktbuf_reserve_headroom(pkt, sizeof(struct ether_hdr) + sizeof(struct ip_hdr));
       pktbuf_copyin(pkt, data->head + offset, frag_datalen, 0);
-      fill_iphdr((struct ip_hdr *)pktbuf_add_header(pkt, sizeof(struct ip_hdr)), frag_datalen, 
+      fill_iphdr((struct ip_hdr *)pktbuf_add_header(pkt, sizeof(struct ip_hdr)), frag_datalen,
                    currentid, remainlen>0, offset, proto, r_dst, devno);
 
       arp_tx(pkt, r_dst, ETHERTYPE_IP, devno);

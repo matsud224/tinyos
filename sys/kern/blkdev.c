@@ -34,7 +34,7 @@ const struct file_ops blkdev_file_ops = {
   .open= blkdev_file_open,
   .read = blkdev_file_read,
   .write = blkdev_file_write,
-  .lseek = blkdev_file_lseek, 
+  .lseek = blkdev_file_lseek,
   .close = blkdev_file_close,
   .sync = blkdev_file_sync,
 };
@@ -146,7 +146,7 @@ struct blkbuf *blkbuf_get(devno_t devno, blkno_t blkno) {
   list_pushfront(&newblk->dev_link, &buf_list[DEV_MAJOR(devno)]);
   mutex_unlock(&buf_list_mtx);
   return newblk;
-} 
+}
 
 void blkbuf_release(struct blkbuf *buf) {
   mutex_lock(&buf_list_mtx);
@@ -304,7 +304,7 @@ int blkdev_sync_all() {
 
 int blkdev_file_open(struct file *f, int mode UNUSED) {
   struct vnode *vno = (struct vnode *)f->data;
-  if(blkdev_check_major(DEV_MAJOR(vno->devno)))
+  if(blkdev_check_major(vno->devno))
     return -1;
 
   if(f->ref == 1)
@@ -370,7 +370,7 @@ int blkdev_file_lseek(struct file *f, off_t offset, int whence) {
 
 int blkdev_file_close(struct file *f) {
   struct vnode *vno = (struct vnode *)f->data;
-  if(blkdev_check_major(DEV_MAJOR(vno->devno)))
+  if(blkdev_check_major(vno->devno))
     return -1;
 
   blkdev_file_sync(f);

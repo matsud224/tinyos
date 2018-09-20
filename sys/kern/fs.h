@@ -91,7 +91,7 @@ int sys_unlink(const char *path);
 int sys_stat(const char *path, struct stat *buf);
 int sys_fstat(int fd, struct stat *buf);
 
-void vnode_init(struct vnode *vno, vno_t number, struct fs *fs, const struct vnode_ops *ops, const struct file_ops *file_ops);
+void vnode_init(struct vnode *vno, vno_t number, struct fs *fs, const struct vnode_ops *ops, const struct file_ops *file_ops, devno_t devno);
 void vnode_lock(struct vnode *vno);
 void vnode_unlock(struct vnode *vno);
 void vnode_hold(struct vnode *vno);

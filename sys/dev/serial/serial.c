@@ -38,7 +38,7 @@ static int serial_open(int minor);
 static int serial_close(int minor);
 static u32 serial_read(int minor, char *dest, size_t count);
 static u32 serial_write(int minor, const char *src, size_t count);
- 
+
 static const struct chardev_ops serial_chardev_ops = {
   .open = serial_open,
   .close = serial_close,
@@ -111,6 +111,7 @@ void serial_isr_common(int port) {
         in8(base+INT_FIFO_CTRL);
       else
         serial_send(port);
+      thread_wakeup(&serial_chardev_ops);
       break;
     case 2:
     case 6:
@@ -126,7 +127,7 @@ void serial_isr_common(int port) {
       break;
     }
   }
-  
+
   pic_sendeoi(comport[port].irq);
   thread_yield();
 }

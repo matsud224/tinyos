@@ -40,7 +40,8 @@ void *elf32_load(struct file *f) {
     switch(phdr->p_type) {
     case PT_LOAD:
       vm_add_area(current->vmmap, phdr->p_vaddr, phdr->p_memsz, file_mapper_new(f, phdr->p_offset, phdr->p_filesz), 0);
-      printf("loaded: %x - %x (file mapping)\n", phdr->p_vaddr, phdr->p_vaddr + phdr->p_filesz);
+      printf("loaded: %x - %x fileoff: %x (file mapping)\n", phdr->p_vaddr, phdr->p_vaddr + phdr->p_filesz, phdr->p_offset);
+      printf("filesz = %x\n", phdr->p_filesz);
       break;
     }
   }

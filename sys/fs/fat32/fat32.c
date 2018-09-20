@@ -197,7 +197,7 @@ static struct vnode *fat32_vnode_new(struct fs *fs, u8 attr, u32 size, u32 clust
   fatvno->attr = attr;
   fatvno->size = size;
   fatvno->cluster = (vno_t)cluster;
-  vnode_init(&fatvno->vnode, cluster, fs, &fat32_vnode_ops, &fat32_file_ops);
+  vnode_init(&fatvno->vnode, cluster, fs, &fat32_vnode_ops, &fat32_file_ops, 0);
   if(vcache_add(fs, &fatvno->vnode)) {
     fat32_vfree(vno);
     return NULL;

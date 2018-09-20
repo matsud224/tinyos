@@ -38,15 +38,16 @@ void fstype_register(const char *name, const struct fstype_ops *ops) {
   printf("fs: \"%s\" registered\n", name);
 }
 
-void vnode_init(struct vnode *vno, vno_t number, struct fs *fs, const struct vnode_ops *ops, const struct file_ops *file_ops) {
+void vnode_init(struct vnode *vno, vno_t number, struct fs *fs, const struct vnode_ops *ops, const struct file_ops *file_ops, devno_t devno) {
   bzero(vno, sizeof(struct vnode));
   mutex_init(&vno->mtx);
   vno->ref = 1;
-printf("init: number=%u\n", number);
+//printf("init: number=%u\n", number);
   vno->number = number;
   vno->fs = fs;
   vno->ops = ops;
   vno->file_ops = file_ops;
+  vno->devno = devno;
   //vno->addrspace = addrspace_new(&fs_addrspace_ops);
 }
 
@@ -92,9 +93,9 @@ void vnode_sync(struct vnode *vno) {
 }
 
 struct vnode *vcache_find(struct fs *fs, vno_t number) {
-  printf("----- vcache_mtx = %x\n", &vcache_mtx);
+  //printf("----- vcache_mtx = %x\n", &vcache_mtx);
   mutex_lock(&vcache_mtx);
-  printf("---locked by %d---", current->pid);
+  //printf("---locked by %d---", current->pid);
   struct list_head *p;
   list_foreach(p, &fs->vnode_list) {
     struct vnode *vno = list_entry(p, struct vnode, fs_link);
@@ -110,7 +111,7 @@ struct vnode *vcache_find(struct fs *fs, vno_t number) {
 
 int vcache_add(struct fs *fs, struct vnode *vno) {
   mutex_lock(&vcache_mtx);
-  printf("---locked by %d---", current->pid);
+  //printf("---locked by %d---", current->pid);
   vno_t i, can_free = VNO_INVALID;
   for(i=0; i<NVCACHE; i++) {
     if(vcache[i] == NULL)
@@ -137,7 +138,7 @@ int vcache_add(struct fs *fs, struct vnode *vno) {
     vcache[can_free] = vno;
     list_pushfront(&vno->fs_link, &fs->vnode_list);
     mutex_unlock(&vcache_mtx);
-  printf("---added %x by %d---\n", vno, current->pid);
+  //printf("---added %x by %d---\n", vno, current->pid);
     return 0;
   }
 
@@ -147,7 +148,7 @@ int vcache_add(struct fs *fs, struct vnode *vno) {
 
 void vcache_remove(struct vnode *vno) {
   mutex_lock(&vcache_mtx);
-  printf("---locked by %d---", current->pid);
+  //printf("---locked by %d---", current->pid);
   for(int i=0; i<NVCACHE; i++) {
     if(vcache[i] == vno) {
       vcache[i] = NULL;
@@ -161,7 +162,7 @@ void vcache_remove(struct vnode *vno) {
 
 void vsync() {
   mutex_lock(&vcache_mtx);
-  printf("---locked by %d---", current->pid);
+  //printf("---locked by %d---", current->pid);
   for(int i=0; i<NVCACHE; i++) {
     if(vcache[i] && vcache[i]->ops->vsync) {
       vnode_hold(vcache[i]);
@@ -248,7 +249,7 @@ static struct vnode *name_to_vnode(const char *path, struct vnode **parent, char
     else
       name[i] = '\0';
 
-printf("current name is %s\n", name);
+//printf("current name is %s\n", name);
     if(prevvno != NULL) {
       vnode_unlock(prevvno);
       vnode_release(prevvno);
@@ -484,9 +485,9 @@ int sys_open(const char *path, int flags) {
   if(fd < 0)
     return -1;
   current->files[fd] = open(path, flags);
-  if(current->files[fd] != NULL)
+  if(current->files[fd] == NULL)
     return -1;
-  return 0;
+  return fd;
 }
 
 int sys_mknod(const char *path, int mode, devno_t devno) {
@@ -514,7 +515,7 @@ int sys_stat(const char *path, struct stat *buf) {
 }
 
 int sys_fstat(int fd, struct stat *buf) {
-  if(fd_check(fd) || buffer_check(buf, sizeof(struct stat)))
+  if(is_invalid_fd(fd) || buffer_check(buf, sizeof(struct stat)))
     return -1;
   return fstat(current->files[fd], buf);
 }

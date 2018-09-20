@@ -186,37 +186,37 @@ int sys_socket(int domain, int type) {
 }
 
 int sys_bind(int fd, const struct sockaddr *addr) {
-  if(fd_check(fd) || buffer_check(addr, sizeof(struct sockaddr)))
+  if(is_invalid_fd(fd) || buffer_check(addr, sizeof(struct sockaddr)))
     return -1;
   return bind(current->files[fd], addr);
 }
 
 int sys_sendto(int fd, const char *msg, size_t len, int flags, const struct sockaddr *to_addr) {
-  if(fd_check(fd) || buffer_check(msg, len) || buffer_check(to_addr, sizeof(struct sockaddr)))
+  if(is_invalid_fd(fd) || buffer_check(msg, len) || buffer_check(to_addr, sizeof(struct sockaddr)))
     return -1;
   return sendto(current->files[fd], msg, len, flags, to_addr);
 }
 
 int sys_recvfrom(int fd, char *buf, size_t len, int flags, struct sockaddr *from_addr) {
-  if(fd_check(fd) || buffer_check(buf, len) || buffer_check(from_addr, sizeof(struct sockaddr)))
+  if(is_invalid_fd(fd) || buffer_check(buf, len) || buffer_check(from_addr, sizeof(struct sockaddr)))
     return -1;
   return recvfrom(current->files[fd], buf, len, flags, from_addr);
 }
 
 int sys_connect(int fd, const struct sockaddr *to_addr) {
-  if(fd_check(fd) || buffer_check(to_addr, sizeof(struct sockaddr)))
+  if(is_invalid_fd(fd) || buffer_check(to_addr, sizeof(struct sockaddr)))
     return -1;
   return connect(current->files[fd], to_addr);
 }
 
 int sys_listen(int fd, int backlog){
-  if(fd_check(fd))
+  if(is_invalid_fd(fd))
     return -1;
   return listen(current->files[fd], backlog);
 }
 
 int sys_accept(int fd, struct sockaddr *client_addr) {
-  if(fd_check(fd) || buffer_check(client_addr, sizeof(struct sockaddr)))
+  if(is_invalid_fd(fd) || buffer_check(client_addr, sizeof(struct sockaddr)))
     return -1;
   int newfd = fd_get();
   if(newfd < 0)
@@ -228,13 +228,13 @@ int sys_accept(int fd, struct sockaddr *client_addr) {
 }
 
 int sys_send(int fd, const char *msg, size_t len, int flags) {
-  if(fd_check(fd) || buffer_check(msg, len))
+  if(is_invalid_fd(fd) || buffer_check(msg, len))
     return -1;
   return send(current->files[fd], msg, len, flags);
 }
 
 int sys_recv(int fd, char *buf, size_t len, int flags) {
-  if(fd_check(fd) || buffer_check(buf, len))
+  if(is_invalid_fd(fd) || buffer_check(buf, len))
     return -1;
   return recv(current->files[fd], buf, len, flags);
 }

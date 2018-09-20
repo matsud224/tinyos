@@ -58,14 +58,13 @@ struct thread {
   u32 flags;
   pid_t pid;
   const void *waitcause;
-  const char *name;
   struct file *files[MAX_FILES];
 };
 
 void dispatcher_init(void);
 void dispatcher_run(void);
 void kstack_setaddr(void);
-struct thread *kthread_new(void (*func)(void *), void *arg, const char *name);
+struct thread *kthread_new(void (*func)(void *), void *arg);
 int thread_exec(const char *path);
 void thread_run(struct thread *t);
 void thread_sched(void);
@@ -76,3 +75,6 @@ void thread_set_alarm(void *cause, u32 expire);
 void thread_exit(void);
 struct deferred_func *defer_exec(void (*func)(void *), void *arg, int priority, int delay);
 void *defer_cancel(struct deferred_func *f);
+
+int sys_execve(const char *filename, char *const argv[], char *const envp[]);
+int sys_fork(void);

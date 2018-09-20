@@ -4,18 +4,19 @@
 #include <kern/fs.h>
 #include <kern/thread.h>
 #include <kern/syscalls.h>
+#include <kern/chardev.h>
 
 static struct list_head file_list;
 
 static mutex filelist_mtx;
 
-int fd_check(int fd) {
-  return !(fd < 0) || !(fd >= MAX_FILES) || !(current->files[fd] == NULL);
+int is_invalid_fd(int fd) {
+  return (fd < 0) || (fd >= MAX_FILES) || (current->files[fd] == NULL);
 }
 
 int fd_get() {
   for(int i=0; i<MAX_FILES; i++)
-    if(current->files[i])
+    if(current->files[i] == NULL)
       return i;
   return -1;
 }
@@ -104,7 +105,7 @@ int getdents(struct file *f, struct dirent *dirp, size_t count) {
 }
 
 int sys_close(int fd) {
-  if(fd_check(fd))
+  if(is_invalid_fd(fd))
     return -1;
   int result = close(current->files[fd]);
   current->files[fd] = NULL;
@@ -112,37 +113,43 @@ int sys_close(int fd) {
 }
 
 int sys_read(int fd, void *buf, size_t count) {
-  if(fd_check(fd) || buffer_check(buf, count))
+  if(is_invalid_fd(fd) || buffer_check(buf, count))
     return -1;
   return read(current->files[fd], buf, count);
 }
 
 int sys_write(int fd, const void *buf, size_t count) {
-  if(fd_check(fd) || buffer_check(buf, count))
+  if(is_invalid_fd(fd) || buffer_check(buf, count))
     return -1;
   return write(current->files[fd], buf, count);
 }
 
+int sys_isatty(int fd) {
+  if(is_invalid_fd(fd))
+    return -1;
+  return (current->files[fd]->ops == &chardev_file_ops); //TODO
+}
+
 int sys_lseek(int fd, off_t offset, int whence) {
-  if(fd_check(fd))
+  if(is_invalid_fd(fd))
     return -1;
   return lseek(current->files[fd], offset, whence);
 }
 
 int sys_fsync(int fd) {
-  if(fd_check(fd))
+  if(is_invalid_fd(fd))
     return -1;
-  return sync(current->files[fd]);
+  return fsync(current->files[fd]);
 }
 
 int sys_truncate(int fd, size_t size) {
-  if(fd_check(fd))
+  if(is_invalid_fd(fd))
     return -1;
   return truncate(current->files[fd], size);
 }
 
 int sys_getdents(int fd, struct dirent *dirp, size_t count) {
-  if(fd_check(fd) || buffer_check(dirp, count))
+  if(is_invalid_fd(fd) || buffer_check(dirp, count))
     return -1;
   return getdents(current->files[fd], dirp, count);
 }

@@ -42,11 +42,11 @@ KERNENTRY void kernel_main(void) {
   pci_init();
   blkdev_init();
   chardev_init();
-  switch_to_chardev();
   netdev_init();
   fs_init();
 
   _init();
+  switch_to_chardev();
 
   ip_set_defaultgw(IPADDR(192,168,4,1));
   pit_init();
@@ -56,4 +56,21 @@ KERNENTRY void kernel_main(void) {
   while(1);
 }
 
+void thread_main(void *arg UNUSED) {
+  if(fs_mountroot(ROOTFS_TYPE, ROOTFS_DEV))
+    puts("fs: failed to mount");
+  else
+    puts("fs: mount succeeded");
 
+
+  struct file *f = open("/dev/tty1", O_RDWR);
+  if(!f) {
+    puts("tty1 open failed.");
+  }
+  current->files[0] = f;
+  current->files[1] = f;
+  current->files[2] = f;
+
+  thread_exec("/hello");
+  puts("exec failed");
+}

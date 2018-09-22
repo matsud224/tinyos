@@ -2,9 +2,9 @@ NASM			= nasm
 CC				= i686-elf-gcc
 CFLAGS		= -std=gnu99 -O2 -Wall -Wextra -g
 OBJCOPY		= i686-elf-objcopy
-QEMU			= qemu-system-i386 
+QEMU			= qemu-system-i386
 SUDO			= sudo
-QEMUFLAGS			= -m 512 -hda disk/minixdisk -hdb disk/sample -hdc disk/fat32disk -boot a -serial stdio -monitor telnet:127.0.0.1:11111,server,nowait
+QEMUFLAGS			= -m 512 -hda disk/minixdisk -hdc disk/fat32disk -boot a -serial stdio -monitor telnet:127.0.0.1:11111,server,nowait
 QEMUNETFLAGS	= -net nic,model=rtl8139 -net tap,ifname=tap0,script=ifup.sh
 RM						= rm -f
 
@@ -24,7 +24,7 @@ all:
 	$(MAKE) -C $(BOOTDIR)
 	$(MAKE) -C $(SYSDIR)
 	cat $(BINDIR)/boot.bin $(BINDIR)/kernel.bin > $(BINDIR)/kernel
-  
+
 .PHONY: clean
 clean:
 	$(RM) $(BINDIR)/*.elf $(BINDIR)/*.bin $(BINDIR)/kernel
@@ -32,7 +32,7 @@ clean:
 
 .PHONY: run
 run: all
-	$(QEMU) -fda $(BINDIR)/kernel -s $(QEMUFLAGS) 
+	$(QEMU) -fda $(BINDIR)/kernel -s $(QEMUFLAGS)
 
 .PHONY: run-with-network
 run-with-network: all

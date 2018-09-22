@@ -5,8 +5,14 @@
 #include <kern/file.h>
 
 
+struct page_entry {
+  struct list_head link;
+  void *addr;
+};
+
 struct anon_mapper {
   struct mapper mapper;
+  struct list_head page_list;
 };
 
 struct file_mapper {
@@ -16,22 +22,45 @@ struct file_mapper {
   struct mapper mapper;
 };
 
-void *anon_mapper_request(struct mapper *m UNUSED, vaddr_t offset UNUSED) {
-  void *p = get_zeropage();
-  return p;
+void *anon_mapper_request(struct mapper *m, vaddr_t offset UNUSED) {
+  struct anon_mapper *am = container_of(m, struct anon_mapper, mapper);
+  struct page_entry *pe;
+  if((pe = malloc(sizeof(struct page_entry))) == NULL)
+    return NULL;
+  pe->addr = get_zeropage();
+  list_pushback(&pe->link, &am->page_list);
+  return pe->addr;
+}
+
+int anon_mapper_yield(struct mapper *m) {
+  //TODO: swapping
+  return -1;
+}
+
+static page_entry_free(struct page_entry *pe) {
+  page_free(pe->addr);
+  free(pe);
+}
+
+void anon_mapper_remove(struct mapper *m) {
+  struct anon_mapper *am = container_of(m, struct file_mapper, mapper);
+  list_free_all(&am->page_list, struct page_entry, link, page_entry_free);
 }
 
 static const struct mapper_ops anon_mapper_ops = {
-  .request = anon_mapper_request
+  .request = anon_mapper_request,
+  .yield = anon_mapper_yield,
+  .remove = anon_mapper_remove,
 };
 
 struct mapper *anon_mapper_new() {
-  struct anon_mapper *m;
-  if((m = malloc(sizeof(struct anon_mapper))) == NULL)
+  struct anon_mapper *am;
+  if((am = malloc(sizeof(struct anon_mapper))) == NULL)
     return NULL;
+  list_init(&am->page_list);
 
-  m->mapper.ops = &anon_mapper_ops;
-  return &(m->mapper);
+  am->mapper.ops = &anon_mapper_ops;
+  return &(am->mapper);
 }
 
 void *file_mapper_request(struct mapper *m, vaddr_t in_area_off) {
@@ -54,15 +83,25 @@ void *file_mapper_request(struct mapper *m, vaddr_t in_area_off) {
       read_bytes = read(fm->file, p, readlen);
 
     if(read_bytes < readlen)
-      puts("vmem: read failed");
-
-    //printf("request: %x read: %x st: %x,areaoff: %x file_off: %x, len:%x, fileoff: %x\n", readlen, read_bytes, st, (u32)m->area->offset, (u32)fm->file_off, (u32)fm->len, (u32)(st + fm->file_off));
+      puts("fatal: read failed");
   }
   return p;
 }
 
+int file_mapper_yield(struct mapper *m) {
+  //TODO: swapping
+  return -1;
+}
+
+void file_mapper_remove(struct mapper *m) {
+  struct file_mapper *fm = container_of(m, struct file_mapper, mapper);
+}
+
+
 static const struct mapper_ops file_mapper_ops = {
-  .request = file_mapper_request
+  .request = file_mapper_request,
+  .yield = file_mapper_yield,
+  .remove = file_mapper_remove,
 };
 
 struct mapper *file_mapper_new(struct file *file, off_t file_off, size_t len) {
@@ -83,7 +122,7 @@ struct vm_map *vm_map_new() {
   if((m = malloc(sizeof(struct vm_map))) == NULL)
     return NULL;
 
-  m->area_list = NULL;
+  list_init(&m->area_list);
   m->flags = 0;
   return m;
 }
@@ -92,17 +131,8 @@ void vm_map_free(struct vm_map *vmmap) {
 
 }
 
-void vm_show_area(struct vm_map *map) {
-  struct vm_area *a;
-
-  for(a=map->area_list; a!=NULL; a=a->next) {
-    printf("vm_add_area: from %x size %x offset %x\n", a->start, a->size, a->offset);
-  }
-}
-
-
 int vm_add_area(struct vm_map *map, u32 start, size_t size, struct mapper *mapper, u32 flags UNUSED) {
-  struct vm_area *a;
+  struct list_head *p;
 
   size += start & (PAGESIZE-1);
   size = (size+(PAGESIZE-1)) & ~(PAGESIZE-1);
@@ -110,8 +140,8 @@ int vm_add_area(struct vm_map *map, u32 start, size_t size, struct mapper *mappe
   start = start & ~(PAGESIZE-1);
 
   //check overlap
-
-  for(a=map->area_list; a!=NULL; a=a->next) {
+  list_foreach(p, &map->area_list) {
+    struct vm_area *a = list_entry(p, struct vm_area, link);
     if(start < a->start && (start+size-1) >= a->start)
       return -1;
     else if(start >= a->start && start <= (a->start+a->size-1))
@@ -126,8 +156,7 @@ int vm_add_area(struct vm_map *map, u32 start, size_t size, struct mapper *mappe
   new->offset = offset;
   new->flags = 0;
   new->mapper = mapper;
-  new->next = map->area_list;
-  map->area_list = new;
+  list_pushback(&new->link, &map->area_list);
   mapper->area = new;
 //printf("vm_add_area: from %x size %x(%x) offset %x\n", new->start, new->size, size, new->offset);
   return 0;
@@ -150,8 +179,9 @@ int vm_remove_area(struct vm_map *map, u32 start, size_t size) {
 */
 
 struct vm_area *vm_findarea(struct vm_map *map, vaddr_t addr) {
-  struct vm_area *a;
-  for(a=map->area_list; a!=NULL; a=a->next) {
+  struct list_head *p;
+  list_foreach(p, &map->area_list) {
+    struct vm_area *a = list_entry(p, struct vm_area, link);
     //printf("area 0x%x - 0x%x\n", a->start, a->start+a->size);
     if(a->start <= addr && (a->start+a->size) > addr) {
       return a;

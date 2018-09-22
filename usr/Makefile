@@ -45,6 +45,11 @@ umount:
 
 .PHONY: init
 init:
+	dd if=/dev/zero of=$(DISKIMG) bs=1M count=256
+	dd if=/dev/zero of=$(DISKIMG2) bs=1M count=256
+	sudo losetup /dev/loop0 $(DISKIMG)
+	sudo mkfs.vfat /dev/loop0
+	sudo losetup -d /dev/loop0
 	sudo losetup /dev/loop0 $(DISKIMG2)
 	sudo mkfs.minix -3 /dev/loop0
 	sudo losetup -d /dev/loop0

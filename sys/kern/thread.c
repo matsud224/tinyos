@@ -110,7 +110,8 @@ int thread_fork() {
   bzero(t, sizeof(struct thread));
   t->vmmap = vm_map_new();
   t->state = TASK_STATE_RUNNING;
-  t->pid = pid_next++;
+  pid_t childpid = pid_next++;
+  t->pid = childpid;
   t->regs.cr3 = procpdt_new();
   memcpy(t->regs.cr3, current->regs.cr3, PAGESIZE); //TODO: pdt size
   //prepare kernel stack
@@ -118,12 +119,15 @@ int thread_fork() {
   bzero(t->kstack, PAGESIZE);
   t->kstacksize = PAGESIZE;
   memcpy(&t->regs, &current->regs, sizeof(struct thread_state));
-  memcpy(&t->files, &current->files, sizeof(struct file *) * MAX_FILES);
+
+  for(int i=0; i<MAX_FILES; i++)
+    if(current->files[i])
+      t->files[i] = dup(current->files[i]);
+
   t->flags = current->flags;
 
   thread_run(t);
-
-  return 0;
+  return childpid;
 }
 
 void thread_run(struct thread *t) {
@@ -214,7 +218,7 @@ int sys_execve(const char *filename, char *const argv[] UNUSED, char *const envp
 }
 
 int sys_fork(void) {
-
+  return thread_fork();
 }
 
 int sys_sbrk(int incr) {

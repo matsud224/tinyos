@@ -33,7 +33,7 @@ void pf_isr(vaddr_t addr, u32 eip, u32 esp) {
 }
 
 u32 syscall_isr(u32 eax, u32 ebx, u32 ecx, u32 edx, u32 esi, u32 edi) {
-  //printf("syscall: %x,%x,%x,%x,%x,%x\n", eax, ebx, ecx, edx, esi, edi);
+  //printf("syscall: %d,%x,%x,%x,%x,%x\n", eax, ebx, ecx, edx, esi, edi);
   if(eax >= NSYSCALLS) {
     printf("syscall#%d is invalid.\n", eax);
     thread_exit();

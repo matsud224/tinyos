@@ -244,8 +244,8 @@ void tcp_stat(void) {
   puts("proto, local, foreign, state, sndwnd, rcvwnd");
   list_foreach(p, &tcpcb_list) {
     struct tcpcb *cb = list_entry(p, struct tcpcb, link);
-    printf("tcp, %x:%u, %x:%u, %s, %u, %u\n", 
-      cb->laddr, cb->lport, cb->faddr, cb->fport, 
+    printf("tcp, %x:%u, %x:%u, %s, %u, %u\n",
+      cb->laddr, cb->lport, cb->faddr, cb->fport,
       TCP_STATE_STR[cb->state], cb->snd_wnd, cb->rcv_wnd);
   }
 
@@ -483,7 +483,7 @@ void tcp_ctl_tx(u32 seq, u32 ack, u16 win, u8 flags, in_addr_t to_addr, in_port_
     tinfo->resend_pkt = tcpseg;
   }
   ip_tx(tcpseg, r_src, r_dst, IPTYPE_TCP);
-  
+
 
   if(cb != NULL)
     tcpcb_timer_add(cb, cb->rtt*TCP_TIMER_UNIT, tinfo);
@@ -534,7 +534,7 @@ void tcp_rx_listen(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th, st
     newcb->snd_wl2 = ntoh32(th->th_ack);
 
     newcb->mss = MSS;
-    
+
     mutex_lock(&cblist_mtx);
     list_pushback(&newcb->link, &tcpcb_list);
     mutex_unlock(&cblist_mtx);
@@ -655,7 +655,7 @@ u32 arrival_copy_head(struct tcpcb *cb, char *base, size_t len) {
   }
 
 exit:
-  return len - remain; 
+  return len - remain;
 }
 
 struct list_head arrival_pick_tail(struct tcp_arrival *a, size_t len) {
@@ -706,7 +706,7 @@ printf("tcp_arrival: seq# %u to %u  rcv_nxt=%u\n", start_seq, end_seq, cb->rcv_n
   struct list_head *p, *tmp;
   list_foreach_safe(p, tmp, &cb->arrival_list){
     struct tcp_arrival *a = list_entry(p, struct tcp_arrival, link);
-    if(LE_LE(newa->start_seq, a->start_seq, newa->end_seq+1) 
+    if(LE_LE(newa->start_seq, a->start_seq, newa->end_seq+1)
          || LE_LE(newa->start_seq-1, a->end_seq, newa->end_seq)) {
       list_remove(p);
       arrival_merge(newa, a);
@@ -1109,7 +1109,7 @@ void tcp_rx_otherwise(struct pktbuf *pkt, struct ip_hdr *ih, struct tcp_hdr *th,
     //相手からFINが送られてきたということは、こちらに全てのセグメントが到着している
     cb->rcv_fin = ntoh32(th->th_seq);
     cb->rcv_nxt = cb->rcv_fin+1;
-    tcp_ctl_tx(cb->snd_nxt, cb->rcv_nxt, cb->rcv_wnd, TH_ACK, 
+    tcp_ctl_tx(cb->snd_nxt, cb->rcv_nxt, cb->rcv_wnd, TH_ACK,
       ih->ip_src, th->th_sport, th->th_dport, NULL);
 
     switch(cb->state){
@@ -1326,7 +1326,7 @@ retry:
         pending->snd_nxt = pending->iss+1;
         pending->snd_unack = pending->iss;
 
-        tcp_ctl_tx(pending->iss, pending->rcv_nxt, STREAM_RECV_BUF, TH_SYN|TH_ACK, 
+        tcp_ctl_tx(pending->iss, pending->rcv_nxt, STREAM_RECV_BUF, TH_SYN|TH_ACK,
                    pending->faddr, pending->fport, cb->lport, pending);
 
         pending->state = TCP_STATE_SYN_RCVD;
@@ -1536,7 +1536,7 @@ void tcp_timer_do(void *arg) {
         //通常の再送
         if(tinfo->msec > TCP_RESEND_WAIT_MAX){
           struct tcpcb *cb = tinfo->cb;
-          tcp_ctl_tx(cb->snd_nxt, cb->rcv_nxt, cb->rcv_wnd, TH_RST, 
+          tcp_ctl_tx(cb->snd_nxt, cb->rcv_nxt, cb->rcv_wnd, TH_RST,
                     cb->faddr, cb->fport, cb->lport, NULL);
           tcpcb_reset(cb);
           list_remove(&tinfo->link);
@@ -1562,7 +1562,7 @@ void tcp_timer_do(void *arg) {
       struct tcpcb *cb = tinfo->cb;
       mutex_lock(&cb->mtx);
       if(cb->rcv_ack_cnt == tinfo->option.delayack.seq){
-        tcp_ctl_tx(cb->snd_nxt, cb->rcv_nxt, cb->rcv_wnd, TH_ACK, 
+        tcp_ctl_tx(cb->snd_nxt, cb->rcv_nxt, cb->rcv_wnd, TH_ACK,
                   cb->faddr, cb->fport, cb->lport, NULL);
       }
       mutex_unlock(&cb->mtx);

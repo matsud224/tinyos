@@ -136,6 +136,9 @@ void thread_run(struct thread *t) {
 
 static void thread_free(struct thread *t) {
   page_free(t->kstack);
+  for(int i=0; i<MAX_FILES; i++)
+    if(t->files[i])
+      close(t->files[i]);
   free(t);
 }
 

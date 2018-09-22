@@ -5,7 +5,7 @@ kernbufbase				equ	0x1000
 pdtbase					equ 0x2000
 kernbase				equ	0x7e00
 virtkernbase		equ 0xc0007e00
-kernsectors			equ 300
+kernsectors			equ 400
 codeseg_r0					equ	0x8
 dataseg_r0					equ	0x10
 codeseg_r3					equ	0x18
@@ -49,7 +49,7 @@ boot:
 .mapfin:
   mov dword [di], 0
   mov dword [di+8], 0
- 
+
   ;reset floppy
   xor ah, ah
   xor dl, dl
@@ -140,7 +140,7 @@ setuppdt:
 
   ;setup gdt
   lgdt [gdtptr]
-  
+
   ;to protect mode
   mov eax, cr0
   or eax, 1

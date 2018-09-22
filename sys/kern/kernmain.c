@@ -19,6 +19,8 @@
 #include <net/inet/inet.h>
 #include <net/inet/ip.h>
 #include <kern/timer.h>
+#include <net/socket/socket.h>
+#include <net/util.h>
 
 
 void _init(void);
@@ -47,7 +49,7 @@ KERNENTRY void kernel_main(void) {
   fs_init();
 
   _init();
-  switch_to_chardev();
+  //switch_to_chardev();
 
   ip_set_defaultgw(IPADDR(192,168,4,1));
   pit_init();
@@ -61,9 +63,9 @@ struct thread *timer_thread;
 
 void thread_timer(void *arg UNUSED) {
   while(1) {
-    thread_set_alarm(timer_thread, msecs_to_ticks(5000));
+    thread_set_alarm(timer_thread, msecs_to_ticks(10000));
     thread_sleep(timer_thread);
-    puts("\n--- 5sec timer---\n");
+    puts("--- 10sec timer---");
   }
 }
 
@@ -73,16 +75,16 @@ void thread_main(void *arg UNUSED) {
   else
     puts("fs: mount succeeded");
 
-  //thread_run(timer_thread = kthread_new(thread_timer, NULL));
+  thread_run(timer_thread = kthread_new(thread_timer, NULL));
 
   struct file *f = open("/dev/tty1", O_RDWR);
   if(!f) {
     puts("tty1 open failed.");
   }
   current->files[0] = f;
-  current->files[1] = f;
-  current->files[2] = f;
+  current->files[1] = dup(f);
+  current->files[2] = dup(f);
 
-  thread_exec("/lua");
+  thread_exec("/bin/init");
   puts("exec failed");
 }

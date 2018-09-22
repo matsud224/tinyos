@@ -58,6 +58,7 @@ struct file *file_new(void *data, const struct file_ops *ops, int type, int flag
 int read(struct file *f, void *buf, size_t count);
 int write(struct file *f, const void *buf, size_t count);
 int lseek(struct file *f, off_t offset, int whence);
+struct file *dup(struct file *f);
 int close(struct file *f);
 int sync(struct file *f);
 int truncate(struct file *f, size_t size);
@@ -70,3 +71,4 @@ int sys_lseek(int fd, off_t offset, int whence);
 int sys_fsync(int fd);
 int sys_truncate(int fd, size_t size);
 int sys_getdents(int fd, struct dirent *dirp, size_t count);
+int sys_dup(int oldfd);

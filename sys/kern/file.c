@@ -45,6 +45,11 @@ struct file *file_new(void *data, const struct file_ops *ops, int type, int flag
   return f;
 }
 
+struct file *dup(struct file *f) {
+  f->ref++;
+  return f;
+}
+
 int close(struct file *f) {
   int retval = 0;
   if(f->ops->close)
@@ -53,11 +58,12 @@ int close(struct file *f) {
   if(retval)
     return retval;
 
-  mutex_lock(&filelist_mtx);
+  //mutex_lock(&filelist_mtx);
   //list_remove(&f->link);
-  mutex_unlock(&filelist_mtx);
+  //mutex_unlock(&filelist_mtx);
 
-  free(f);
+  if(--(f->ref) == 0)
+    free(f);
 
   return retval;
 }
@@ -154,3 +160,14 @@ int sys_getdents(int fd, struct dirent *dirp, size_t count) {
   return getdents(current->files[fd], dirp, count);
 }
 
+int sys_dup(int oldfd) {
+  if(is_invalid_fd(oldfd))
+    return -1;
+  int newfd = fd_get();
+  if(newfd < 0)
+    return -1;
+  current->files[newfd] = dup(current->files[oldfd]);
+  if(current->files[newfd] == NULL)
+    return -1;
+  return newfd;
+}

@@ -45,7 +45,6 @@ void page_free(void *addr) {
   pageinfo[index].next_free = page_freelist;
   page_freelist = &pageinfo[index];
   page_nfree++;
-  puts("page freed");
 }
 
 static void recycle_area(paddr_t start, size_t size) {

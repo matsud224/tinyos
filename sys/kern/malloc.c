@@ -85,10 +85,10 @@ IRQ_RESTORE
 
 void free(void *addr) {
 IRQ_DISABLE
-  /*if(((vaddr_t)addr & (PAGESIZE-1)) == 0) {
+  if(((vaddr_t)addr & (PAGESIZE-1)) == 0) {
     page_free(addr);
-  } else */{
-    struct chunkhdr *ch = (struct chunkhdr *)((u32)addr&~(PAGESIZE-1));
+  } else {
+    struct chunkhdr *ch = (struct chunkhdr *)pagealign((u32)addr);
     ch->nfree++;
     if(ch->nfree == ch->nobjs) {
       list_remove(&ch->link);

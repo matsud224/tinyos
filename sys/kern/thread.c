@@ -96,9 +96,8 @@ int thread_exec(const char *path) {
 
   //prepare user space stack
   vm_add_area(current->vmmap, USER_STACK_BOTTOM-USER_STACK_SIZE, USER_STACK_SIZE, anon_mapper_new(), 0);
-  //printf("loaded: %x - %x (stack, anon mapping)\n", USER_STACK_BOTTOM-USER_STACK_SIZE, USER_STACK_BOTTOM-USER_STACK_SIZE+USER_STACK_SIZE);
 
-  current->brk = ((u32)brk+(PAGESIZE-1)) & ~(PAGESIZE-1);
+  current->brk = pagealign((u32)brk+(PAGESIZE-1));
 
   jmpto_userspace(entrypoint, (void *)(USER_STACK_BOTTOM - 4));
 
@@ -148,7 +147,6 @@ static void thread_free(struct thread *t) {
 }
 
 void thread_sched() {
-  //printf("sched: nextpid=%d esp=%x\n", current->pid, current->regs.esp);
   switch(current->state) {
   case TASK_STATE_RUNNING:
     list_pushback(&(current->link), &run_queue);
@@ -232,7 +230,7 @@ int sys_sbrk(int incr) {
     return -1;
 
   u32 prev_brk = (u32)current->brk;
-  u32 new_brk = ((u32)current->brk + incr + (PAGESIZE-1)) & ~(PAGESIZE-1);
+  u32 new_brk = pagealign((u32)current->brk + incr + (PAGESIZE-1));
 
   //add mapping if brk go over the page boundary.
   vm_add_area(current->vmmap, current->brk, new_brk-prev_brk, anon_mapper_new(), 0);

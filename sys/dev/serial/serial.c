@@ -7,7 +7,7 @@
 
 #define COMPORT_NUM 2
 
-#define SERIAL_BUFSIZE 64
+#define SERIAL_BUFSIZE 128
 
 enum {
   DATA				= 0,

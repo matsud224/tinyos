@@ -43,7 +43,7 @@ struct chardev_buf *cdbuf_create(char *mem, size_t size) {
 
 size_t cdbuf_read(struct chardev_buf *buf, char *dest, size_t count) {
   u32 read_count = 0;
-  while((read_count < count) && (buf->head != buf->tail)) {
+  while(read_count < count && buf->free < buf->size) {
     *dest++ = buf->addr[buf->tail++];
     if(buf->tail == buf->size)
       buf->tail = 0;
@@ -54,9 +54,8 @@ size_t cdbuf_read(struct chardev_buf *buf, char *dest, size_t count) {
 }
 
 size_t cdbuf_write(struct chardev_buf *buf, const char *src, size_t count) {
-  u32 write_count = 0;
-  u32 limit = (buf->tail+(buf->size-1))%buf->size;
-  while((write_count < count) && (buf->head != limit)) {
+  size_t write_count = 0;
+  while(write_count < count && buf->free > 0) {
     buf->addr[buf->head++] = *src++;
     if(buf->head == buf->size)
       buf->head = 0;
@@ -113,7 +112,7 @@ size_t chardev_write(devno_t devno, const char *src, size_t count) {
   u32 remain = count;
 IRQ_DISABLE
   while(remain > 0) {
-    u32 n = ops->write(DEV_MINOR(devno), src, count);
+    u32 n = ops->write(DEV_MINOR(devno), src, remain);
     remain -= n;
     src += n;
     if(remain > 0)

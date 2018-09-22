@@ -66,6 +66,7 @@ u32 (*syscall_table[NSYSCALLS])(u32, u32, u32, u32, u32) = {
   syscall_send,     //25
   syscall_recv,     //26
   syscall_dup,      //27
+  syscall_getdents, //28
 };
 
 

@@ -20,14 +20,13 @@ struct vm_area {
   size_t size;
   u32 flags;
   struct mapper *mapper;
-  struct vm_area *next;
   int ref;
 };
 
 struct mapper_ops {
   void *(*request)(struct mapper *m, vaddr_t offset);
   int (*yield)(struct mapper *m);
-  void (*remove)(struct mapper *m);
+  void (*free)(struct mapper *m);
 };
 
 struct mapper {

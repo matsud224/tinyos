@@ -143,6 +143,7 @@ static void thread_free(struct thread *t) {
   for(int i=0; i<MAX_FILES; i++)
     if(t->files[i])
       close(t->files[i]);
+  vm_map_free(t->vmmap);
   free(t);
 }
 

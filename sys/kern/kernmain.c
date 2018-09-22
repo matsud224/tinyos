@@ -85,6 +85,6 @@ void thread_main(void *arg UNUSED) {
   current->files[1] = dup(f);
   current->files[2] = dup(f);
 
-  thread_exec("/bin/init");
+  thread_exec("/lua");
   puts("exec failed");
 }

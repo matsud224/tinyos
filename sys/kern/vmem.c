@@ -16,10 +16,11 @@ struct anon_mapper {
 };
 
 struct file_mapper {
+  struct mapper mapper;
   struct file *file;
   off_t file_off;
   size_t len;
-  struct mapper mapper;
+  struct list_head page_list;
 };
 
 void *anon_mapper_request(struct mapper *m, vaddr_t offset UNUSED) {
@@ -42,7 +43,7 @@ static page_entry_free(struct page_entry *pe) {
   free(pe);
 }
 
-void anon_mapper_remove(struct mapper *m) {
+void anon_mapper_free(struct mapper *m) {
   struct anon_mapper *am = container_of(m, struct file_mapper, mapper);
   list_free_all(&am->page_list, struct page_entry, link, page_entry_free);
 }
@@ -50,7 +51,7 @@ void anon_mapper_remove(struct mapper *m) {
 static const struct mapper_ops anon_mapper_ops = {
   .request = anon_mapper_request,
   .yield = anon_mapper_yield,
-  .remove = anon_mapper_remove,
+  .free = anon_mapper_free,
 };
 
 struct mapper *anon_mapper_new() {
@@ -93,7 +94,7 @@ int file_mapper_yield(struct mapper *m) {
   return -1;
 }
 
-void file_mapper_remove(struct mapper *m) {
+void file_mapper_free(struct mapper *m) {
   struct file_mapper *fm = container_of(m, struct file_mapper, mapper);
 }
 
@@ -101,7 +102,7 @@ void file_mapper_remove(struct mapper *m) {
 static const struct mapper_ops file_mapper_ops = {
   .request = file_mapper_request,
   .yield = file_mapper_yield,
-  .remove = file_mapper_remove,
+  .free = file_mapper_free,
 };
 
 struct mapper *file_mapper_new(struct file *file, off_t file_off, size_t len) {
@@ -127,8 +128,14 @@ struct vm_map *vm_map_new() {
   return m;
 }
 
-void vm_map_free(struct vm_map *vmmap) {
+void vm_area_free(struct vm_area *area) {
+  area->mapper->ops->free(area->mapper);
+  free(area);
+}
 
+void vm_map_free(struct vm_map *vmmap) {
+  list_free_all(&vmmap->area_list, struct vm_area, link, vm_area_free);
+  free(vmmap);
 }
 
 int vm_add_area(struct vm_map *map, u32 start, size_t size, struct mapper *mapper, u32 flags UNUSED) {

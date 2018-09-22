@@ -45,6 +45,7 @@ void page_free(void *addr) {
   pageinfo[index].next_free = page_freelist;
   page_freelist = &pageinfo[index];
   page_nfree++;
+  puts("page freed");
 }
 
 static void recycle_area(paddr_t start, size_t size) {
@@ -77,7 +78,7 @@ void page_init() {
   page_nfree = 0;
   page_freelist = NULL;
   recycle_area(KERN_VMEM_TO_PHYS(protmem_freearea_addr), memsize - (((u32)KERN_VMEM_TO_PHYS(protmem_freearea_addr))));
-  
+
   printf("page: %d MB(%d pages) free\n", (page_getnfree()*4)/1024, page_getnfree());
   return;
 }

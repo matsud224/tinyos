@@ -123,6 +123,8 @@ int thread_fork() {
     if(current->files[i])
       t->files[i] = dup(current->files[i]);
 
+  t->vmmap = vm_map_dup(current->vmmap);
+
   t->flags = current->flags;
 
   thread_run(t);

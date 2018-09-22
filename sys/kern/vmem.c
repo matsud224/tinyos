@@ -52,6 +52,18 @@ struct page_entry *page_entry_find(struct list_head *page_list, vaddr_t start) {
   return NULL;
 }
 
+static void page_copy(struct page_entry *pe) {
+  if(pe->pinfo->ref == 1)
+    return;
+
+  struct page_info *pinew = malloc(sizeof(struct page_info));
+  memcpy(pinew, pe->pinfo, sizeof(struct page_info));
+  pinew->addr = page_alloc();
+  memcpy(pinew->addr, pe->pinfo->addr, PAGESIZE);
+  pinew->ref = 1;
+  pe->pinfo->ref--;
+  pe->pinfo = pinew;
+}
 
 void *anon_mapper_request(struct mapper *m, vaddr_t offset) {
   struct anon_mapper *am = container_of(m, struct anon_mapper, mapper);
@@ -59,7 +71,10 @@ void *anon_mapper_request(struct mapper *m, vaddr_t offset) {
 
   struct page_entry *pe;
 
-  if((pe = page_entry_find(&am->page_list, start)) == NULL) {
+  if(pe = page_entry_find(&am->page_list, start)) {
+    //this page already exists but requested ... copy-on-write
+    page_copy(pe);
+  } else {
     pe = page_entry_new(start);
     if(pe == NULL)
       return NULL;
@@ -135,7 +150,10 @@ void *file_mapper_request(struct mapper *m, vaddr_t in_area_off) {
 
   vaddr_t start = pagealign(m->area->start+in_area_off);
   struct page_entry *pe;
-  if((pe = page_entry_find(&fm->page_list, start)) == NULL) {
+  if(pe = page_entry_find(&fm->page_list, start)) {
+    //this page already exists but requested ... copy-on-write
+    page_copy(pe);
+  } else {
     pe = page_entry_new(start);
     if(pe == NULL)
       return NULL;

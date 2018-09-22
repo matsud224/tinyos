@@ -18,6 +18,7 @@
 #include <kern/netdev.h>
 #include <net/inet/inet.h>
 #include <net/inet/ip.h>
+#include <kern/timer.h>
 
 
 void _init(void);
@@ -56,12 +57,23 @@ KERNENTRY void kernel_main(void) {
   while(1);
 }
 
+struct thread *timer_thread;
+
+void thread_timer(void *arg UNUSED) {
+  while(1) {
+    thread_set_alarm(timer_thread, msecs_to_ticks(5000));
+    thread_sleep(timer_thread);
+    puts("\n--- 5sec timer---\n");
+  }
+}
+
 void thread_main(void *arg UNUSED) {
   if(fs_mountroot(ROOTFS_TYPE, ROOTFS_DEV))
     puts("fs: failed to mount");
   else
     puts("fs: mount succeeded");
 
+  //thread_run(timer_thread = kthread_new(thread_timer, NULL));
 
   struct file *f = open("/dev/tty1", O_RDWR);
   if(!f) {
@@ -71,6 +83,6 @@ void thread_main(void *arg UNUSED) {
   current->files[1] = f;
   current->files[2] = f;
 
-  thread_exec("/hello");
+  thread_exec("/lua");
   puts("exec failed");
 }

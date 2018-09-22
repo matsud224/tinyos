@@ -133,8 +133,8 @@ u32 syscall_open(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32
   return sys_open((void *)a0, a1);
 }
 
-u32 syscall_sbrk(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
-  return -1;
+u32 syscall_sbrk(u32 a0, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
+  return sys_sbrk(a0);
 }
 
 u32 syscall_times(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
@@ -196,7 +196,3 @@ u32 syscall_truncate(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED,
 u32 syscall_getdents(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
   return sys_getdents(a0, (void *)a1, a2);
 }
-
-
-
-

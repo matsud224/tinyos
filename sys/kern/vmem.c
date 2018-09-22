@@ -4,7 +4,6 @@
 #include <kern/fs.h>
 #include <kern/file.h>
 
-#define VM_AREA_HAVE_SUBMAP 0x1
 
 struct anon_mapper {
   struct mapper mapper;
@@ -54,7 +53,10 @@ void *file_mapper_request(struct mapper *m, vaddr_t in_area_off) {
     else
       read_bytes = read(fm->file, p, readlen);
 
-    //printf("read: %x st: %x,areaoff: %x file_off: %x, len:%x, fileoff: %x\n", read_bytes, st, (u32)m->area->offset, (u32)fm->file_off, (u32)fm->len, (u32)(st - m->area->offset + fm->file_off));
+    if(read_bytes < readlen)
+      puts("vmem: read failed");
+
+    //printf("request: %x read: %x st: %x,areaoff: %x file_off: %x, len:%x, fileoff: %x\n", readlen, read_bytes, st, (u32)m->area->offset, (u32)fm->file_off, (u32)fm->len, (u32)(st + fm->file_off));
   }
   return p;
 }
@@ -119,7 +121,6 @@ int vm_add_area(struct vm_map *map, u32 start, size_t size, struct mapper *mappe
   struct vm_area *new = malloc(sizeof(struct vm_area));
   if(new == NULL)
     return -1;
-  new->submap = NULL;
   new->start = start;
   new->size = size;
   new->offset = offset;
@@ -153,10 +154,7 @@ struct vm_area *vm_findarea(struct vm_map *map, vaddr_t addr) {
   for(a=map->area_list; a!=NULL; a=a->next) {
     //printf("area 0x%x - 0x%x\n", a->start, a->start+a->size);
     if(a->start <= addr && (a->start+a->size) > addr) {
-      if(a->flags & VM_AREA_HAVE_SUBMAP)
-        return vm_findarea(a->submap, addr);
-      else
-        return a;
+      return a;
     }
   }
   return NULL;

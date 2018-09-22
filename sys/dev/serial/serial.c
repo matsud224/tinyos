@@ -117,10 +117,21 @@ void serial_isr_common(int port) {
     case 6:
       //受信
       data = in8(base+DATA);
+
       if(CDBUF_IS_EMPTY(comport[port].rxbuf))
         thread_wakeup(&serial_chardev_ops);
-      if(!CDBUF_IS_FULL(comport[port].rxbuf))
-        cdbuf_write(comport[port].rxbuf, &data, 1);
+
+      if(data == '\r')
+        data = '\n';
+
+
+      if(!CDBUF_IS_FULL(comport[port].rxbuf)) {
+        if(data == 0x7f) {
+          cdbuf_write(comport[port].rxbuf, "\b \b", 3);
+        } else {
+          cdbuf_write(comport[port].rxbuf, &data, 1);
+        }
+      }
       break;
     case 3:
       in8(base+LINESTAT);
@@ -165,6 +176,9 @@ static u32 serial_read(int minor, char *dest, size_t count) {
 
   struct comport *com = &comport[minor];
   u32 n = cdbuf_read(com->rxbuf, dest, count);
+  //echo back
+  cdbuf_write(com->txbuf, dest, n);
+  serial_send(com->port);
   return n;
 }
 

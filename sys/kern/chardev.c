@@ -88,16 +88,21 @@ size_t chardev_read(devno_t devno, char *dest, size_t count) {
     return -1;
 
   u32 remain = count;
+  u32 read_bytes = 0;
 IRQ_DISABLE
   while(remain > 0) {
     u32 n = ops->read(DEV_MINOR(devno), dest, remain);
     remain -= n;
     dest += n;
+    read_bytes += n;
+    if(n > 0 && *(dest-1) == '\n') {
+      break;
+    }
     if(remain > 0)
       thread_sleep(ops);
   }
 IRQ_RESTORE
-  return count;
+  return read_bytes;
 }
 
 size_t chardev_write(devno_t devno, const char *src, size_t count) {

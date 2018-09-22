@@ -180,7 +180,6 @@ static struct minix3_vnode *minix3_vnode_new(struct fs *fs, u32 number, struct m
     vnode_init(&vno->vnode, number, fs, &minix3_vnode_ops, &blkdev_file_ops, inode->i_zone[0]);
     break;
   case S_IFCHR:
-    puts("character device file!");
     vnode_init(&vno->vnode, number, fs, &minix3_vnode_ops, &chardev_file_ops, inode->i_zone[0]);
     break;
   default:
@@ -386,13 +385,14 @@ static zone_t zone_vtop(struct minix3_vnode *m3vno, zone_t vzone, int is_write_a
     return 0;
   }
   vzone -= minix3->zone_boundary[depth-1];
-  divisor = minix3->zone_divisor[depth-1];
+  //divisor = minix3->zone_divisor[depth-1];
 
   for(int i=0; i<depth; i++) {
     if(!is_write_access && current_zone == MINIX3_INVALID_ZONE)
       return MINIX3_INVALID_ZONE;
     u32 current_blk = zone_to_blk(&minix3->sb, current_zone);
-    u32 indirect_index = vzone / minix3->zone_divisor[depth-1-i];
+    divisor = minix3->zone_divisor[depth-1-i];
+    u32 indirect_index = vzone / divisor;
     u32 blk_offset = indirect_index * sizeof(zone_t) / BLOCKSIZE;
     struct blkbuf *bbuf = blkbuf_get(minix3->devno, current_blk + blk_offset);
     blkbuf_read(bbuf);
@@ -403,9 +403,9 @@ static zone_t zone_vtop(struct minix3_vnode *m3vno, zone_t vzone, int is_write_a
         return MINIX3_INVALID_ZONE;
       }
     }
-    current_zone = ((zone_t *)bbuf->addr)[indirect_index];
+    current_zone = ((zone_t *)bbuf->addr)[indirect_index % (BLOCKSIZE/sizeof(zone_t))];
     blkbuf_release(bbuf);
-    vzone = vzone & (divisor-1);
+    vzone = vzone % divisor;
   }
 
   return current_zone;
@@ -537,8 +537,10 @@ static int minix3_firstblk(struct minix3_vnode *m3vno, size_t file_off, int is_w
   u32 remblk = file_off % minix3->zone_size / BLOCKSIZE;
   zone_t current_zone = zone_vtop(m3vno, vzone, is_write_access);
 
-  if(current_zone == MINIX3_INVALID_ZONE)
+  if(current_zone == MINIX3_INVALID_ZONE) {
+    puts("minix3: invalid zone");
     return -1;
+  }
 
   return zone_to_blk(&minix3->sb, current_zone) + remblk;
 }
@@ -678,6 +680,8 @@ int minix3_read(struct file *f, void *buf, size_t count) {
   u32 offset = (u32)f->offset;
   u32 tail = MIN(count + offset, m3vno->minix3.i_size);
   u32 remain = tail - offset;
+
+  //printf("minix3: offset=%x, tail=%x, remain=%x\n", offset, tail, remain);
 
   if(tail <= offset) {
     vnode_unlock(vno);

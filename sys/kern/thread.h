@@ -59,6 +59,7 @@ struct thread {
   pid_t pid;
   const void *waitcause;
   struct file *files[MAX_FILES];
+  void *brk;
 };
 
 void dispatcher_init(void);
@@ -78,3 +79,4 @@ void *defer_cancel(struct deferred_func *f);
 
 int sys_execve(const char *filename, char *const argv[], char *const envp[]);
 int sys_fork(void);
+int sys_sbrk(int incr);

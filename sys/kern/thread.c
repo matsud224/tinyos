@@ -82,20 +82,23 @@ struct thread *kthread_new(void (*func)(void *), void *arg) {
 }
 
 #define USER_STACK_BOTTOM ((vaddr_t)0xc0000000)
-#define USER_STACK_SIZE ((size_t)0x1000)
+#define USER_STACK_SIZE ((size_t)0x4000)
 
 int thread_exec(const char *path) {
   struct file *f = open(path, O_RDONLY);
   if(f == NULL)
     return -1;
 
-  int (*entrypoint)(void) = elf32_load(f);
+  void *brk;
+  int (*entrypoint)(void) = elf32_load(f, &brk);
   if(entrypoint == NULL)
     return -1;
 
   //prepare user space stack
   vm_add_area(current->vmmap, USER_STACK_BOTTOM-USER_STACK_SIZE, USER_STACK_SIZE, anon_mapper_new(), 0);
-  printf("loaded: %x - %x (stack, anon mapping)\n", USER_STACK_BOTTOM-USER_STACK_SIZE, USER_STACK_BOTTOM-USER_STACK_SIZE+USER_STACK_SIZE);
+  //printf("loaded: %x - %x (stack, anon mapping)\n", USER_STACK_BOTTOM-USER_STACK_SIZE, USER_STACK_BOTTOM-USER_STACK_SIZE+USER_STACK_SIZE);
+
+  current->brk = ((u32)brk+(PAGESIZE-1)) & ~(PAGESIZE-1);
 
   jmpto_userspace(entrypoint, (void *)(USER_STACK_BOTTOM - 4));
 
@@ -209,5 +212,25 @@ int sys_execve(const char *filename, char *const argv[] UNUSED, char *const envp
 
 int sys_fork(void) {
 
+}
+
+int sys_sbrk(int incr) {
+  if(incr < 0)
+    return -1;
+  else if(incr == 0)
+    return current->brk;
+
+  if(current->brk + incr > current->regs.esp)
+    return -1;
+
+  u32 prev_brk = (u32)current->brk;
+  u32 new_brk = ((u32)current->brk + incr + (PAGESIZE-1)) & ~(PAGESIZE-1);
+
+  //add mapping if brk go over the page boundary.
+  vm_add_area(current->vmmap, current->brk, new_brk-prev_brk, anon_mapper_new(), 0);
+  current->brk = new_brk;
+  //printf("sbrk: %x -> %x\n", prev_brk, new_brk);
+
+  return (int)prev_brk;
 }
 

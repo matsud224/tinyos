@@ -13,13 +13,13 @@ struct vm_map {
 };
 
 struct vm_area {
-  struct vm_map *submap;
   vaddr_t start;
   off_t offset;
   size_t size;
   u32 flags;
   struct mapper *mapper;
   struct vm_area *next;
+  int ref;
 };
 
 struct mapper_ops {

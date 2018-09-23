@@ -68,8 +68,7 @@ struct thread *kthread_new(void (*func)(void *), void *arg, const char *name) {
   t->pid = pid_next++;
   t->regs.cr3 = pagetbl_new();
   //prepare kernel stack
-  t->kstack = page_alloc();
-  bzero(t->kstack, PAGESIZE);
+  t->kstack = get_zeropage();
   t->kstacksize = PAGESIZE;
   t->regs.esp = (u32)((u8 *)(t->kstack) + t->kstacksize - 4);
   *(u32 *)t->regs.esp = (u32)arg;
@@ -107,7 +106,7 @@ int thread_exec(const char *path) {
 
 int thread_fork() {
   struct thread *t = malloc(sizeof(struct thread));
-  bzero(t, sizeof(struct thread));
+  memcpy(t, current, sizeof(struct thread));
   t->vmmap = vm_map_new();
   t->state = TASK_STATE_RUNNING;
   pid_t childpid = pid_next++;
@@ -115,20 +114,20 @@ int thread_fork() {
   t->regs.cr3 = pagetbl_dup_for_fork((paddr_t)current->regs.cr3);
 
   //prepare kernel stack
-  t->kstack = page_alloc();
-  bzero(t->kstack, PAGESIZE);
+  t->kstack = get_zeropage();
   t->kstacksize = PAGESIZE;
-  memcpy(&t->regs, &current->regs, sizeof(struct thread_state));
 
   for(int i=0; i<MAX_FILES; i++)
     if(current->files[i])
       t->files[i] = dup(current->files[i]);
 
   t->vmmap = vm_map_dup(current->vmmap);
+  //vm_show_area(current->vmmap);
+  //vm_show_area(t->vmmap);
 
   t->flags = current->flags;
 
-  thread_run(t);
+  //thread_run(t);
   return childpid;
 }
 

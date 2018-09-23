@@ -17,7 +17,6 @@ struct page_info {
 
 struct anon_mapper {
   struct mapper mapper;
-  struct list_head page_list;
 };
 
 struct file_mapper {
@@ -25,7 +24,6 @@ struct file_mapper {
   struct file *file;
   off_t file_off;
   size_t len;
-  struct list_head page_list;
 };
 
 struct page_entry *page_entry_new(vaddr_t start) {
@@ -71,14 +69,14 @@ void *anon_mapper_request(struct mapper *m, vaddr_t offset) {
 
   struct page_entry *pe;
 
-  if((pe = page_entry_find(&am->page_list, start))) {
+  if((pe = page_entry_find(&m->page_list, start))) {
     //this page already exists but requested ... copy-on-write
     page_copy(pe);
   } else {
     pe = page_entry_new(start);
     if(pe == NULL)
       return NULL;
-    list_pushback(&pe->link, &am->page_list);
+    list_pushback(&pe->link, &m->page_list);
   }
 
   return pe->pinfo->addr;
@@ -99,7 +97,7 @@ static void page_entry_free(struct page_entry *pe) {
 
 void anon_mapper_free(struct mapper *m) {
   struct anon_mapper *am = container_of(m, struct anon_mapper, mapper);
-  list_free_all(&am->page_list, struct page_entry, link, page_entry_free);
+  list_free_all(&m->page_list, struct page_entry, link, page_entry_free);
   free(am);
 }
 
@@ -119,9 +117,9 @@ struct mapper *anon_mapper_dup(struct mapper *m) {
   struct anon_mapper *amnew = malloc(sizeof(struct anon_mapper));
   memcpy(amnew, amold, sizeof(struct anon_mapper));
 
-  list_init(&amnew->page_list);
+  list_init(&amnew->mapper.page_list);
 
-  page_list_dup(&amold->page_list, &amnew->page_list);
+  page_list_dup(&amold->mapper.page_list, &amnew->mapper.page_list);
   return &amnew->mapper;
 }
 
@@ -137,7 +135,7 @@ struct mapper *anon_mapper_new() {
   struct anon_mapper *am;
   if((am = malloc(sizeof(struct anon_mapper))) == NULL)
     return NULL;
-  list_init(&am->page_list);
+  list_init(&am->mapper.page_list);
 
   am->mapper.ops = &anon_mapper_ops;
   return &(am->mapper);
@@ -150,14 +148,14 @@ void *file_mapper_request(struct mapper *m, vaddr_t in_area_off) {
 
   vaddr_t start = pagealign(m->area->start+in_area_off);
   struct page_entry *pe;
-  if((pe = page_entry_find(&fm->page_list, start))) {
+  if((pe = page_entry_find(&m->page_list, start))) {
     //this page already exists but requested ... copy-on-write
     page_copy(pe);
   } else {
     pe = page_entry_new(start);
     if(pe == NULL)
       return NULL;
-    list_pushback(&pe->link, &fm->page_list);
+    list_pushback(&pe->link, &m->page_list);
   }
 
   size_t readlen = PAGESIZE;
@@ -184,16 +182,16 @@ void *file_mapper_request(struct mapper *m, vaddr_t in_area_off) {
 int file_mapper_yield(struct mapper *m) {
   struct file_mapper *fm = container_of(m, struct file_mapper, mapper);
 
-  if(list_is_empty(&fm->page_list))
+  if(list_is_empty(&m->page_list))
     return -1;
 
-  list_free_all(&fm->page_list, struct page_entry, link, page_entry_free);
+  list_free_all(&m->page_list, struct page_entry, link, page_entry_free);
   return 0;
 }
 
 void file_mapper_free(struct mapper *m) {
   struct file_mapper *fm = container_of(m, struct file_mapper, mapper);
-  list_free_all(&fm->page_list, struct page_entry, link, page_entry_free);
+  list_free_all(&m->page_list, struct page_entry, link, page_entry_free);
   free(fm);
 }
 
@@ -203,8 +201,8 @@ struct mapper *file_mapper_dup(struct mapper *m) {
   memcpy(fmnew, fmold, sizeof(struct file_mapper));
 
   fmnew->file = dup(fmold->file);
-  list_init(&fmnew->page_list);
-  page_list_dup(&fmold->page_list, &fmnew->page_list);
+  list_init(&fmnew->mapper.page_list);
+  page_list_dup(&fmold->mapper.page_list, &fmnew->mapper.page_list);
   return &fmnew->mapper;
 }
 
@@ -224,7 +222,7 @@ struct mapper *file_mapper_new(struct file *file, off_t file_off, size_t len) {
   fm->file_off = file_off;
   fm->len = len;
   fm->mapper.ops = &file_mapper_ops;
-  list_init(&fm->page_list);
+  list_init(&fm->mapper.page_list);
   return &(fm->mapper);
 }
 
@@ -316,6 +314,21 @@ struct vm_area *vm_findarea(struct vm_map *map, vaddr_t addr) {
       return a;
   }
   return NULL;
+}
+
+void vm_show_area(struct vm_map *map) {
+  struct list_head *p, *p2;
+  puts("----- ----- -----");
+  list_foreach(p, &map->area_list) {
+    struct vm_area *a = list_entry(p, struct vm_area, link);;
+    printf("  from %x size %x offset %x\n", a->start, a->size, a->offset);
+    list_foreach(p2, &(a->mapper->page_list)) {
+      struct page_entry *pe = list_entry(p2, struct page_entry, link);
+      struct page_info *i = pe->pinfo;
+      printf("    addr %x ref %x start %x\n", i->addr, i->ref, i->start);
+    }
+  }
+  puts("----- ----- -----");
 }
 
 void vmem_init() {

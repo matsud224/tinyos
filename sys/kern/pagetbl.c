@@ -24,7 +24,9 @@
 #define PTE_DIRTY					0x40
 #define PTE_GLOBAL				0x100
 
-#define KERNSPACE_NUM_PDE 1024
+#define TOTAL_NUM_PDE     (PAGESIZE >> 2)
+#define TOTAL_NUM_PTE     (PAGESIZE >> 2)
+static u32 KERN_PDE_START;
 
 static u32 *kernspace_pdt; //beyond 0xc0000000
 
@@ -32,7 +34,8 @@ void pagetbl_init() {
   //setup kernel space
   kernspace_pdt = get_zeropage();
   //kernel space straight mapping(896MB)
-  int st_start_index = KERN_VMEM_ADDR / 0x400000;
+  int st_start_index = KERN_VMEM_ADDR / 0x400000; //0x400000 = 4MB
+  KERN_PDE_START = st_start_index;
   int st_end_index = st_start_index + (KERN_STRAIGHT_MAP_SIZE/0x400000);
   vaddr_t addr = 0x0;
   for(int i = st_start_index; i < st_end_index;
@@ -40,7 +43,7 @@ void pagetbl_init() {
     kernspace_pdt[i] = addr | PDE_PRESENT | PDE_RW | PDE_SIZE_4MB | PDE_USER;
   }
   //kernel space virtual area
-  for(int i = st_end_index; i < KERNSPACE_NUM_PDE; i++) {
+  for(int i = st_end_index; i < TOTAL_NUM_PDE; i++) {
     u32 *pt = get_zeropage();
     kernspace_pdt[i] = KERN_VMEM_TO_PHYS((vaddr_t)pt) | PDE_PRESENT | PDE_RW | PDE_USER;
   }
@@ -52,8 +55,9 @@ void pagetbl_init() {
 paddr_t pagetbl_new() {
   u32 *pdt = get_zeropage();
   //fill kernel space page directory entry
-  for(int i = 0; i < KERNSPACE_NUM_PDE; i++)
+  for(int i = 0; i < TOTAL_NUM_PDE; i++)
     pdt[i] = kernspace_pdt[i];
+
   return KERN_VMEM_TO_PHYS(pdt);
 }
 
@@ -71,7 +75,7 @@ void pagetbl_add_mapping(u32 *pdt, u32 vaddr, u32 paddr) {
 
 void pagetbl_free(paddr_t pdt) {
   u32 *v_pdt = (u32 *)PHYS_TO_KERN_VMEM(pdt);
-  for(int i = KERNSPACE_NUM_PDE; i < PAGESIZE; i++) {
+  for(int i = 0; i < KERN_PDE_START; i++) {
     u32 ent = v_pdt[i];
     if((ent & PDE_PRESENT)) {
       page_free(PHYS_TO_KERN_VMEM(ent & ~0xfff));
@@ -84,7 +88,8 @@ void pagetbl_free(paddr_t pdt) {
 static vaddr_t pagetbl_dup_one(vaddr_t oldpt) {
   //copy page table entry
   u32 *newpt = get_zeropage();
-  for(int i=0; i<PAGESIZE; i++) {
+  return NULL;
+  for(int i=0; i<TOTAL_NUM_PTE; i++) {
     u32 oldent = ((u32 *)oldpt)[i];
     if(oldent & PTE_PRESENT)
       newpt[i] = (oldent & ~0xfff) | PTE_PRESENT | PTE_USER; //Do not set PTE_RW due to copy-on-write.
@@ -97,16 +102,16 @@ paddr_t pagetbl_dup_for_fork(paddr_t oldpdt) {
   u32 *v_oldpdt = (u32 *)PHYS_TO_KERN_VMEM(oldpdt);
 
   //fill kernel space page directory entry
-  for(int i = 0; i < KERNSPACE_NUM_PDE; i++)
+  for(int i = 0; i < TOTAL_NUM_PDE; i++)
     pdt[i] = kernspace_pdt[i];
 
   //copy user space page directory entry
-  for(int i = KERNSPACE_NUM_PDE; i < PAGESIZE; i++) {
-    u32 oldent = (v_oldpdt)[i];
+  for(int i = 0; i < KERN_PDE_START; i++) {
+    u32 oldent = v_oldpdt[i];
     if(oldent & PDE_PRESENT)
       pdt[i] = KERN_VMEM_TO_PHYS(pagetbl_dup_one(PHYS_TO_KERN_VMEM(oldent & ~0xfff))) | PDE_PRESENT | PDE_RW | PDE_USER;
   }
 
-  return (paddr_t)KERN_VMEM_TO_PHYS(pdt);
+  return KERN_VMEM_TO_PHYS(pdt);
 }
 

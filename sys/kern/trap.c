@@ -20,7 +20,7 @@ void gpe_isr(int errcode) {
 }
 
 void pf_isr(vaddr_t addr, u32 eip, u32 esp) {
-  //printf("\nPage fault addr = 0x%x (eip = 0x%x, esp = 0x%x)\n", addr, eip, esp);
+  //printf("\nPage fault in thread#%d (%s)\n  addr = 0x%x (eip = 0x%x, esp = 0x%x)\n", current->pid, GET_THREAD_NAME(current), addr, eip, esp);
   struct vm_area *varea = vm_findarea(current->vmmap, addr);
   if(varea == NULL) {
     printf("Segmentation Fault in thread#%d (%s)\n  addr = 0x%x (eip = 0x%x, esp = 0x%x)\n", current->pid, GET_THREAD_NAME(current), addr, eip, esp);
@@ -33,7 +33,7 @@ void pf_isr(vaddr_t addr, u32 eip, u32 esp) {
 }
 
 u32 syscall_isr(u32 eax, u32 ebx, u32 ecx, u32 edx, u32 esi, u32 edi) {
-  //printf("syscall: %d,%x,%x,%x,%x,%x\n", eax, ebx, ecx, edx, esi, edi);
+  //printf("syscall in thread#%d (%s)\n  eax=%d,ebx=%x,ecx=%x,edx=%x,esi=%x,edi=%x\n", current->pid, GET_THREAD_NAME(current), eax, ebx, ecx, edx, esi, edi);
   if(eax >= NSYSCALLS) {
     printf("syscall#%d is invalid.\n", eax);
     thread_exit();

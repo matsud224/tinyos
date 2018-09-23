@@ -47,8 +47,8 @@ void dispatcher_init() {
   gdt_init();
   gdt_settssbase(&tss);
   ltr(GDT_SEL_TSS);
-  thread_run(kthread_new(thread_idle, NULL));
-  thread_run(kthread_new(thread_main, NULL));
+  thread_run(kthread_new(thread_idle, NULL, "idle"));
+  thread_run(kthread_new(thread_main, NULL, "main"));
 }
 
 void dispatcher_run() {
@@ -59,11 +59,12 @@ void kstack_setaddr() {
   tss.esp0 = (u32)((u8 *)(current->kstack) + current->kstacksize);
 }
 
-struct thread *kthread_new(void (*func)(void *), void *arg) {
+struct thread *kthread_new(void (*func)(void *), void *arg, const char *name) {
   struct thread *t = malloc(sizeof(struct thread));
   bzero(t, sizeof(struct thread));
   t->vmmap = vm_map_new();
   t->state = TASK_STATE_RUNNING;
+  t->name = name;
   t->pid = pid_next++;
   t->regs.cr3 = procpdt_new();
   //prepare kernel stack
@@ -176,7 +177,7 @@ void thread_yield() {
 }
 
 void thread_sleep(const void *cause) {
-  //printf("thread#%d sleep for %x\n", current->pid, cause);
+  //printf("thread#%d (%s) sleep for %x\n", current->pid, GET_THREAD_NAME(current), cause);
   current->state = TASK_STATE_WAITING;
   current->waitcause = cause;
   thread_yield();
@@ -195,7 +196,7 @@ void thread_wakeup(const void *cause) {
   list_foreach_safe(h, tmp, &wait_queue) {
     struct thread *t = container_of(h, struct thread, link);
     if(t->waitcause == cause) {
-      //printf("thread#%d wakeup for %x\n", t->pid, cause);
+      //printf("thread#%d (%s) wakeup for %x\n", t->pid, GET_THREAD_NAME(t), cause);
       t->state = TASK_STATE_RUNNING;
       list_remove(h);
       list_pushfront(h, &run_queue);
@@ -208,7 +209,7 @@ void thread_set_alarm(void *cause, u32 expire) {
 }
 
 void thread_exit() {
-  printf("thread#%d exit\n", current->pid);
+  printf("thread#%d (%s) exit\n", current->pid, GET_THREAD_NAME(current));
   current->state = TASK_STATE_EXITED;
   thread_yield();
 }

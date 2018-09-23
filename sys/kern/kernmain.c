@@ -75,7 +75,7 @@ void thread_main(void *arg UNUSED) {
   else
     puts("fs: mount succeeded");
 
-  thread_run(timer_thread = kthread_new(thread_timer, NULL));
+  thread_run(timer_thread = kthread_new(thread_timer, NULL, "timer_10sec"));
 
   struct file *f = open("/dev/tty1", O_RDWR);
   if(!f) {

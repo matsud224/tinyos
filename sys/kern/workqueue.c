@@ -30,10 +30,10 @@ static void workqueue_thread(void *arg) {
   }
 }
 
-struct workqueue *workqueue_new() {
+struct workqueue *workqueue_new(const char *name) {
   struct workqueue *wq = malloc(sizeof(struct workqueue));
   list_init(&wq->queue);
-  wq->thread = kthread_new(workqueue_thread, wq);
+  wq->thread = kthread_new(workqueue_thread, wq, name);
   thread_run(wq->thread);
   return wq;
 }

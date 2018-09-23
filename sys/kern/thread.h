@@ -60,12 +60,15 @@ struct thread {
   const void *waitcause;
   struct file *files[MAX_FILES];
   void *brk;
+  char *name;
 };
+
+#define GET_THREAD_NAME(th) ((th)->name?(th)->name:"???")
 
 void dispatcher_init(void);
 void dispatcher_run(void);
 void kstack_setaddr(void);
-struct thread *kthread_new(void (*func)(void *), void *arg);
+struct thread *kthread_new(void (*func)(void *), void *arg, const char *name);
 int thread_exec(const char *path);
 void thread_run(struct thread *t);
 void thread_sched(void);

@@ -71,7 +71,7 @@ void *anon_mapper_request(struct mapper *m, vaddr_t offset) {
 
   struct page_entry *pe;
 
-  if(pe = page_entry_find(&am->page_list, start)) {
+  if((pe = page_entry_find(&am->page_list, start))) {
     //this page already exists but requested ... copy-on-write
     page_copy(pe);
   } else {
@@ -84,7 +84,7 @@ void *anon_mapper_request(struct mapper *m, vaddr_t offset) {
   return pe->pinfo->addr;
 }
 
-int anon_mapper_yield(struct mapper *m) {
+int anon_mapper_yield(struct mapper *m UNUSED) {
   //TODO: swapping
   return -1;
 }
@@ -150,7 +150,7 @@ void *file_mapper_request(struct mapper *m, vaddr_t in_area_off) {
 
   vaddr_t start = pagealign(m->area->start+in_area_off);
   struct page_entry *pe;
-  if(pe = page_entry_find(&fm->page_list, start)) {
+  if((pe = page_entry_find(&fm->page_list, start))) {
     //this page already exists but requested ... copy-on-write
     page_copy(pe);
   } else {
@@ -254,7 +254,7 @@ struct vm_map *vm_map_dup(struct vm_map *oldm) {
   list_foreach(p, &oldm->area_list) {
     struct vm_area *a = list_entry(p, struct vm_area, link);
     struct vm_area *newa = vm_area_dup(a);
-    list_pushback(&a->link, &newm->area_list);
+    list_pushback(&newa->link, &newm->area_list);
   }
 
   return newm;

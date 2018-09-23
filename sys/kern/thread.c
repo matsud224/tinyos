@@ -111,8 +111,8 @@ int thread_fork() {
   t->state = TASK_STATE_RUNNING;
   pid_t childpid = pid_next++;
   t->pid = childpid;
-  t->regs.cr3 = procpdt_new();
-  memcpy(t->regs.cr3, current->regs.cr3, PAGESIZE); //TODO: pdt size
+  t->regs.cr3 = pagetbl_dup_for_fork((paddr_t)current->regs.cr3);
+
   //prepare kernel stack
   t->kstack = page_alloc();
   bzero(t->kstack, PAGESIZE);

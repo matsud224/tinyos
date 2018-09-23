@@ -35,6 +35,8 @@ struct mapper {
 };
 
 struct vm_map *vm_map_new(void);
+void vm_map_free(struct vm_map *vmmap);
+struct vm_map *vm_map_dup(struct vm_map *oldm);
 int vm_add_area(struct vm_map *map, vaddr_t start, size_t size, struct mapper *mapper, u32 flags);
 struct vm_area *vm_findarea(struct vm_map *map, vaddr_t addr);
 void vmem_init(void);

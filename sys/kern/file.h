@@ -67,6 +67,7 @@ int getdents(struct file *f, struct dirent *dirp, size_t count);
 int sys_close(int fd);
 int sys_read(int fd, void *buf, size_t count);
 int sys_write(int fd, const void *buf, size_t count);
+int sys_isatty(int fd);
 int sys_lseek(int fd, off_t offset, int whence);
 int sys_fsync(int fd);
 int sys_truncate(int fd, size_t size);

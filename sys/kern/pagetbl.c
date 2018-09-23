@@ -24,13 +24,14 @@
 #define PTE_DIRTY					0x40
 #define PTE_GLOBAL				0x100
 
+#define KERNSPACE_NUM_PDT 1024
 
 static u32 *kernspace_pdt; //beyond 0xc0000000
 
 paddr_t procpdt_new() {
   u32 *pdt = get_zeropage();
-  //fill kernel space page diectory entry
-  for(int i = 0; i < 1024; i++)
+  //fill kernel space page directory entry
+  for(int i = 0; i < KERNSPACE_NUM_PDT; i++)
     pdt[i] = kernspace_pdt[i];
   return (paddr_t)pdt;
 }
@@ -41,13 +42,13 @@ void pagetbl_init() {
   //kernel space straight mapping(896MB)
   int st_start_index = KERN_VMEM_ADDR / 0x400000;
   int st_end_index = st_start_index + (KERN_STRAIGHT_MAP_SIZE/0x400000);
-  vaddr_t addr = 0x0; 
+  vaddr_t addr = 0x0;
   for(int i = st_start_index; i < st_end_index;
         i++, addr += 0x400000){
     kernspace_pdt[i] = addr | PDE_PRESENT | PDE_RW | PDE_SIZE_4MB | PDE_USER;
   }
   //kernel space virtual area
-  for(int i = st_end_index; i < 1024; i++) {
+  for(int i = st_end_index; i < KERNSPACE_NUM_PDT; i++) {
     u32 *pt = get_zeropage();
     kernspace_pdt[i] = KERN_VMEM_TO_PHYS((vaddr_t)pt) | PDE_PRESENT | PDE_RW | PDE_USER;
   }
@@ -65,3 +66,32 @@ void pagetbl_add_mapping(u32 *pdt, u32 vaddr, u32 paddr) {
   u32 *pt = (u32 *)(PHYS_TO_KERN_VMEM(pdt[pdtindex] & ~0xfff));
   pt[ptindex] = (KERN_VMEM_TO_PHYS(paddr) & ~0xfff) | PTE_PRESENT | PTE_RW | PTE_USER;
 }
+
+static vaddr_t pagetbl_dup_one(vaddr_t oldpt) {
+  //copy page table entry
+  u32 *newpt = get_zeropage();
+  for(int i=0; i<PAGESIZE; i++) {
+    u32 oldent = ((u32 *)oldpt)[i];
+    if(oldent & PTE_PRESENT)
+      newpt[i] = (oldent & ~0xfff) | PTE_PRESENT | PTE_USER; //Do not set PTE_RW due to copy-on-write.
+  }
+  return (vaddr_t)newpt;
+}
+
+paddr_t pagetbl_dup_for_fork(paddr_t oldpdt) {
+  u32 *pdt = page_alloc();
+
+  //fill kernel space page directory entry
+  for(int i = 0; i < KERNSPACE_NUM_PDT; i++)
+    pdt[i] = kernspace_pdt[i];
+
+  //copy user space page directory entry
+  for(int i = KERNSPACE_NUM_PDT; i < PAGESIZE; i++) {
+    u32 oldent = ((u32 *)oldpdt)[i];
+    if(oldent & PDE_PRESENT)
+      pdt[i] = KERN_VMEM_TO_PHYS(pagetbl_dup_one(PHYS_TO_KERN_VMEM(oldent & ~0xfff))) | PDE_PRESENT | PDE_RW | PDE_USER;
+  }
+
+  return (paddr_t)KERN_VMEM_TO_PHYS(pdt);
+}
+

@@ -8,14 +8,14 @@
 #define PROTMEM_ADDR						((paddr_t)0x100000u)
 #define KERN_STRAIGHT_MAP_SIZE	((size_t)0x38000000) //896MB
 
-#define KERN_VMEM_TO_PHYS(v)		((paddr_t)((v) - KERN_VMEM_ADDR))
-#define PHYS_TO_KERN_VMEM(p)		((vaddr_t)((p) + KERN_VMEM_ADDR))
+#define KERN_VMEM_TO_PHYS(v)		((paddr_t)((((vaddr_t)(v)) - KERN_VMEM_ADDR)))
+#define PHYS_TO_KERN_VMEM(p)		((vaddr_t)(((paddr_t)(p)) + KERN_VMEM_ADDR))
 
 #define PAGESIZE			4096
 
 #define MAX_BLKDEV		64
 #define MAX_CHARDEV		128
-#define MAX_NETDEV		64 
+#define MAX_NETDEV		64
 #define MAX_FSTYPE		32
 #define MAX_MOUNT			32
 #define MAX_FILES			256

@@ -66,7 +66,7 @@ struct thread *kthread_new(void (*func)(void *), void *arg, const char *name) {
   t->state = TASK_STATE_RUNNING;
   t->name = name;
   t->pid = pid_next++;
-  t->regs.cr3 = procpdt_new();
+  t->regs.cr3 = pagetbl_new();
   //prepare kernel stack
   t->kstack = page_alloc();
   bzero(t->kstack, PAGESIZE);
@@ -146,10 +146,18 @@ static void thread_free(struct thread *t) {
     if(t->files[i])
       close(t->files[i]);
   vm_map_free(t->vmmap);
+  pagetbl_free(t->regs.cr3);
   free(t);
 }
 
+
 void thread_sched() {
+  static struct thread *delayed_free_thread = NULL;
+  if(delayed_free_thread != NULL) {
+    thread_free(delayed_free_thread);
+    delayed_free_thread = NULL;
+  }
+
   switch(current->state) {
   case TASK_STATE_RUNNING:
     list_pushback(&(current->link), &run_queue);
@@ -158,7 +166,7 @@ void thread_sched() {
     list_pushback(&(current->link), &wait_queue);
     break;
   case TASK_STATE_EXITED:
-    thread_free(current);
+    delayed_free_thread = current;
     break;
   }
   struct list_head *next = list_pop(&run_queue);

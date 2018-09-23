@@ -28,7 +28,7 @@ out8:
   pop ebp
   ret
 
-global out16 
+global out16
 out16:
   push ebp
   mov ebp, esp
@@ -129,7 +129,6 @@ extern current
 global flushtlb
 flushtlb:
   mov eax, [esp+4]
-  sub eax, 0xc0000000
   mov cr3, eax
   jmp .flush
 .flush:
@@ -158,7 +157,7 @@ a20_enable:
   out 0x64, al
   call .waitkbdin
   ret
- 
+
 .waitkbdin:
   in al, 0x64
   test al, 0x2
@@ -203,7 +202,6 @@ _thread_yield:
   mov eax, [current]
   mov esp, [eax] ;new esp
   mov ecx, [eax+4] ;new cr3
-  sub ecx, 0xc0000000
   mov cr3, ecx
   popfd
   pop edi
@@ -229,7 +227,6 @@ jmpto_current:
   mov eax, [current]
   mov esp, [eax]
   mov ecx, [eax+4]
-  sub ecx, 0xc0000000
   mov cr3, ecx
   popfd
   pop edi

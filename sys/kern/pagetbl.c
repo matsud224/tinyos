@@ -24,17 +24,9 @@
 #define PTE_DIRTY					0x40
 #define PTE_GLOBAL				0x100
 
-#define KERNSPACE_NUM_PDT 1024
+#define KERNSPACE_NUM_PDE 1024
 
 static u32 *kernspace_pdt; //beyond 0xc0000000
-
-paddr_t procpdt_new() {
-  u32 *pdt = get_zeropage();
-  //fill kernel space page directory entry
-  for(int i = 0; i < KERNSPACE_NUM_PDT; i++)
-    pdt[i] = kernspace_pdt[i];
-  return (paddr_t)pdt;
-}
 
 void pagetbl_init() {
   //setup kernel space
@@ -48,23 +40,45 @@ void pagetbl_init() {
     kernspace_pdt[i] = addr | PDE_PRESENT | PDE_RW | PDE_SIZE_4MB | PDE_USER;
   }
   //kernel space virtual area
-  for(int i = st_end_index; i < KERNSPACE_NUM_PDT; i++) {
+  for(int i = st_end_index; i < KERNSPACE_NUM_PDE; i++) {
     u32 *pt = get_zeropage();
     kernspace_pdt[i] = KERN_VMEM_TO_PHYS((vaddr_t)pt) | PDE_PRESENT | PDE_RW | PDE_USER;
   }
 
-  flushtlb(kernspace_pdt);
+  flushtlb(KERN_VMEM_TO_PHYS(kernspace_pdt));
+}
+
+
+paddr_t pagetbl_new() {
+  u32 *pdt = get_zeropage();
+  //fill kernel space page directory entry
+  for(int i = 0; i < KERNSPACE_NUM_PDE; i++)
+    pdt[i] = kernspace_pdt[i];
+  return KERN_VMEM_TO_PHYS(pdt);
 }
 
 void pagetbl_add_mapping(u32 *pdt, u32 vaddr, u32 paddr) {
+  u32 *v_pdt = (u32 *)PHYS_TO_KERN_VMEM(pdt);
   int pdtindex = vaddr>>22;
   int ptindex = (vaddr>>12) & 0x3ff;
-  if((pdt[pdtindex] & PDE_PRESENT) == 0) {
-    pdt[pdtindex] = KERN_VMEM_TO_PHYS((u32)get_zeropage()) | PDE_PRESENT | PDE_RW | PDE_USER;
+  if((v_pdt[pdtindex] & PDE_PRESENT) == 0) {
+    v_pdt[pdtindex] = KERN_VMEM_TO_PHYS((u32)get_zeropage()) | PDE_PRESENT | PDE_RW | PDE_USER;
   }
 
-  u32 *pt = (u32 *)(PHYS_TO_KERN_VMEM(pdt[pdtindex] & ~0xfff));
+  u32 *pt = (u32 *)(PHYS_TO_KERN_VMEM(v_pdt[pdtindex] & ~0xfff));
   pt[ptindex] = (KERN_VMEM_TO_PHYS(paddr) & ~0xfff) | PTE_PRESENT | PTE_RW | PTE_USER;
+}
+
+void pagetbl_free(paddr_t pdt) {
+  u32 *v_pdt = (u32 *)PHYS_TO_KERN_VMEM(pdt);
+  for(int i = KERNSPACE_NUM_PDE; i < PAGESIZE; i++) {
+    u32 ent = v_pdt[i];
+    if((ent & PDE_PRESENT)) {
+      page_free(PHYS_TO_KERN_VMEM(ent & ~0xfff));
+    }
+  }
+
+  page_free(v_pdt);
 }
 
 static vaddr_t pagetbl_dup_one(vaddr_t oldpt) {
@@ -80,14 +94,15 @@ static vaddr_t pagetbl_dup_one(vaddr_t oldpt) {
 
 paddr_t pagetbl_dup_for_fork(paddr_t oldpdt) {
   u32 *pdt = page_alloc();
+  u32 *v_oldpdt = (u32 *)PHYS_TO_KERN_VMEM(oldpdt);
 
   //fill kernel space page directory entry
-  for(int i = 0; i < KERNSPACE_NUM_PDT; i++)
+  for(int i = 0; i < KERNSPACE_NUM_PDE; i++)
     pdt[i] = kernspace_pdt[i];
 
   //copy user space page directory entry
-  for(int i = KERNSPACE_NUM_PDT; i < PAGESIZE; i++) {
-    u32 oldent = ((u32 *)oldpdt)[i];
+  for(int i = KERNSPACE_NUM_PDE; i < PAGESIZE; i++) {
+    u32 oldent = (v_oldpdt)[i];
     if(oldent & PDE_PRESENT)
       pdt[i] = KERN_VMEM_TO_PHYS(pagetbl_dup_one(PHYS_TO_KERN_VMEM(oldent & ~0xfff))) | PDE_PRESENT | PDE_RW | PDE_USER;
   }

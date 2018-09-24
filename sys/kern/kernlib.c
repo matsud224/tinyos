@@ -64,3 +64,11 @@ void *memset(void *s, int c, size_t n) {
     *(u8 *)s++ = (u8)c;
   return s;
 }
+
+void show_line() {
+  puts("-------------------");
+}
+
+void show_number(u32 num) {
+  printf("%x", num);
+}

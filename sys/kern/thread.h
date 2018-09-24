@@ -42,6 +42,7 @@ struct tss {
 struct thread_state {
   u32 esp;
   u32 cr3;
+  u32 eip;
 };
 
 #define TASK_STATE_RUNNING	0

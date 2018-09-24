@@ -67,6 +67,7 @@ struct thread *kthread_new(void (*func)(void *), void *arg, const char *name) {
   t->name = name;
   t->pid = pid_next++;
   t->regs.cr3 = pagetbl_new();
+  t->regs.eip = 0;
   //prepare kernel stack
   t->kstack = get_zeropage();
   t->kstacksize = PAGESIZE;
@@ -104,7 +105,7 @@ int thread_exec(const char *path) {
   return 0;
 }
 
-int thread_fork() {
+int thread_fork(u32 child_esp) {
   struct thread *t = malloc(sizeof(struct thread));
   memcpy(t, current, sizeof(struct thread));
   t->vmmap = vm_map_new();
@@ -116,6 +117,13 @@ int thread_fork() {
   //prepare kernel stack
   t->kstack = get_zeropage();
   t->kstacksize = PAGESIZE;
+  //u32 current_esp = getesp();
+  //u32 distance = current_esp - (u32)current->kstack;
+  //memcpy(t->kstack + distance, current_esp, PAGESIZE - distance);
+  memcpy(t->kstack, current->kstack, current->kstacksize);
+  //child_esp points a return address to sys_fork
+  t->regs.esp = (u32)t->kstack + (child_esp - (u32)current->kstack);
+
 
   for(int i=0; i<MAX_FILES; i++)
     if(current->files[i])
@@ -127,8 +135,10 @@ int thread_fork() {
 
   t->flags = current->flags;
 
-  //thread_run(t);
-  return childpid;
+  t->regs.eip = fork_child_epilogue;
+  thread_run(t);
+
+  return current->pid;//fork_epilogue();
 }
 
 void thread_run(struct thread *t) {
@@ -227,7 +237,7 @@ int sys_execve(const char *filename, char *const argv[] UNUSED, char *const envp
 }
 
 int sys_fork(void) {
-  return thread_fork();
+  return fork_prologue(thread_fork);
 }
 
 int sys_sbrk(int incr) {

@@ -182,6 +182,8 @@ saveesp:
 
 extern thread_sched
 extern kstack_setaddr
+extern show_line
+extern show_number
 
 global _thread_yield
 _thread_yield:
@@ -203,6 +205,13 @@ _thread_yield:
   mov esp, [eax] ;new esp
   mov ecx, [eax+4] ;new cr3
   mov cr3, ecx
+  mov ecx, [eax+8] ;eip(optional)
+  cmp ecx, 0
+  jz cont
+  mov dword [eax+8], 0
+  ;push dword 0 ;argument for fork_epilogue
+  jmp ecx
+cont:
   popfd
   pop edi
   pop esi
@@ -259,4 +268,22 @@ jmpto_userspace:
   push eax
   iretd
 
+global getesp
+getesp:
+  mov eax, esp
+  add eax, 4
+  ret
+
+global fork_prologue
+fork_prologue:
+  mov eax, [esp+4]
+  push esp
+  call eax
+  add esp, 4
+  ret
+
+global fork_child_epilogue
+fork_child_epilogue:
+  mov eax, 0
+  ret
 

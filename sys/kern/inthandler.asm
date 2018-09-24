@@ -4,6 +4,7 @@ section .text
 
 extern kernstack_setaddr
 extern thread_sched
+extern current
 
 %macro handler_enter 0
   push eax

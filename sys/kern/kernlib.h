@@ -48,3 +48,5 @@ void free(void *addr);
 int putchar(int c);
 int puts(const char *str);
 void printf(const char *fmt, ...);
+void show_line(void);
+void show_number(u32);

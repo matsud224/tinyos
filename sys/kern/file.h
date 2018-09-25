@@ -31,6 +31,7 @@ struct file {
   off_t offset;
   int flags;
   mutex mtx;
+  mutex rwmtx;
 };
 
 #define FILE_VNODE		0

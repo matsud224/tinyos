@@ -31,7 +31,6 @@ void *elf32_load(struct file *f, void **brk) {
   struct elf32_phdr *phdr_table = malloc(phdr_table_size);
   lseek(f, ehdr->e_phoff, SEEK_SET);
   read(f, phdr_table, phdr_table_size);
-  //printf("e_phnum = %d\n", ehdr->e_phnum);
 
   void *tail = 0;
 
@@ -44,14 +43,13 @@ void *elf32_load(struct file *f, void **brk) {
       if(phdr->p_vaddr + phdr->p_memsz > tail)
         tail = phdr->p_vaddr + phdr->p_memsz;
 
-      printf("loaded: %x - %x fileoff: %x (file mapping)\n", phdr->p_vaddr, phdr->p_vaddr + phdr->p_filesz, phdr->p_offset);
+      //printf("loaded: %x - %x fileoff: %x (file mapping)\n", phdr->p_vaddr, phdr->p_vaddr + phdr->p_filesz, phdr->p_offset);
       break;
     }
   }
 
   free(phdr_table);
   free(ehdr);
-  //printf("entry point: %x\n", ehdr->e_entry);
 
   *brk = tail;
   return (void *)ehdr->e_entry;

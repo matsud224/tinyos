@@ -118,10 +118,9 @@ int thread_fork(u32 ch_esp, u32 ch_eflags, u32 ch_edi, u32 ch_esi, u32 ch_ebx, u
   //prepare kernel stack
   t->kstack = get_zeropage();
   t->kstacksize = PAGESIZE;
-  //u32 current_esp = getesp();
-  //u32 distance = current_esp - (u32)current->kstack;
-  //memcpy(t->kstack + distance, current_esp, PAGESIZE - distance);
-  memcpy(t->kstack, current->kstack, current->kstacksize);
+  u32 current_esp = getesp();
+  u32 distance = current_esp - (u32)current->kstack;
+  memcpy(t->kstack + distance, current_esp, PAGESIZE - distance);
   //ch_esp points a return address to sys_fork
   t->regs.esp = (u32)t->kstack + (ch_esp - (u32)current->kstack);
 
@@ -135,9 +134,6 @@ int thread_fork(u32 ch_esp, u32 ch_eflags, u32 ch_edi, u32 ch_esi, u32 ch_ebx, u
   *(u32 *)t->regs.esp = ch_edi;
   t->regs.esp -= 4;
   *(u32 *)t->regs.esp = ch_eflags;
-
-  //for(int i=0; i<100; i+=4)
-    //printf("esp+%d = %x\n", i, *(u32*)(t->regs.esp+i));
 
   for(int i=0; i<MAX_FILES; i++)
     if(current->files[i])
@@ -153,6 +149,10 @@ int thread_fork(u32 ch_esp, u32 ch_eflags, u32 ch_edi, u32 ch_esi, u32 ch_ebx, u
   return t->pid;
 }
 
+int thread_wait(int *status) {
+  thread_sleep(current);
+}
+
 void thread_run(struct thread *t) {
   t->state = TASK_STATE_RUNNING;
   if(current == NULL)
@@ -163,22 +163,12 @@ void thread_run(struct thread *t) {
 
 static void thread_free(struct thread *t) {
   page_free(t->kstack);
-  for(int i=0; i<MAX_FILES; i++)
-    if(t->files[i])
-      close(t->files[i]);
-  vm_map_free(t->vmmap);
   pagetbl_free(t->regs.cr3);
   free(t);
 }
 
 
 void thread_sched() {
-  static struct thread *delayed_free_thread = NULL;
-  if(delayed_free_thread != NULL) {
-    thread_free(delayed_free_thread);
-    delayed_free_thread = NULL;
-  }
-
   switch(current->state) {
   case TASK_STATE_RUNNING:
     list_pushback(&(current->link), &run_queue);
@@ -187,7 +177,7 @@ void thread_sched() {
     list_pushback(&(current->link), &wait_queue);
     break;
   case TASK_STATE_EXITED:
-    delayed_free_thread = current;
+    thread_free(current);
     break;
   }
   struct list_head *next = list_pop(&run_queue);
@@ -240,7 +230,12 @@ void thread_set_alarm(void *cause, u32 expire) {
 
 void thread_exit() {
   printf("thread#%d (%s) exit\n", current->pid, GET_THREAD_NAME(current));
-  //vm_show_area(current->vmmap);
+
+  for(int i=0; i<MAX_FILES; i++)
+    if(current->files[i])
+      close(current->files[i]);
+  vm_map_free(current->vmmap);
+
   current->state = TASK_STATE_EXITED;
   thread_yield();
 }
@@ -252,6 +247,10 @@ int sys_execve(const char *filename, char *const argv[] UNUSED, char *const envp
 
 int sys_fork(void) {
   return fork_prologue(thread_fork);
+}
+
+int sys_wait(int *status) {
+  return thread_wait(status);
 }
 
 int sys_sbrk(int incr) {

@@ -19,6 +19,7 @@
 #define MAX_FSTYPE		32
 #define MAX_MOUNT			32
 #define MAX_FILES			256
+#define MAX_THREADS   1024
 
 #define MAX_FILENAME_LEN 255 //null is not contained
 
@@ -39,3 +40,5 @@
 
 #define ROOTFS_TYPE "minix3"
 #define ROOTFS_DEV DEVNO(1, 0)
+
+#define INVALID_PID 0

@@ -16,7 +16,7 @@ struct trap_stack {
 void gpe_isr(int errcode) {
   printf("General Protection Exception in thread#%d (%s)\n  errorcode = %d\n", current->pid, GET_THREAD_NAME(current), errcode);
   while(1);
-  thread_exit();
+  thread_exit_with_error();
 }
 
 void pf_isr(vaddr_t addr, u32 eip, u32 esp, u32 eax) {
@@ -24,12 +24,10 @@ void pf_isr(vaddr_t addr, u32 eip, u32 esp, u32 eax) {
   struct vm_area *varea = vm_findarea(current->vmmap, addr);
   if(varea == NULL) {
     printf("Segmentation Fault in thread#%d (%s) addr = 0x%x (eip = 0x%x, esp = 0x%x)\n", current->pid, GET_THREAD_NAME(current), addr, eip, esp);
-    //vm_show_area(current->vmmap);
-    thread_exit();
+    thread_exit_with_error();
   } else {
     paddr_t paddr = varea->mapper->ops->request(varea->mapper, addr - varea->start);
     pagetbl_add_mapping((u32 *)current->regs.cr3, addr, paddr);
-    //puts("page fault ok");
   }
 }
 
@@ -37,7 +35,7 @@ u32 syscall_isr(u32 eax, u32 ebx, u32 ecx, u32 edx, u32 esi, u32 edi) {
   //printf("syscall in thread#%d (%s) eax=%d,ebx=%x,ecx=%x,edx=%x,esi=%x,edi=%x\n", current->pid, GET_THREAD_NAME(current), eax, ebx, ecx, edx, esi, edi);
   if(eax >= NSYSCALLS) {
     printf("syscall#%d is invalid.\n", eax);
-    thread_exit();
+    thread_exit_with_error();
   }
   int ret = syscall_table[eax](ebx, ecx, edx, esi, edi);
   //printf("pid %d : return from syscall_isr eax=%d ret=%d  (%x)\n", current->pid, eax, ret, &ret);
@@ -46,8 +44,7 @@ u32 syscall_isr(u32 eax, u32 ebx, u32 ecx, u32 edx, u32 esi, u32 edi) {
 
 void spurious_isr() {
   puts("spurious interrupt!");
-  while(1);
-  thread_exit();
+  thread_exit_with_error();
 }
 
 

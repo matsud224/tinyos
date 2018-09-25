@@ -48,6 +48,7 @@ struct thread_state {
 #define TASK_STATE_RUNNING	0
 #define TASK_STATE_WAITING	1
 #define TASK_STATE_EXITED		2
+#define TASK_STATE_ZOMBIE		3
 
 struct thread {
   struct thread_state regs; //do not move from here
@@ -58,6 +59,8 @@ struct thread {
   u8 state;
   u32 flags;
   pid_t pid;
+  pid_t ppid;
+  int exit_code;
   const void *waitcause;
   struct file *files[MAX_FILES];
   void *brk;
@@ -77,7 +80,8 @@ void thread_sleep(const void *cause);
 void thread_wakeup(const void *cause);
 void thread_yield(void);
 void thread_set_alarm(void *cause, u32 expire);
-void thread_exit(void);
+void thread_exit(int exit_code);
+void thread_exit_with_error(void);
 struct deferred_func *defer_exec(void (*func)(void *), void *arg, int priority, int delay);
 void *defer_cancel(struct deferred_func *f);
 

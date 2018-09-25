@@ -22,7 +22,8 @@
 static struct tss tss;
 
 struct thread *current = NULL;
-static pid_t pid_next = 0;
+static struct thread *thread_tbl[MAX_THREADS];
+static pid_t pid_last = INVALID_PID+1;
 
 static struct list_head run_queue;
 static struct list_head wait_queue;
@@ -37,6 +38,9 @@ void thread_idle(UNUSED void *arg) {
 }
 
 void dispatcher_init() {
+  for(int i=0; i<MAX_THREADS; i++)
+    thread_tbl[i] = NULL;
+
   current = NULL;
   list_init(&run_queue);
   list_init(&wait_queue);
@@ -59,13 +63,36 @@ void kstack_setaddr() {
   tss.esp0 = (u32)((u8 *)(current->kstack) + current->kstacksize);
 }
 
+pid_t get_next_pid() {
+  pid_t pid;
+  for(pid = pid_last; pid < MAX_THREADS; pid++) {
+    if(thread_tbl[pid] == NULL) {
+      pid_last = pid+1;
+      return pid;
+    }
+  }
+
+  for(pid = INVALID_PID+1; pid < pid_last; pid++) {
+    if(thread_tbl[pid] == NULL) {
+      pid_last = pid+1;
+      return pid;
+    }
+  }
+  return INVALID_PID;
+}
+
 struct thread *kthread_new(void (*func)(void *), void *arg, const char *name) {
+  pid_t pid = get_next_pid();
+  if(pid == INVALID_PID)
+    return NULL;
+
   struct thread *t = malloc(sizeof(struct thread));
   bzero(t, sizeof(struct thread));
   t->vmmap = vm_map_new();
   t->state = TASK_STATE_RUNNING;
   t->name = name;
-  t->pid = pid_next++;
+  t->pid = pid;
+  t->ppid = INVALID_PID;
   t->regs.cr3 = pagetbl_new();
   t->regs.eip = 0;
   //prepare kernel stack
@@ -74,11 +101,13 @@ struct thread *kthread_new(void (*func)(void *), void *arg, const char *name) {
   t->regs.esp = (u32)((u8 *)(t->kstack) + t->kstacksize - 4);
   *(u32 *)t->regs.esp = (u32)arg;
   t->regs.esp -= 4;
-  *(u32 *)t->regs.esp = (u32)thread_exit;
+  *(u32 *)t->regs.esp = (u32)thread_exit_with_error;
   t->regs.esp -= 4;
   *(u32 *)t->regs.esp = (u32)func;
   t->regs.esp -= 4*5;
   *(u32 *)t->regs.esp = 0x200; //initial eflags(IF=1)
+
+  thread_tbl[t->pid] = t;
   return t;
 }
 
@@ -106,13 +135,17 @@ int thread_exec(const char *path) {
   return 0;
 }
 
-int thread_fork(u32 ch_esp, u32 ch_eflags, u32 ch_edi, u32 ch_esi, u32 ch_ebx, u32 ch_ebp) {
+int fork_main(u32 ch_esp, u32 ch_eflags, u32 ch_edi, u32 ch_esi, u32 ch_ebx, u32 ch_ebp) {
+  pid_t childpid = get_next_pid();
+  if(childpid == INVALID_PID)
+    return NULL;
+
   struct thread *t = malloc(sizeof(struct thread));
   memcpy(t, current, sizeof(struct thread));
   t->vmmap = vm_map_new();
   t->state = TASK_STATE_RUNNING;
-  pid_t childpid = pid_next++;
   t->pid = childpid;
+  t->ppid = current->pid;
   t->regs.cr3 = pagetbl_dup_for_fork((paddr_t)current->regs.cr3);
 
   //prepare kernel stack
@@ -149,10 +182,6 @@ int thread_fork(u32 ch_esp, u32 ch_eflags, u32 ch_edi, u32 ch_esi, u32 ch_ebx, u
   return t->pid;
 }
 
-int thread_wait(int *status) {
-  thread_sleep(current);
-}
-
 void thread_run(struct thread *t) {
   t->state = TASK_STATE_RUNNING;
   if(current == NULL)
@@ -167,7 +196,6 @@ static void thread_free(struct thread *t) {
   free(t);
 }
 
-
 void thread_sched() {
   switch(current->state) {
   case TASK_STATE_RUNNING:
@@ -177,7 +205,15 @@ void thread_sched() {
     list_pushback(&(current->link), &wait_queue);
     break;
   case TASK_STATE_EXITED:
+    thread_tbl[current->pid] = NULL;
+
+    for(int i=0; i<MAX_THREADS; i++)
+      if(thread_tbl[i] && thread_tbl[i]->ppid == current->pid)
+        thread_tbl[i]->ppid = INVALID_PID;
+
     thread_free(current);
+    break;
+  case TASK_STATE_ZOMBIE:
     break;
   }
   struct list_head *next = list_pop(&run_queue);
@@ -228,33 +264,42 @@ void thread_set_alarm(void *cause, u32 expire) {
   timer_start(expire, thread_wakeup, cause);
 }
 
-void thread_exit() {
+void thread_exit(int exit_code) {
   printf("thread#%d (%s) exit\n", current->pid, GET_THREAD_NAME(current));
 
   for(int i=0; i<MAX_FILES; i++)
     if(current->files[i])
       close(current->files[i]);
+
   vm_map_free(current->vmmap);
 
-  current->state = TASK_STATE_EXITED;
+  if(thread_tbl[current->ppid]) {
+    current->state = TASK_STATE_ZOMBIE;
+    current->exit_code = exit_code;
+  } else {
+    current->state = TASK_STATE_EXITED;
+  }
+
   thread_yield();
 }
 
+void thread_exit_with_error() {
+  thread_exit(-1);
+}
 
 int sys_execve(const char *filename, char *const argv[] UNUSED, char *const envp[] UNUSED) {
   return thread_exec(filename);
 }
 
 int sys_fork(void) {
-  return fork_prologue(thread_fork);
+  return fork_prologue(fork_main);
 }
 
 int sys_wait(int *status) {
-  return thread_wait(status);
+  return -1;
 }
 
 int sys_sbrk(int incr) {
-  //printf("sbrk incr=%x\n", incr);
   if(incr < 0)
     return -1;
   else if(incr == 0)
@@ -269,7 +314,6 @@ int sys_sbrk(int incr) {
   //add mapping if brk go over the page boundary.
   vm_add_area(current->vmmap, current->brk, new_brk-prev_brk, anon_mapper_new(), 0);
   current->brk = new_brk;
-  //printf("sbrk: %x -> %x\n", prev_brk, new_brk);
 
   return (int)prev_brk;
 }

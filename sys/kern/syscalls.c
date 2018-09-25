@@ -78,8 +78,8 @@ int buffer_check(const void *buf UNUSED, size_t count UNUSED) {
   return 0; //TODO
 }
 
-u32 syscall_exit(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
-  thread_exit();
+u32 syscall_exit(u32 a0, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
+  thread_exit(a0);
   return 0;
 }
 

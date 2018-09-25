@@ -37,6 +37,9 @@
 #define GDT_SEL_DATASEG_3	4*8
 #define GDT_SEL_TSS				5*8
 
+#define USER_STACK_BOTTOM ((vaddr_t)0xc0000000)
+#define USER_STACK_INITIAL_SIZE ((size_t)0x1000)
+#define USER_STACK_GROW_SIZE ((size_t)0x1000)
 
 #define ROOTFS_TYPE "minix3"
 #define ROOTFS_DEV DEVNO(1, 0)

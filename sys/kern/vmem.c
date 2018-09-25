@@ -71,11 +71,19 @@ static void page_copy(struct page_entry *pe) {
 paddr_t anon_mapper_request(struct mapper *m, vaddr_t offset) {
   struct anon_mapper *am = container_of(m, struct anon_mapper, mapper);
   vaddr_t start = pagealign(m->area->start+offset);
+  vaddr_t page = anon_mapper_add_page(m, start);
+  return KERN_VMEM_TO_PHYS(page);
+}
 
+int anon_mapper_yield(struct mapper *m UNUSED, paddr_t pdt UNUSED) {
+  //TODO: swapping
+  return -1;
+}
+
+vaddr_t anon_mapper_add_page(struct mapper *m, vaddr_t start) {
+  struct anon_mapper *am = container_of(m, struct anon_mapper, mapper);
   struct page_entry *pe;
-
   if((pe = page_entry_find(&m->page_list, start))) {
-    //this page already exists but requested ... copy-on-write
     page_copy(pe);
   } else {
     pe = page_entry_new(start);
@@ -84,12 +92,7 @@ paddr_t anon_mapper_request(struct mapper *m, vaddr_t offset) {
     list_pushback(&pe->link, &m->page_list);
   }
 
-  return KERN_VMEM_TO_PHYS(pe->pinfo->addr);
-}
-
-int anon_mapper_yield(struct mapper *m UNUSED, paddr_t pdt UNUSED) {
-  //TODO: swapping
-  return -1;
+  return pe->pinfo->addr;
 }
 
 static void page_entry_free(struct page_entry *pe) {

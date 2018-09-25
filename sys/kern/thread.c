@@ -12,9 +12,6 @@
 #include <kern/fs.h>
 
 
-#define USER_STACK_BOTTOM ((vaddr_t)0xc0000000)
-#define USER_STACK_SIZE ((size_t)0x4000)
-
 static struct tss tss;
 
 struct thread *current = NULL;
@@ -107,7 +104,7 @@ struct thread *kthread_new(void (*func)(void *), void *arg, const char *name) {
   return t;
 }
 
-int thread_exec_in_usermode(const char *path) {
+int thread_exec_in_usermode(const char *path, char *const argv[], char *const envp[]) {
   struct file *f = open(path, O_RDONLY);
   if(f == NULL)
     return -1;
@@ -123,7 +120,11 @@ int thread_exec_in_usermode(const char *path) {
     return -1;
 
   //prepare user space stack
-  vm_add_area(current->vmmap, USER_STACK_BOTTOM-USER_STACK_SIZE, USER_STACK_SIZE, anon_mapper_new(), 0);
+  struct mapper *m = anon_mapper_new();
+  current->user_stack_bottom = USER_STACK_BOTTOM;
+  current->user_stack_top = USER_STACK_BOTTOM - USER_STACK_INITIAL_SIZE;
+  vm_add_area(current->vmmap, current->user_stack_top, USER_STACK_INITIAL_SIZE, m, 0);
+  //char *stackpage = (char *)anon_mapper_add_page(m, USER_STACK_BOTTOM);
 
   current->brk = pagealign((u32)brk+(PAGESIZE-1));
 
@@ -324,8 +325,8 @@ int thread_chdir(const char *path) {
   return -1;
 }
 
-int sys_execve(const char *filename, char *const argv[] UNUSED, char *const envp[] UNUSED) {
-  return thread_exec_in_usermode(filename);
+int sys_execve(const char *filename, char *const argv[], char *const envp[]) {
+  return thread_exec_in_usermode(filename, argv, envp);
 }
 
 int sys_fork(void) {

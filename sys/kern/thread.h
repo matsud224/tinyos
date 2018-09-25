@@ -67,6 +67,8 @@ struct thread {
   void *brk;
   char *name;
   struct vnode *curdir;
+  vaddr_t user_stack_bottom;
+  vaddr_t user_stack_top;
 };
 
 #define GET_THREAD_NAME(th) ((th)->name?(th)->name:"???")
@@ -75,7 +77,7 @@ void dispatcher_init(void);
 void dispatcher_run(void);
 void kstack_setaddr(void);
 struct thread *kthread_new(void (*func)(void *), void *arg, const char *name);
-int thread_exec_in_usermode(const char *path);
+int thread_exec_in_usermode(const char *path, char *const argv[], char *const envp[]);
 void thread_run(struct thread *t);
 void thread_sched(void);
 void thread_sleep(const void *cause);

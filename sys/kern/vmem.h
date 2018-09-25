@@ -45,4 +45,5 @@ void vm_show_area(struct vm_map *map);
 void vmem_init(void);
 
 struct mapper *anon_mapper_new(void);
+vaddr_t anon_mapper_add_page(struct mapper *m, vaddr_t start);
 struct mapper *file_mapper_new(struct file *file, off_t file_off, size_t len);

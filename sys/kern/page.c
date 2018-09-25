@@ -1,4 +1,5 @@
 #include <kern/page.h>
+#include <kern/thread.h>
 #include <kern/kernlib.h>
 
 // address region descriptor
@@ -27,8 +28,13 @@ int page_getnfree() {
 }
 
 void *page_alloc() {
-  if(page_freelist == NULL)
-    return NULL;
+alloc_try:
+  if(page_freelist == NULL) {
+    if(thread_yield_pages() == 0)
+      goto alloc_try;
+    else
+      return NULL;
+  }
   page_nfree--;
   struct page *new = page_freelist;
   page_freelist = page_freelist->next_free;

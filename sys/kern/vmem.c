@@ -14,6 +14,7 @@ struct page_info {
   void *addr;
   int ref;
   vaddr_t start;
+  mutex mtx;
 };
 
 struct anon_mapper {
@@ -37,6 +38,7 @@ struct page_entry *page_entry_new(vaddr_t start) {
   pi->addr = p;
   pi->ref = 1;
   pi->start = start;
+  mutex_init(&pi->mtx);
   pe->pinfo = pi;
   return pe;
 }
@@ -61,6 +63,7 @@ static void page_copy(struct page_entry *pe) {
   pinew->addr = page_alloc();
   memcpy(pinew->addr, pe->pinfo->addr, PAGESIZE);
   pinew->ref = 1;
+  mutex_init(&pinew->mtx);
   pe->pinfo->ref--;
   pe->pinfo = pinew;
 }
@@ -167,6 +170,7 @@ paddr_t file_mapper_request(struct mapper *m, vaddr_t in_area_off) {
 
     if(readlen != 0) {
       u32 read_bytes;
+      mutex_lock(&pe->pinfo->mtx);
       lseek(fm->file, st + fm->file_off, SEEK_SET);
       if(st <= m->area->offset && end > m->area->offset)
         read_bytes = read(fm->file, pe->pinfo->addr+m->area->offset, readlen);
@@ -175,6 +179,8 @@ paddr_t file_mapper_request(struct mapper *m, vaddr_t in_area_off) {
 
       if(read_bytes < readlen)
         puts("fatal: read failed");
+
+      mutex_unlock(&pe->pinfo->mtx);
     }
   }
 
@@ -184,11 +190,21 @@ paddr_t file_mapper_request(struct mapper *m, vaddr_t in_area_off) {
 int file_mapper_yield(struct mapper *m) {
   struct file_mapper *fm = container_of(m, struct file_mapper, mapper);
 
-  if(list_is_empty(&m->page_list))
-    return -1;
-
-  list_free_all(&m->page_list, struct page_entry, link, page_entry_free);
-  return 0;
+  int count = 0;
+  struct list_head *p, *tmp;
+  list_foreach_safe(p, tmp, &m->page_list) {
+    struct page_entry *pe = list_entry(p, struct page_entry, link);
+    if(mutex_trylock(&pe->pinfo->mtx) == 0) {
+      if(pe->pinfo->ref == 1) {
+        list_remove(&pe->link);
+        page_entry_free(pe);
+        count++;
+      } else {
+        mutex_unlock(&pe->pinfo->mtx);
+      }
+    }
+  }
+  return (count > 0)?0:-1;
 }
 
 void file_mapper_free(struct mapper *m) {
@@ -276,6 +292,16 @@ void vm_area_free(struct vm_area *area) {
 void vm_map_free(struct vm_map *vmmap) {
   list_free_all(&vmmap->area_list, struct vm_area, link, vm_area_free);
   free(vmmap);
+}
+
+int vm_map_yield(struct vm_map *vmmap) {
+  struct list_head *p;
+  list_foreach(p, &vmmap->area_list) {
+    struct vm_area *area = list_entry(p, struct vm_area, link);
+    if(area->mapper->ops->yield(area->mapper) == 0)
+      return 0;
+  }
+  return -1;
 }
 
 int vm_add_area(struct vm_map *map, u32 start, size_t size, struct mapper *mapper, u32 flags UNUSED) {

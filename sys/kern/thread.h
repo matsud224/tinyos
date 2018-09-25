@@ -82,6 +82,7 @@ void thread_yield(void);
 void thread_set_alarm(void *cause, u32 expire);
 void thread_exit(int exit_code);
 void thread_exit_with_error(void);
+int thread_yield_pages(void);
 struct deferred_func *defer_exec(void (*func)(void *), void *arg, int priority, int delay);
 void *defer_cancel(struct deferred_func *f);
 

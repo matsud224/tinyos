@@ -287,6 +287,15 @@ void thread_exit_with_error() {
   thread_exit(-1);
 }
 
+int thread_yield_pages() {
+  for(int i=0; i<MAX_THREADS; i++) {
+    if(thread_tbl[i])
+      if(vm_map_yield(thread_tbl[i]->vmmap) == 0)
+        return 0;
+  }
+  return -1;
+}
+
 int sys_execve(const char *filename, char *const argv[] UNUSED, char *const envp[] UNUSED) {
   return thread_exec_in_usermode(filename);
 }

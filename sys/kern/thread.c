@@ -301,7 +301,8 @@ int sys_wait(int *status) {
       struct thread *th = thread_tbl[i];
       if(th && th->state == TASK_STATE_ZOMBIE
           && th->ppid == current->pid) {
-        *status = th->exit_code;
+        if(status)
+          *status = th->exit_code;
         pid_t child_pid = th->pid;
         thread_free(th);
         return child_pid;

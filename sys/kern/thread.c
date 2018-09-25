@@ -177,6 +177,7 @@ int fork_main(u32 ch_esp, u32 ch_eflags, u32 ch_edi, u32 ch_esi, u32 ch_ebx, u32
   t->flags = current->flags;
 
   t->regs.eip = fork_child_epilogue;
+  thread_tbl[t->pid] = t;
   thread_run(t);
 
   return t->pid;
@@ -191,6 +192,12 @@ void thread_run(struct thread *t) {
 }
 
 static void thread_free(struct thread *t) {
+  thread_tbl[t->pid] = NULL;
+
+  for(int i=0; i<MAX_THREADS; i++)
+    if(thread_tbl[i] && thread_tbl[i]->ppid == t->pid)
+      thread_tbl[i]->ppid = INVALID_PID;
+
   page_free(t->kstack);
   pagetbl_free(t->regs.cr3);
   free(t);
@@ -205,12 +212,6 @@ void thread_sched() {
     list_pushback(&(current->link), &wait_queue);
     break;
   case TASK_STATE_EXITED:
-    thread_tbl[current->pid] = NULL;
-
-    for(int i=0; i<MAX_THREADS; i++)
-      if(thread_tbl[i] && thread_tbl[i]->ppid == current->pid)
-        thread_tbl[i]->ppid = INVALID_PID;
-
     thread_free(current);
     break;
   case TASK_STATE_ZOMBIE:
@@ -276,6 +277,7 @@ void thread_exit(int exit_code) {
   if(thread_tbl[current->ppid]) {
     current->state = TASK_STATE_ZOMBIE;
     current->exit_code = exit_code;
+    thread_wakeup(thread_tbl[current->ppid]);
   } else {
     current->state = TASK_STATE_EXITED;
   }
@@ -296,6 +298,20 @@ int sys_fork(void) {
 }
 
 int sys_wait(int *status) {
+  while(1) {
+    for(int i=0; i<MAX_THREADS; i++) {
+      struct thread *th = thread_tbl[i];
+      if(th && th->state == TASK_STATE_ZOMBIE
+          && th->ppid == current->pid) {
+        *status = th->exit_code;
+        pid_t child_pid = th->pid;
+        thread_free(th);
+        return child_pid;
+      }
+    }
+
+    thread_sleep(current);
+  }
   return -1;
 }
 

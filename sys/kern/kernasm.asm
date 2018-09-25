@@ -206,17 +206,16 @@ _thread_yield:
   mov ecx, [eax+4] ;new cr3
   mov cr3, ecx
   mov ecx, [eax+8] ;eip(optional)
-  cmp ecx, 0
-  jz cont
-  mov dword [eax+8], 0
-  ;push dword 0 ;argument for fork_epilogue
-  jmp ecx
-cont:
   popfd
   pop edi
   pop esi
   pop ebx
   pop ebp
+  cmp ecx, 0
+  jz cont
+  mov dword [eax+8], 0
+  jmp ecx
+cont:
   ret
 
 global cpu_halt
@@ -276,10 +275,16 @@ getesp:
 
 global fork_prologue
 fork_prologue:
+  mov ecx, esp
   mov eax, [esp+4]
-  push esp
+  push ebp
+  push ebx
+  push esi
+  push edi
+  pushfd
+  push ecx
   call eax
-  add esp, 4
+  add esp, 24
   ret
 
 global fork_child_epilogue

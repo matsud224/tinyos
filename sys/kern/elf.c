@@ -39,12 +39,12 @@ void *elf32_load(struct file *f, void **brk) {
     struct elf32_phdr *phdr = (struct elf32_phdr *)((u8 *)phdr_table + ehdr->e_phentsize*i);
     switch(phdr->p_type) {
     case PT_LOAD:
-      vm_add_area(current->vmmap, phdr->p_vaddr, phdr->p_memsz, file_mapper_new(f, phdr->p_offset, phdr->p_filesz), 0);
+      vm_add_area(current->vmmap, phdr->p_vaddr, phdr->p_memsz, file_mapper_new(dup(f), phdr->p_offset, phdr->p_filesz), 0);
 
       if(phdr->p_vaddr + phdr->p_memsz > tail)
         tail = phdr->p_vaddr + phdr->p_memsz;
 
-      //printf("loaded: %x - %x fileoff: %x (file mapping)\n", phdr->p_vaddr, phdr->p_vaddr + phdr->p_filesz, phdr->p_offset);
+      printf("loaded: %x - %x fileoff: %x (file mapping)\n", phdr->p_vaddr, phdr->p_vaddr + phdr->p_filesz, phdr->p_offset);
       break;
     }
   }

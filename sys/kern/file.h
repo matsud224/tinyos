@@ -30,6 +30,7 @@ struct file {
   void *data;
   off_t offset;
   int flags;
+  mutex mtx;
 };
 
 #define FILE_VNODE		0

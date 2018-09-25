@@ -5,6 +5,7 @@
 #include <kern/params.h>
 #include <kern/vga.h>
 #include <kern/page.h>
+#include <kern/thread.h>
 
 #define PDE_PRESENT		 		0x1
 #define PDE_RW				 		0x2
@@ -61,7 +62,8 @@ paddr_t pagetbl_new() {
   return KERN_VMEM_TO_PHYS(pdt);
 }
 
-void pagetbl_add_mapping(u32 *pdt, u32 vaddr, u32 paddr) {
+void pagetbl_add_mapping(u32 *pdt, vaddr_t vaddr, paddr_t paddr) {
+  //printf("add_mapping: pid %d, vaddr %x, paddr %x\n", current->pid, vaddr, paddr);
   u32 *v_pdt = (u32 *)PHYS_TO_KERN_VMEM(pdt);
   int pdtindex = vaddr>>22;
   int ptindex = (vaddr>>12) & 0x3ff;
@@ -70,7 +72,8 @@ void pagetbl_add_mapping(u32 *pdt, u32 vaddr, u32 paddr) {
   }
 
   u32 *pt = (u32 *)(PHYS_TO_KERN_VMEM(v_pdt[pdtindex] & ~0xfff));
-  pt[ptindex] = (KERN_VMEM_TO_PHYS(paddr) & ~0xfff) | PTE_PRESENT | PTE_RW | PTE_USER;
+  pt[ptindex] = (paddr & ~0xfff) | PTE_PRESENT | PTE_RW | PTE_USER;
+  flushtlb(pdt);
 }
 
 void pagetbl_free(paddr_t pdt) {
@@ -88,11 +91,13 @@ void pagetbl_free(paddr_t pdt) {
 static vaddr_t pagetbl_dup_one(vaddr_t oldpt) {
   //copy page table entry
   u32 *newpt = get_zeropage();
-  return NULL;
+
   for(int i=0; i<TOTAL_NUM_PTE; i++) {
     u32 oldent = ((u32 *)oldpt)[i];
-    if(oldent & PTE_PRESENT)
+    if(oldent & PTE_PRESENT) {
       newpt[i] = (oldent & ~0xfff) | PTE_PRESENT | PTE_USER; //Do not set PTE_RW due to copy-on-write.
+      ((u32 *)oldpt)[i] &= ~PTE_RW; //for copy-on-write
+    }
   }
   return (vaddr_t)newpt;
 }
@@ -108,9 +113,13 @@ paddr_t pagetbl_dup_for_fork(paddr_t oldpdt) {
   //copy user space page directory entry
   for(int i = 0; i < KERN_PDE_START; i++) {
     u32 oldent = v_oldpdt[i];
-    if(oldent & PDE_PRESENT)
-      pdt[i] = KERN_VMEM_TO_PHYS(pagetbl_dup_one(PHYS_TO_KERN_VMEM(oldent & ~0xfff))) | PDE_PRESENT | PDE_RW | PDE_USER;
+    if(oldent & PDE_PRESENT) {
+      vaddr_t newpt = pagetbl_dup_one(PHYS_TO_KERN_VMEM(oldent & ~0xfff));
+      pdt[i] = KERN_VMEM_TO_PHYS(newpt) | PDE_PRESENT | PDE_RW | PDE_USER;
+    }
   }
+
+  flushtlb(oldpdt);
 
   return KERN_VMEM_TO_PHYS(pdt);
 }

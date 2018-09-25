@@ -3,6 +3,7 @@
 #include <kern/page.h>
 #include <kern/fs.h>
 #include <kern/file.h>
+#include <kern/thread.h>
 
 struct page_entry {
   struct list_head link;
@@ -51,8 +52,10 @@ struct page_entry *page_entry_find(struct list_head *page_list, vaddr_t start) {
 }
 
 static void page_copy(struct page_entry *pe) {
-  if(pe->pinfo->ref == 1)
+  if(pe->pinfo->ref == 1) {
+    //printf("no copy needed %d %x\n", current->pid, pe->pinfo->start);
     return;
+  }
 
   struct page_info *pinew = malloc(sizeof(struct page_info));
   memcpy(pinew, pe->pinfo, sizeof(struct page_info));
@@ -61,9 +64,10 @@ static void page_copy(struct page_entry *pe) {
   pinew->ref = 1;
   pe->pinfo->ref--;
   pe->pinfo = pinew;
+  //printf("copied %d %x\n", current->pid, pinew->start);
 }
 
-void *anon_mapper_request(struct mapper *m, vaddr_t offset) {
+paddr_t anon_mapper_request(struct mapper *m, vaddr_t offset) {
   struct anon_mapper *am = container_of(m, struct anon_mapper, mapper);
   vaddr_t start = pagealign(m->area->start+offset);
 
@@ -71,15 +75,17 @@ void *anon_mapper_request(struct mapper *m, vaddr_t offset) {
 
   if((pe = page_entry_find(&m->page_list, start))) {
     //this page already exists but requested ... copy-on-write
+    //printf("anon mapper: request from pid%d addr=%x off=%x(already exists)\n", current->pid, start, offset);
     page_copy(pe);
   } else {
+    //printf("anon mapper: request from pid%d addr=%x(new)\n", current->pid, start);
     pe = page_entry_new(start);
     if(pe == NULL)
       return NULL;
     list_pushback(&pe->link, &m->page_list);
   }
 
-  return pe->pinfo->addr;
+  return KERN_VMEM_TO_PHYS(pe->pinfo->addr);
 }
 
 int anon_mapper_yield(struct mapper *m UNUSED) {
@@ -141,7 +147,7 @@ struct mapper *anon_mapper_new() {
   return &(am->mapper);
 }
 
-void *file_mapper_request(struct mapper *m, vaddr_t in_area_off) {
+paddr_t file_mapper_request(struct mapper *m, vaddr_t in_area_off) {
   struct file_mapper *fm = container_of(m, struct file_mapper, mapper);
   vaddr_t st = pagealign(in_area_off);
   vaddr_t end = pagealign(in_area_off) + PAGESIZE;
@@ -150,33 +156,42 @@ void *file_mapper_request(struct mapper *m, vaddr_t in_area_off) {
   struct page_entry *pe;
   if((pe = page_entry_find(&m->page_list, start))) {
     //this page already exists but requested ... copy-on-write
+    //printf("file mapper: request from pid%d addr=%x(already exists)\n", current->pid, start);
     page_copy(pe);
   } else {
     pe = page_entry_new(start);
     if(pe == NULL)
       return NULL;
     list_pushback(&pe->link, &m->page_list);
-  }
 
-  size_t readlen = PAGESIZE;
-  if(st <= m->area->offset + fm->len && end > m->area->offset + fm->len)
-    readlen -= end - (m->area->offset + fm->len);
-  if(st <= m->area->offset && end > m->area->offset)
-    readlen -= m->area->offset;
-
-  if(readlen != 0) {
-    u32 read_bytes;
-    lseek(fm->file, st + fm->file_off, SEEK_SET);
+    size_t readlen = PAGESIZE;
+    if(st <= m->area->offset + fm->len && end > m->area->offset + fm->len)
+      readlen -= end - (m->area->offset + fm->len);
     if(st <= m->area->offset && end > m->area->offset)
-      read_bytes = read(fm->file, pe->pinfo->addr+m->area->offset, readlen);
-    else
-      read_bytes = read(fm->file, pe->pinfo->addr, readlen);
+      readlen -= m->area->offset;
 
-    if(read_bytes < readlen)
-      puts("fatal: read failed");
+    if(readlen != 0) {
+      u32 read_bytes;
+      lseek(fm->file, st + fm->file_off, SEEK_SET);
+      if(st <= m->area->offset && end > m->area->offset)
+        read_bytes = read(fm->file, pe->pinfo->addr+m->area->offset, readlen);
+      else
+        read_bytes = read(fm->file, pe->pinfo->addr, readlen);
+
+      if(read_bytes < readlen)
+        puts("fatal: read failed");
+    }
   }
 
-  return pe->pinfo->addr;
+
+  /*
+  u32 sum = 0;
+  for(int i=0; i<PAGESIZE; i++)
+    sum += ((u8*)pe->pinfo->addr)[i];
+  printf("file mapper: request from pid%d addr=%x file=%x sum=%x\n", current->pid, start, fm->file, sum);
+  */
+
+  return KERN_VMEM_TO_PHYS(pe->pinfo->addr);
 }
 
 int file_mapper_yield(struct mapper *m) {
@@ -192,6 +207,7 @@ int file_mapper_yield(struct mapper *m) {
 void file_mapper_free(struct mapper *m) {
   struct file_mapper *fm = container_of(m, struct file_mapper, mapper);
   list_free_all(&m->page_list, struct page_entry, link, page_entry_free);
+  //close(fm->file);
   free(fm);
 }
 

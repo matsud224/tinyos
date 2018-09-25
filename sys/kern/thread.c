@@ -92,6 +92,7 @@ int thread_exec(const char *path) {
 
   void *brk;
   int (*entrypoint)(void) = elf32_load(f, &brk);
+  close(f);
   if(entrypoint == NULL)
     return -1;
 
@@ -105,7 +106,7 @@ int thread_exec(const char *path) {
   return 0;
 }
 
-int thread_fork(u32 child_esp) {
+int thread_fork(u32 ch_esp, u32 ch_eflags, u32 ch_edi, u32 ch_esi, u32 ch_ebx, u32 ch_ebp) {
   struct thread *t = malloc(sizeof(struct thread));
   memcpy(t, current, sizeof(struct thread));
   t->vmmap = vm_map_new();
@@ -121,24 +122,35 @@ int thread_fork(u32 child_esp) {
   //u32 distance = current_esp - (u32)current->kstack;
   //memcpy(t->kstack + distance, current_esp, PAGESIZE - distance);
   memcpy(t->kstack, current->kstack, current->kstacksize);
-  //child_esp points a return address to sys_fork
-  t->regs.esp = (u32)t->kstack + (child_esp - (u32)current->kstack);
+  //ch_esp points a return address to sys_fork
+  t->regs.esp = (u32)t->kstack + (ch_esp - (u32)current->kstack);
 
+  t->regs.esp -= 4;
+  *(u32 *)t->regs.esp = ch_ebp;
+  t->regs.esp -= 4;
+  *(u32 *)t->regs.esp = ch_ebx;
+  t->regs.esp -= 4;
+  *(u32 *)t->regs.esp = ch_esi;
+  t->regs.esp -= 4;
+  *(u32 *)t->regs.esp = ch_edi;
+  t->regs.esp -= 4;
+  *(u32 *)t->regs.esp = ch_eflags;
+
+  //for(int i=0; i<100; i+=4)
+    //printf("esp+%d = %x\n", i, *(u32*)(t->regs.esp+i));
 
   for(int i=0; i<MAX_FILES; i++)
     if(current->files[i])
       t->files[i] = dup(current->files[i]);
 
   t->vmmap = vm_map_dup(current->vmmap);
-  //vm_show_area(current->vmmap);
-  //vm_show_area(t->vmmap);
 
   t->flags = current->flags;
 
   t->regs.eip = fork_child_epilogue;
   thread_run(t);
 
-  return current->pid;//fork_epilogue();
+  return t->pid;
 }
 
 void thread_run(struct thread *t) {
@@ -185,6 +197,7 @@ void thread_sched() {
       cpu_halt();
   }
   current = container_of(next, struct thread, link);
+  //printf("sched: pid=%d\n", current->pid);
 }
 
 void thread_yield() {
@@ -227,6 +240,7 @@ void thread_set_alarm(void *cause, u32 expire) {
 
 void thread_exit() {
   printf("thread#%d (%s) exit\n", current->pid, GET_THREAD_NAME(current));
+  //vm_show_area(current->vmmap);
   current->state = TASK_STATE_EXITED;
   thread_yield();
 }
@@ -241,6 +255,7 @@ int sys_fork(void) {
 }
 
 int sys_sbrk(int incr) {
+  //printf("sbrk incr=%x\n", incr);
   if(incr < 0)
     return -1;
   else if(incr == 0)

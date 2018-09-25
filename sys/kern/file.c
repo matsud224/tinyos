@@ -36,6 +36,7 @@ struct file *file_new(void *data, const struct file_ops *ops, int type, int flag
   f->type = type;
   f->flags = flags;
   f->offset = 0;
+  mutex_init(&f->mtx);
   if(f->ops->open) {
     if(f->ops->open(f, flags) != 0) {
       free(f);
@@ -46,68 +47,107 @@ struct file *file_new(void *data, const struct file_ops *ops, int type, int flag
 }
 
 struct file *dup(struct file *f) {
+  mutex_lock(&f->mtx);
   f->ref++;
+  mutex_unlock(&f->mtx);
   return f;
 }
 
 int close(struct file *f) {
   int retval = 0;
+  mutex_lock(&f->mtx);
   if(f->ops->close)
     retval = f->ops->close(f);
 
-  if(retval)
+  if(retval) {
+    mutex_unlock(&f->mtx);
     return retval;
+  }
 
   //mutex_lock(&filelist_mtx);
   //list_remove(&f->link);
   //mutex_unlock(&filelist_mtx);
 
-  if(--(f->ref) == 0)
+  int ref = --(f->ref);
+  mutex_unlock(&f->mtx);
+
+  if(ref == 0) {
     free(f);
+  }
 
   return retval;
 }
 
 int read(struct file *f, void *buf, size_t count) {
-  if(f->ops->read)
-    return f->ops->read(f, buf, count);
-  else
+  mutex_lock(&f->mtx);
+  if(f->ops->read) {
+    int ret = f->ops->read(f, buf, count);
+    mutex_unlock(&f->mtx);
+    return ret;
+  } else {
+    mutex_unlock(&f->mtx);
     return 0;
+  }
 }
 
 int write(struct file *f, const void *buf, size_t count) {
-  if(f->ops->write)
-    return f->ops->write(f, buf, count);
-  else
+  mutex_lock(&f->mtx);
+  if(f->ops->write) {
+    int ret = f->ops->write(f, buf, count);
+    mutex_unlock(&f->mtx);
+    return ret;
+  } else {
+    mutex_unlock(&f->mtx);
     return 0;
+  }
 }
 
 int lseek(struct file *f, off_t offset, int whence) {
-  if(f->ops->lseek)
-    return f->ops->lseek(f, offset, whence);
-  else
+  mutex_lock(&f->mtx);
+  if(f->ops->lseek) {
+    int ret = f->ops->lseek(f, offset, whence);
+    mutex_unlock(&f->mtx);
+    return ret;
+  } else {
+    mutex_unlock(&f->mtx);
     return -1;
+  }
 }
 
 int fsync(struct file *f) {
-  if(f->ops->sync)
-    return f->ops->sync(f);
-  else
+  mutex_lock(&f->mtx);
+  if(f->ops->sync) {
+    int ret = f->ops->sync(f);
+    mutex_unlock(&f->mtx);
+    return ret;
+  } else {
+    mutex_unlock(&f->mtx);
     return -1;
+  }
 }
 
 int truncate(struct file *f, size_t size) {
-  if(f->ops->truncate)
-    return f->ops->truncate(f, size);
-  else
+  mutex_lock(&f->mtx);
+  if(f->ops->truncate) {
+    int ret = f->ops->truncate(f, size);
+    mutex_unlock(&f->mtx);
+    return ret;
+  } else {
+    mutex_unlock(&f->mtx);
     return -1;
+  }
 }
 
 int getdents(struct file *f, struct dirent *dirp, size_t count) {
-  if(f->ops->getdents)
-    return f->ops->getdents(f, dirp, count);
-  else
+  mutex_lock(&f->mtx);
+  if(f->ops->getdents) {
+    int ret = f->ops->getdents(f, dirp, count);
+    mutex_unlock(&f->mtx);
+    return ret;
+  } else {
+    mutex_unlock(&f->mtx);
     return -1;
+  }
 }
 
 int sys_close(int fd) {

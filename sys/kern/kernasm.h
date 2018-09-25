@@ -25,6 +25,6 @@ u32 xchg(u32 value, void *mem);
 void jmpto_current(void);
 void jmpto_userspace(void *entrypoint, void *userstack);
 u32 getesp(void);
-u32 fork_prologue(u32 (*func)(u32));
+u32 fork_prologue(u32 (*func)(u32, u32, u32, u32, u32, u32));
 u32 fork_child_epilogue(void);
 

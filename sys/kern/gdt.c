@@ -54,7 +54,7 @@ static struct descriptor {
 static struct gdtr {
   u16 limit;
   struct descriptor *base;
-} PACKED gdtr; 
+} PACKED gdtr;
 
 void gdt_init() {
   gdtr.limit = sizeof(gdt)-1;

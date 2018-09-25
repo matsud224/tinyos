@@ -108,9 +108,7 @@ u32 syscall_execve(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u
 }
 
 u32 syscall_fork(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
-  int ret = sys_fork();
-  printf("return from fork (%d)\n", ret);
-  return ret;
+  return sys_fork();
 }
 
 u32 syscall_stat(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {

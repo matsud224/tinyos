@@ -23,7 +23,7 @@ struct vm_area {
 };
 
 struct mapper_ops {
-  void *(*request)(struct mapper *m, vaddr_t offset);
+  paddr_t (*request)(struct mapper *m, vaddr_t offset);
   int (*yield)(struct mapper *m);
   void (*free)(struct mapper *m);
   struct mapper *(*dup)(struct mapper *m);

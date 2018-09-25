@@ -6,18 +6,14 @@
 #include <kern/kernasm.h>
 #include <kern/vmem.h>
 #include <kern/kernlib.h>
-#include <kern/chardev.h>
-#include <kern/blkdev.h>
-#include <kern/netdev.h>
 #include <kern/timer.h>
-#include <kern/lock.h>
 #include <kern/elf.h>
 #include <kern/file.h>
 #include <kern/fs.h>
 
-#include <net/socket/socket.h>
-#include <net/inet/inet.h>
-#include <net/util.h>
+
+#define USER_STACK_BOTTOM ((vaddr_t)0xc0000000)
+#define USER_STACK_SIZE ((size_t)0x4000)
 
 static struct tss tss;
 
@@ -111,13 +107,14 @@ struct thread *kthread_new(void (*func)(void *), void *arg, const char *name) {
   return t;
 }
 
-#define USER_STACK_BOTTOM ((vaddr_t)0xc0000000)
-#define USER_STACK_SIZE ((size_t)0x4000)
-
-int thread_exec(const char *path) {
+int thread_exec_in_usermode(const char *path) {
   struct file *f = open(path, O_RDONLY);
   if(f == NULL)
     return -1;
+
+  vm_map_free(current->vmmap);
+  current->vmmap = vm_map_new();
+  current->regs.cr3 = pagetbl_new();
 
   void *brk;
   int (*entrypoint)(void) = elf32_load(f, &brk);
@@ -130,9 +127,10 @@ int thread_exec(const char *path) {
 
   current->brk = pagealign((u32)brk+(PAGESIZE-1));
 
-  jmpto_userspace(entrypoint, (void *)(USER_STACK_BOTTOM - 4));
+  flushtlb(current->regs.cr3);
 
-  return 0;
+  jmpto_userspace(entrypoint, (void *)(USER_STACK_BOTTOM - 4));
+  return 0; //never return here
 }
 
 int fork_main(u32 ch_esp, u32 ch_eflags, u32 ch_edi, u32 ch_esi, u32 ch_ebx, u32 ch_ebp) {
@@ -290,7 +288,7 @@ void thread_exit_with_error() {
 }
 
 int sys_execve(const char *filename, char *const argv[] UNUSED, char *const envp[] UNUSED) {
-  return thread_exec(filename);
+  return thread_exec_in_usermode(filename);
 }
 
 int sys_fork(void) {

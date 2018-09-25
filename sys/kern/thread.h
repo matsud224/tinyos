@@ -73,7 +73,7 @@ void dispatcher_init(void);
 void dispatcher_run(void);
 void kstack_setaddr(void);
 struct thread *kthread_new(void (*func)(void *), void *arg, const char *name);
-int thread_exec(const char *path);
+int thread_exec_in_usermode(const char *path);
 void thread_run(struct thread *t);
 void thread_sched(void);
 void thread_sleep(const void *cause);

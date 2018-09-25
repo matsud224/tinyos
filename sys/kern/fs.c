@@ -243,7 +243,7 @@ struct vnode *name_to_vnode(const char *path, struct vnode **parent, char **fnam
     else
       name[i] = '\0';
 
-printf("current name is %s\n", name);
+//printf("current name is %s\n", name);
     if(prevvno != NULL) {
       vnode_release(prevvno);
     }

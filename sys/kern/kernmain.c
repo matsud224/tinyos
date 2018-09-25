@@ -85,6 +85,8 @@ void thread_main(void *arg UNUSED) {
   current->files[1] = dup(f);
   current->files[2] = dup(f);
 
+  thread_chdir("/");
+
   thread_exec_in_usermode("/bin/init");
   puts("exec failed");
 }

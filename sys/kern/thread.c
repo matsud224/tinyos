@@ -116,14 +116,6 @@ int thread_exec_in_usermode(const char *path) {
   current->vmmap = vm_map_new();
   current->regs.cr3 = pagetbl_new();
 
-  vnodes_lock();
-  struct vnode *parent;
-  struct vnode *v = name_to_vnode(path, &parent, NULL);
-  if(current->curdir)
-    vnode_release(current->curdir);
-  vnodes_unlock();
-  current->curdir = parent;
-
   void *brk;
   int (*entrypoint)(void) = elf32_load(f, &brk);
   close(f);

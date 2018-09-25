@@ -87,7 +87,7 @@ paddr_t anon_mapper_request(struct mapper *m, vaddr_t offset) {
   return KERN_VMEM_TO_PHYS(pe->pinfo->addr);
 }
 
-int anon_mapper_yield(struct mapper *m UNUSED) {
+int anon_mapper_yield(struct mapper *m UNUSED, paddr_t pdt UNUSED) {
   //TODO: swapping
   return -1;
 }
@@ -187,7 +187,7 @@ paddr_t file_mapper_request(struct mapper *m, vaddr_t in_area_off) {
   return KERN_VMEM_TO_PHYS(pe->pinfo->addr);
 }
 
-int file_mapper_yield(struct mapper *m) {
+int file_mapper_yield(struct mapper *m, paddr_t pdt) {
   struct file_mapper *fm = container_of(m, struct file_mapper, mapper);
 
   int count = 0;
@@ -196,6 +196,7 @@ int file_mapper_yield(struct mapper *m) {
     struct page_entry *pe = list_entry(p, struct page_entry, link);
     if(mutex_trylock(&pe->pinfo->mtx) == 0) {
       if(pe->pinfo->ref == 1) {
+        pagetbl_remove_mapping(pdt, pe->pinfo->start);
         list_remove(&pe->link);
         page_entry_free(pe);
         count++;
@@ -294,11 +295,11 @@ void vm_map_free(struct vm_map *vmmap) {
   free(vmmap);
 }
 
-int vm_map_yield(struct vm_map *vmmap) {
+int vm_map_yield(struct vm_map *vmmap, paddr_t pdt) {
   struct list_head *p;
   list_foreach(p, &vmmap->area_list) {
     struct vm_area *area = list_entry(p, struct vm_area, link);
-    if(area->mapper->ops->yield(area->mapper) == 0)
+    if(area->mapper->ops->yield(area->mapper, pdt) == 0)
       return 0;
   }
   return -1;

@@ -28,6 +28,7 @@ void pf_isr(vaddr_t addr, u32 eip, u32 esp, u32 eax) {
   } else {
     paddr_t paddr = varea->mapper->ops->request(varea->mapper, addr - varea->start);
     pagetbl_add_mapping((u32 *)current->regs.cr3, addr, paddr);
+    flushtlb(current->regs.cr3);
   }
 }
 

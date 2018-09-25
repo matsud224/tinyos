@@ -145,6 +145,7 @@ int fork_main(u32 ch_esp, u32 ch_eflags, u32 ch_edi, u32 ch_esi, u32 ch_ebx, u32
   t->pid = childpid;
   t->ppid = current->pid;
   t->regs.cr3 = pagetbl_dup_for_fork((paddr_t)current->regs.cr3);
+  flushtlb(current->regs.cr3);
 
   //prepare kernel stack
   t->kstack = get_zeropage();
@@ -215,6 +216,7 @@ void thread_sched() {
   case TASK_STATE_ZOMBIE:
     break;
   }
+
   struct list_head *next = list_pop(&run_queue);
   if(next == NULL) {
     puts("no thread!");
@@ -288,12 +290,17 @@ void thread_exit_with_error() {
 }
 
 int thread_yield_pages() {
+  int is_yielded = 0;
+IRQ_DISABLE
   for(int i=0; i<MAX_THREADS; i++) {
-    if(thread_tbl[i])
-      if(vm_map_yield(thread_tbl[i]->vmmap) == 0)
-        return 0;
+    if(i != current->pid && thread_tbl[i])
+      if(vm_map_yield(thread_tbl[i]->vmmap, thread_tbl[i]->regs.cr3) == 0) {
+        is_yielded = 1;
+        break;
+      }
   }
-  return -1;
+IRQ_RESTORE
+  return is_yielded ? 0 : -1;
 }
 
 int sys_execve(const char *filename, char *const argv[] UNUSED, char *const envp[] UNUSED) {

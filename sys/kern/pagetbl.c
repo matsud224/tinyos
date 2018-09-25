@@ -73,7 +73,17 @@ void pagetbl_add_mapping(u32 *pdt, vaddr_t vaddr, paddr_t paddr) {
 
   u32 *pt = (u32 *)(PHYS_TO_KERN_VMEM(v_pdt[pdtindex] & ~0xfff));
   pt[ptindex] = (paddr & ~0xfff) | PTE_PRESENT | PTE_RW | PTE_USER;
-  flushtlb(pdt);
+}
+
+void pagetbl_remove_mapping(u32 *pdt, vaddr_t vaddr) {
+  u32 *v_pdt = (u32 *)PHYS_TO_KERN_VMEM(pdt);
+  int pdtindex = vaddr>>22;
+  int ptindex = (vaddr>>12) & 0x3ff;
+  if((v_pdt[pdtindex] & PDE_PRESENT) == 0)
+    return;
+
+  u32 *pt = (u32 *)(PHYS_TO_KERN_VMEM(v_pdt[pdtindex] & ~0xfff));
+  pt[ptindex] &= ~PTE_PRESENT;
 }
 
 void pagetbl_free(paddr_t pdt) {
@@ -118,8 +128,6 @@ paddr_t pagetbl_dup_for_fork(paddr_t oldpdt) {
       pdt[i] = KERN_VMEM_TO_PHYS(newpt) | PDE_PRESENT | PDE_RW | PDE_USER;
     }
   }
-
-  flushtlb(oldpdt);
 
   return KERN_VMEM_TO_PHYS(pdt);
 }

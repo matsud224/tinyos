@@ -3,6 +3,7 @@
 #include <kern/vmem.h>
 #include <kern/list.h>
 #include <kern/file.h>
+#include <kern/fs.h>
 #include <stdint.h>
 #include <stddef.h>
 
@@ -65,6 +66,7 @@ struct thread {
   struct file *files[MAX_FILES];
   void *brk;
   char *name;
+  struct vnode *curdir;
 };
 
 #define GET_THREAD_NAME(th) ((th)->name?(th)->name:"???")
@@ -82,6 +84,7 @@ void thread_yield(void);
 void thread_set_alarm(void *cause, u32 expire);
 void thread_exit(int exit_code);
 void thread_exit_with_error(void);
+int thread_chdir(const char *path);
 int thread_yield_pages(void);
 struct deferred_func *defer_exec(void (*func)(void *), void *arg, int priority, int delay);
 void *defer_cancel(struct deferred_func *f);
@@ -89,3 +92,4 @@ void *defer_cancel(struct deferred_func *f);
 int sys_execve(const char *filename, char *const argv[], char *const envp[]);
 int sys_fork(void);
 int sys_sbrk(int incr);
+int sys_chdir(const char *path);

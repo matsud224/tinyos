@@ -116,6 +116,14 @@ int thread_exec_in_usermode(const char *path) {
   current->vmmap = vm_map_new();
   current->regs.cr3 = pagetbl_new();
 
+  vnodes_lock();
+  struct vnode *parent;
+  struct vnode *v = name_to_vnode(path, &parent, NULL);
+  if(current->curdir)
+    vnode_release(current->curdir);
+  vnodes_unlock();
+  current->curdir = parent;
+
   void *brk;
   int (*entrypoint)(void) = elf32_load(f, &brk);
   close(f);
@@ -142,6 +150,8 @@ int fork_main(u32 ch_esp, u32 ch_eflags, u32 ch_edi, u32 ch_esi, u32 ch_ebx, u32
   memcpy(t, current, sizeof(struct thread));
   t->vmmap = vm_map_new();
   t->state = TASK_STATE_RUNNING;
+  if(t->curdir)
+    vnode_hold(t->curdir);
   t->pid = childpid;
   t->ppid = current->pid;
   t->regs.cr3 = pagetbl_dup_for_fork((paddr_t)current->regs.cr3);
@@ -272,6 +282,9 @@ void thread_exit(int exit_code) {
     if(current->files[i])
       close(current->files[i]);
 
+  if(current->curdir)
+    vnode_release(current->curdir);
+
   vm_map_free(current->vmmap);
 
   if(thread_tbl[current->ppid]) {
@@ -301,6 +314,22 @@ IRQ_DISABLE
   }
 IRQ_RESTORE
   return is_yielded ? 0 : -1;
+}
+
+int thread_chdir(const char *path) {
+  struct stat stbuf;
+  if(stat(path, &stbuf) || (stbuf.st_mode & S_IFMT) != S_IFDIR)
+    return -1;
+
+  vnodes_lock();
+  struct vnode *newdir = name_to_vnode(path, NULL, NULL);
+  if(newdir) {
+    vnode_release(current->curdir);
+    vnodes_unlock();
+    current->curdir = newdir;
+    return 0;
+  }
+  return -1;
 }
 
 int sys_execve(const char *filename, char *const argv[] UNUSED, char *const envp[] UNUSED) {
@@ -349,3 +378,6 @@ int sys_sbrk(int incr) {
   return (int)prev_brk;
 }
 
+int sys_chdir(const char *path) {
+  return thread_chdir(path);
+}

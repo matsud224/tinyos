@@ -84,6 +84,8 @@ int link(const char *oldpath, const char *newpath);
 int unlink(const char *path);
 int stat(const char *path, struct stat *buf);
 
+struct vnode *name_to_vnode(const char *path, struct vnode **parent, char **fname);
+
 int sys_open(const char *path, int flags);
 int sys_mknod(const char *path, int mode, devno_t devno);
 int sys_link(const char *oldpath, const char *newpath);
@@ -92,8 +94,8 @@ int sys_stat(const char *path, struct stat *buf);
 int sys_fstat(int fd, struct stat *buf);
 
 void vnode_init(struct vnode *vno, vno_t number, struct fs *fs, const struct vnode_ops *ops, const struct file_ops *file_ops, devno_t devno);
-void vnode_lock(struct vnode *vno);
-void vnode_unlock(struct vnode *vno);
+void vnodes_lock(void);
+void vnodes_unlock(void);
 void vnode_hold(struct vnode *vno);
 void vnode_release(struct vnode *vno);
 void vnode_markdirty(struct vnode *vno);

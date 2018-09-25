@@ -22,9 +22,11 @@ static struct vnode *vcache[NVCACHE];
 static mutex vcache_mtx;
 
 static struct vnode *rootdir;
+static mutex all_vnodes_mtx;
 
 void fs_init() {
   mutex_init(&vcache_mtx);
+  mutex_init(&all_vnodes_mtx);
 
   for(int i=0; i<NVCACHE; i++) {
     vcache[i] = NULL;
@@ -51,30 +53,24 @@ void vnode_init(struct vnode *vno, vno_t number, struct fs *fs, const struct vno
   //vno->addrspace = addrspace_new(&fs_addrspace_ops);
 }
 
-void vnode_lock(struct vnode *vno) {
-  mutex_lock(&vno->mtx);
+void vnodes_lock() {
+  mutex_lock(&all_vnodes_mtx);
 }
 
-void vnode_unlock(struct vnode *vno) {
-  if(vno == NULL)
-    return;
-  mutex_unlock(&vno->mtx);
+void vnodes_unlock() {
+  mutex_unlock(&all_vnodes_mtx);
 }
 
 void vnode_hold(struct vnode *vno) {
-  vnode_lock(vno);
   if(vno->ref > 0)
     vno->ref++;
-  vnode_unlock(vno);
 }
 
 void vnode_release(struct vnode *vno) {
   if(vno == NULL)
     return;
-  vnode_lock(vno);
   if(vno->ref > 0)
     vno->ref--;
-  vnode_unlock(vno);
 }
 
 void vnode_markdirty(struct vnode *vno) {
@@ -86,10 +82,8 @@ void vnode_markdirty(struct vnode *vno) {
 void vnode_sync(struct vnode *vno) {
   if(vno == NULL)
     return;
-  vnode_lock(vno);
   if(vno->ops->vsync)
     vno->ops->vsync(vno);
-  vnode_unlock(vno);
 }
 
 struct vnode *vcache_find(struct fs *fs, vno_t number) {
@@ -161,18 +155,18 @@ void vcache_remove(struct vnode *vno) {
 }
 
 void vsync() {
+  vnodes_lock();
   mutex_lock(&vcache_mtx);
   //printf("---locked by %d---", current->pid);
   for(int i=0; i<NVCACHE; i++) {
     if(vcache[i] && vcache[i]->ops->vsync) {
       vnode_hold(vcache[i]);
-      vnode_lock(vcache[i]);
       vcache[i]->ops->vsync(vcache[i]);
-      vnode_unlock(vcache[i]);
       vnode_release(vcache[i]);
     }
   }
   mutex_unlock(&vcache_mtx);
+  vnodes_unlock();
 }
 
 
@@ -210,20 +204,20 @@ found       yes    yes    yes
 not found   yes    no     yes
 error       no     no     no
 */
-static struct vnode *name_to_vnode(const char *path, struct vnode **parent, char **fname) {
+//already locked
+struct vnode *name_to_vnode(const char *path, struct vnode **parent, char **fname) {
   static char name[MAX_FILE_NAME+1];
   const char *ptr = path;
   struct vnode *prevvno = NULL;
   struct vnode *curvno = rootdir;
 
+  if(*ptr != '/')
+    curvno = current->curdir;
+
   if(curvno == NULL)
     return NULL;
-  vnode_hold(curvno);
-  vnode_lock(curvno);
 
-  //currently, relative path is not allowed
-  if(*ptr != '/')
-    goto err;
+  vnode_hold(curvno);
 
   while(1) {
     while(*ptr == '/') ptr++;
@@ -232,11 +226,11 @@ static struct vnode *name_to_vnode(const char *path, struct vnode **parent, char
       if(parent != NULL)
         *parent = prevvno;
       else if(prevvno != NULL) {
-        vnode_unlock(prevvno);
         vnode_release(prevvno);
       }
       if(fname != NULL)
         *fname = strdup(name);
+
       return curvno;
     }
 
@@ -249,28 +243,23 @@ static struct vnode *name_to_vnode(const char *path, struct vnode **parent, char
     else
       name[i] = '\0';
 
-//printf("current name is %s\n", name);
+printf("current name is %s\n", name);
     if(prevvno != NULL) {
-      vnode_unlock(prevvno);
       vnode_release(prevvno);
     }
 
     prevvno = curvno;
     if(!curvno || !curvno->ops->lookup ||
-      curvno->ops->lookup(curvno, name, &curvno) == LOOKUP_ERROR)
+      curvno->ops->lookup(curvno, name, &curvno) != LOOKUP_FOUND)
         goto err;
   }
 
 err:
-  if(curvno != NULL) {
-    vnode_unlock(curvno);
+  if(curvno != NULL)
     vnode_release(curvno);
-  }
 
-  if(prevvno != NULL) {
-    vnode_unlock(prevvno);
+  if(prevvno != NULL)
     vnode_release(prevvno);
-  }
 
   if(parent != NULL)
     *parent = NULL;
@@ -289,6 +278,7 @@ struct file *open(const char *path, int flags) {
   if(!(flags & (_FREAD | _FWRITE)))
     return NULL;
 
+  vnodes_lock();
   struct vnode *vno = name_to_vnode(path, &parent, &name);
 
   if(vno == NULL) {
@@ -297,7 +287,6 @@ struct file *open(const char *path, int flags) {
         if(parent->ops->mknod(parent, name, S_IFREG, 0))
           goto err;
         if(parent != NULL) {
-          vnode_unlock(parent);
           vnode_release(parent);
           parent = NULL;
         }
@@ -315,8 +304,6 @@ struct file *open(const char *path, int flags) {
       goto err;
   }
 
-  vnode_unlock(vno);
-  vnode_unlock(parent);
   vnode_release(parent);
 
   if(name != NULL)
@@ -330,26 +317,27 @@ struct file *open(const char *path, int flags) {
   if(flags & _FTRUNC)
     truncate(f, 0);
 
+  vnodes_unlock();
   return f;
 
 err:
-  if(parent != NULL) {
-    vnode_unlock(parent);
+  if(parent != NULL)
     vnode_release(parent);
-  }
-  if(vno != NULL) {
-    vnode_unlock(vno);
+  if(vno != NULL)
     vnode_release(vno);
-  }
   if(name != NULL)
     free(name);
+
+  vnodes_unlock();
   return NULL;
 }
 
 int mknod(const char *path, int mode, devno_t devno) {
   struct vnode *parent = NULL;
   char *name = NULL;
+  vnodes_lock();
   struct vnode *vno = name_to_vnode(path, &parent, &name);
+
   int ret = -1;
   if(vno != NULL)
     goto err;
@@ -359,16 +347,14 @@ int mknod(const char *path, int mode, devno_t devno) {
   ret = parent->ops->mknod(parent, name, mode, devno);
 
 err:
-  if(vno != NULL) {
-    vnode_unlock(vno);
+  if(vno != NULL)
     vnode_release(vno);
-  }
-  if(parent != NULL) {
-    vnode_unlock(parent);
+  if(parent != NULL)
     vnode_release(parent);
-  }
   if(name != NULL)
     free(name);
+
+  vnodes_unlock();
   return ret;
 }
 
@@ -378,6 +364,7 @@ int link(const char *oldpath, const char *newpath) {
   char *name = NULL;
   int ret = -1;
 
+  vnodes_lock();
   vno0 = name_to_vnode(oldpath, NULL, NULL);
   if(vno0 == NULL)
     goto err;
@@ -395,54 +382,51 @@ int link(const char *oldpath, const char *newpath) {
   ret = parent->ops->link(parent, name, vno0);
 
 err:
-  if(vno0 != NULL) {
-    vnode_unlock(vno0);
+  if(vno0 != NULL)
     vnode_release(vno0);
-  }
-  if(vno1 != NULL) {
-    vnode_unlock(vno1);
+  if(vno1 != NULL)
     vnode_release(vno1);
-  }
-  if(parent != NULL) {
-    vnode_unlock(parent);
+  if(parent != NULL)
     vnode_release(parent);
-  }
   if(name != NULL)
     free(name);
+
+  vnodes_unlock();
   return ret;
 }
 
 int unlink(const char *path) {
   struct vnode *parent = NULL;
   char *name = NULL;
+  vnodes_lock();
   struct vnode *vno = name_to_vnode(path, &parent, &name);
+
   int ret = -1;
   if(!vno || !parent)
     goto err;
   if(!vno->ops->unlink)
     goto err;
 
-  vnode_unlock(vno);
   vnode_release(vno);
   ret = parent->ops->unlink(parent, name, vno);
   vno = NULL;
 
 err:
-  if(vno != NULL) {
-    vnode_unlock(vno);
+  if(vno != NULL)
     vnode_release(vno);
-  }
-  if(parent != NULL) {
-    vnode_unlock(parent);
+  if(parent != NULL)
     vnode_release(parent);
-  }
   if(name != NULL)
     free(name);
+
+  vnodes_unlock();
   return ret;
 }
 
 int stat(const char *path, struct stat *buf) {
+  vnodes_lock();
   struct vnode *vno = name_to_vnode(path, NULL, NULL);
+
   int ret = -1;
   if(vno == NULL)
     goto err;
@@ -452,10 +436,10 @@ int stat(const char *path, struct stat *buf) {
   ret = vno->ops->stat(vno, buf);
 
 err:
-  if(vno != NULL) {
-    vnode_unlock(vno);
+  if(vno != NULL)
     vnode_release(vno);
-  }
+
+  vnodes_unlock();
   return ret;
 }
 
@@ -470,9 +454,9 @@ int fstat(struct file *f, struct stat *buf) {
   if(!vno->ops->stat)
     return ret;
 
-  vnode_lock(vno);
+  vnodes_lock();
   ret = vno->ops->stat(vno, buf);
-  vnode_unlock(vno);
+  vnodes_unlock();
 
   return ret;
 }

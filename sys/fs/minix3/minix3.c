@@ -670,10 +670,8 @@ int minix3_read(struct file *f, void *buf, size_t count) {
   struct minix3_vnode *m3vno = container_of(vno, struct minix3_vnode, vnode);
   struct minix3_fs *minix3 = container_of(m3vno->vnode.fs, struct minix3_fs, fs);
 
-  vnode_lock(vno);
 
   if(f->offset < 0) {
-    vnode_unlock(vno);
     return -1;
   }
 
@@ -684,7 +682,6 @@ int minix3_read(struct file *f, void *buf, size_t count) {
   //printf("minix3: offset=%x, tail=%x, remain=%x\n", offset, tail, remain);
 
   if(tail <= offset) {
-    vnode_unlock(vno);
     return 0;
   }
 
@@ -707,7 +704,6 @@ int minix3_read(struct file *f, void *buf, size_t count) {
   u32 read_bytes = (tail - offset) - remain;
   f->offset += read_bytes;
 
-  vnode_unlock(vno);
   return read_bytes;
 }
 
@@ -715,10 +711,8 @@ int minix3_write(struct file *f, const void *buf, size_t count) {
   struct vnode *vno = (struct vnode *)f->data;
   struct minix3_vnode *m3vno = container_of(vno, struct minix3_vnode, vnode);
   struct minix3_fs *minix3 = container_of(m3vno->vnode.fs, struct minix3_fs, fs);
-  vnode_lock(vno);
 
   if(f->offset < 0) {
-    vnode_unlock(vno);
     return -1;
   }
 
@@ -727,7 +721,6 @@ int minix3_write(struct file *f, const void *buf, size_t count) {
   u32 remain = tail - offset;
 
   if(tail <= offset) {
-    vnode_unlock(vno);
     return 0;
   }
 
@@ -756,7 +749,6 @@ int minix3_write(struct file *f, const void *buf, size_t count) {
     vnode_markdirty(vno);
   }
 
-  vnode_unlock(vno);
   return wrote_bytes;
 }
 
@@ -803,10 +795,7 @@ int minix3_getdents(struct file *f, struct dirent *dirp, size_t count) {
   struct minix3_vnode *m3vno = container_of(vno, struct minix3_vnode, vnode);
   struct minix3_fs *minix3 = container_of(m3vno->vnode.fs, struct minix3_fs, fs);
 
-  vnode_lock(vno);
-
   if(f->offset < 0) {
-    vnode_unlock(vno);
     return -1;
   }
 
@@ -815,7 +804,6 @@ int minix3_getdents(struct file *f, struct dirent *dirp, size_t count) {
   u32 remain = tail - offset;
 
   if(tail <= offset) {
-    vnode_unlock(vno);
     return 0;
   }
 
@@ -853,7 +841,6 @@ int minix3_getdents(struct file *f, struct dirent *dirp, size_t count) {
   u32 read_bytes = (tail - offset) - remain;
   f->offset += read_bytes;
 
-  vnode_unlock(vno);
   return nfoundent * sizeof(struct dirent);
 }
 

@@ -36,6 +36,7 @@ u32 syscall_sync(u32, u32, u32, u32, u32);
 u32 syscall_truncate(u32, u32, u32, u32, u32);
 u32 syscall_getdents(u32, u32, u32, u32, u32);
 u32 syscall_dup(u32, u32, u32, u32, u32);
+u32 syscall_chdir(u32, u32, u32, u32, u32);
 
 u32 (*syscall_table[NSYSCALLS])(u32, u32, u32, u32, u32) = {
   syscall_exit,     //0
@@ -67,6 +68,7 @@ u32 (*syscall_table[NSYSCALLS])(u32, u32, u32, u32, u32) = {
   syscall_recv,     //26
   syscall_dup,      //27
   syscall_getdents, //28
+  syscall_chdir,    //29
 };
 
 
@@ -202,4 +204,8 @@ u32 syscall_getdents(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED,
 
 u32 syscall_dup(u32 a0, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
   return sys_dup(a0);
+}
+
+u32 syscall_chdir(u32 a0, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
+  return sys_chdir(a0);
 }

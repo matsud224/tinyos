@@ -587,21 +587,21 @@ static struct vnode *minix3_dentop(struct vnode *vnode, const char *name, int op
   struct blkbuf *bbuf = NULL;
 
   if(remain == 0 && op == OP_ADD) {
-    remain += sizeof(struct minix3_dent);
+    remain += MINIX3_DENT_SIZE;
     is_file_expanded = 1;
   }
 
   for(int blkno = minix3_firstblk(m3vno, 0, is_write_access);
         blkno > 0 && remain > 0; ) {
     bbuf = blkbuf_get(minix3->devno, blkno);
-    blkno = minix3_nextblk(m3vno, blkno, pos+sizeof(struct minix3_dent), is_write_access);
+    blkno = minix3_nextblk(m3vno, blkno, pos + MINIX3_DENTS_PER_BLOCK*MINIX3_DENT_SIZE, is_write_access);
     blkbuf_readahead(bbuf, blkno);
 
-    for(u32 i=0; i < MINIX3_DENTS_PER_BLOCK && remain > 0; i++) {
-      struct minix3_dent *dent = &(((struct minix3_dent *)bbuf->addr)[i]);
+    struct minix3_dent *dent = (struct minix3_dent *)bbuf->addr;
+    for(u32 i=0; i < MINIX3_DENTS_PER_BLOCK && remain > 0; i++, dent++) {
       switch(op) {
       case OP_LOOKUP:
-        if(dent->inode == 0)
+        if(dent->inode == MINIX3_INVALID_INODE)
           break;
         if(strncmp(name, dent->name, MINIX3_MAX_NAME_LEN) == 0) {
           result = minix3_vnode_get(minix3, dent->inode);
@@ -611,7 +611,7 @@ static struct vnode *minix3_dentop(struct vnode *vnode, const char *name, int op
         }
         break;
       case OP_EMPTY_CHECK:
-        if(dent->inode == 0)
+        if(dent->inode == MINIX3_INVALID_INODE)
           break;
         if(strcmp(".", dent->name) && strcmp("..", dent->name)) {
           result = minix3_vnode_get(minix3, dent->inode);
@@ -619,7 +619,7 @@ static struct vnode *minix3_dentop(struct vnode *vnode, const char *name, int op
         }
         break;
       case OP_REMOVE:
-        if(dent->inode == 0)
+        if(dent->inode == MINIX3_INVALID_INODE)
           break;
         if(strncmp(name, dent->name, MINIX3_MAX_NAME_LEN) == 0) {
           dent->inode = MINIX3_INVALID_INODE;
@@ -629,7 +629,7 @@ static struct vnode *minix3_dentop(struct vnode *vnode, const char *name, int op
         }
         break;
       case OP_ADD:
-        if(!is_file_expanded && dent->inode != 0) {
+        if(!is_file_expanded && dent->inode != MINIX3_INVALID_INODE) {
           break;
         }
         strncpy(dent->name, name, MINIX3_MAX_NAME_LEN);
@@ -639,10 +639,10 @@ static struct vnode *minix3_dentop(struct vnode *vnode, const char *name, int op
         goto exit;
       }
 
-      remain -= sizeof(struct minix3_dent);
-      pos += sizeof(struct minix3_dent);
+      remain -= MINIX3_DENT_SIZE;
+      pos += MINIX3_DENT_SIZE;
       if(remain == 0 && op == OP_ADD) {
-        remain += sizeof(struct minix3_dent);
+        remain += MINIX3_DENT_SIZE;
         is_file_expanded = 1;
       }
     }
@@ -826,10 +826,10 @@ int minix3_getdents(struct file *f, struct dirent *dirp, size_t count) {
   for(int blkno = minix3_firstblk(m3vno, pos, 0);
         blkno > 0 && remain > 0 && nbufent > 0; ) {
     struct blkbuf *bbuf = blkbuf_get(minix3->devno, blkno);
-    blkno = minix3_nextblk(m3vno, blkno, pos+MINIX3_DENT_SIZE, 0);
-    blkbuf_readahead(bbuf, blkno + 1);
     u32 inblk_off = pos % BLOCKSIZE;
     u32 inblk_remain = MIN(BLOCKSIZE - inblk_off, remain);
+    blkno = minix3_nextblk(m3vno, blkno, pos + inblk_remain, 0);
+    blkbuf_readahead(bbuf, blkno);
     struct minix3_dent *dent = (struct minix3_dent *)(bbuf->addr + inblk_off);
 
     while(inblk_remain >= MINIX3_DENT_SIZE

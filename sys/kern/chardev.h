@@ -13,11 +13,22 @@ struct chardev_buf {
   char *addr;
 };
 
+#define CDMODE_CANON   0x1
+#define CDMODE_ECHO    0x2
+struct chardev_state {
+  int mode;
+  char linebuf[MAX_CHARDEV_LINE_CHARS + 1];
+#define CDTEMPBUFSIZE 512
+  char tempbuf[CDTEMPBUFSIZE];
+  int linebuf_head;
+};
+
 struct chardev_ops {
   int (*open)(int minor);
   int (*close)(int minor);
-  size_t (*read)(int minor, char *dest, size_t count);
-  size_t (*write)(int minor, const char *src, size_t count);
+  int (*read)(int minor, char *dest, size_t count);
+  int (*write)(int minor, const char *src, size_t count);
+  struct chardev_state *(*getstate)(int minor);
 };
 
 extern const struct file_ops chardev_file_ops;
@@ -25,11 +36,11 @@ extern const struct file_ops chardev_file_ops;
 void chardev_init(void);
 int chardev_register(const struct chardev_ops *ops);
 struct chardev_buf *cdbuf_create(char *mem, size_t size);
-size_t cdbuf_read(struct chardev_buf *buf, char *dest, size_t count);
-size_t cdbuf_write(struct chardev_buf *buf, const char *src, size_t count);
+int cdbuf_read(struct chardev_buf *buf, char *dest, size_t count);
+int cdbuf_write(struct chardev_buf *buf, const char *src, size_t count);
 int chardev_open(devno_t devno);
 int chardev_close(devno_t devno);
-size_t chardev_read(devno_t devno, char *dest, size_t count);
-size_t chardev_write(devno_t devno, const char *src, size_t count);
-
+int chardev_read(devno_t devno, char *dest, size_t count);
+int chardev_write(devno_t devno, const char *src, size_t count);
+void chardev_initstate(struct chardev_state *state, int mode);
 

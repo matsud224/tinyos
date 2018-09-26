@@ -41,8 +41,8 @@ struct chardev_buf *cdbuf_create(char *mem, size_t size) {
   return buf;
 }
 
-size_t cdbuf_read(struct chardev_buf *buf, char *dest, size_t count) {
-  u32 read_count = 0;
+int cdbuf_read(struct chardev_buf *buf, char *dest, size_t count) {
+  int read_count = 0;
   while(read_count < count && buf->free < buf->size) {
     *dest++ = buf->addr[buf->tail++];
     if(buf->tail == buf->size)
@@ -53,8 +53,8 @@ size_t cdbuf_read(struct chardev_buf *buf, char *dest, size_t count) {
   return read_count;
 }
 
-size_t cdbuf_write(struct chardev_buf *buf, const char *src, size_t count) {
-  size_t write_count = 0;
+int cdbuf_write(struct chardev_buf *buf, const char *src, size_t count) {
+  int write_count = 0;
   while(write_count < count && buf->free > 0) {
     buf->addr[buf->head++] = *src++;
     if(buf->head == buf->size)
@@ -81,38 +81,102 @@ int chardev_close(devno_t devno) {
   return ops->close(DEV_MINOR(devno));
 }
 
-size_t chardev_read(devno_t devno, char *dest, size_t count) {
+static int fill_linebuf(devno_t devno, struct chardev_state *state) {
+  const struct chardev_ops *ops = chardev_tbl[DEV_MAJOR(devno)];
+
+  if(state->linebuf_head > 0 && state->linebuf[state->linebuf_head-1] == '\n')
+    return 0;
+
+  int result = 0;
+  while(1) {
+    int n = ops->read(DEV_MINOR(devno), state->tempbuf, CDTEMPBUFSIZE);
+    if(n < 0) {
+      result = -1;
+      goto exit;
+    }
+    for(int i = 0; i < n; i++) {
+      switch(state->tempbuf[i]) {
+      case 0x7f:
+        if(state->linebuf_head > 0)
+          state->linebuf_head--;
+        break;
+      case '\r':
+      case '\n':
+        if(state->linebuf_head == MAX_CHARDEV_LINE_CHARS)
+          state->linebuf_head--;
+        state->linebuf[state->linebuf_head++] = '\n';
+        goto exit;
+      default:
+        if(state->linebuf_head < MAX_CHARDEV_LINE_CHARS)
+          state->linebuf[state->linebuf_head++] = state->tempbuf[i];
+        break;
+      }
+    }
+
+    thread_sleep(ops);
+  }
+
+exit:
+  return result;
+}
+
+int chardev_read(devno_t devno, char *dest, size_t count) {
   const struct chardev_ops *ops = chardev_tbl[DEV_MAJOR(devno)];
   if(ops == NULL)
     return -1;
 
-  u32 remain = count;
-  u32 read_bytes = 0;
+  struct chardev_state *state = ops->getstate(DEV_MINOR(devno));
+
+  int read_bytes = 0;
+
+  if(state->mode & CDMODE_CANON) {
 IRQ_DISABLE
-  while(remain > 0) {
-    u32 n = ops->read(DEV_MINOR(devno), dest, remain);
-    remain -= n;
-    dest += n;
-    read_bytes += n;
-    if(n > 0 && *(dest-1) == '\n') {
+    if(fill_linebuf(devno, state) < 0) {
+      read_bytes = -1;
       break;
     }
-    if(remain > 0)
-      thread_sleep(ops);
-  }
+    read_bytes = MIN(count, state->linebuf_head);
+    memcpy(dest, state->linebuf, read_bytes);
+    int rem_bytes = state->linebuf_head - read_bytes;
+    for(int i=0; i < rem_bytes; i++)
+      state->linebuf[i] = state->linebuf[read_bytes+i];
+    state->linebuf_head = rem_bytes;
 IRQ_RESTORE
+  } else {
+    int remain = count;
+IRQ_DISABLE
+    while(remain > 0) {
+      int n = ops->read(DEV_MINOR(devno), dest, remain);
+      if(n < 0) {
+        read_bytes = -1;
+        break;
+      }
+      remain -= n;
+      dest += n;
+      read_bytes += n;
+      if(remain > 0)
+        thread_sleep(ops);
+    }
+IRQ_RESTORE
+  }
+
   return read_bytes;
 }
 
-size_t chardev_write(devno_t devno, const char *src, size_t count) {
+
+int chardev_write(devno_t devno, const char *src, size_t count) {
   const struct chardev_ops *ops = chardev_tbl[DEV_MAJOR(devno)];
   if(ops == NULL)
     return -1;
 
-  u32 remain = count;
+  int remain = count;
 IRQ_DISABLE
   while(remain > 0) {
-    u32 n = ops->write(DEV_MINOR(devno), src, remain);
+    int n = ops->write(DEV_MINOR(devno), src, remain);
+    if(n < 0) {
+      count = -1;
+      break;
+    }
     remain -= n;
     src += n;
     if(remain > 0)
@@ -122,6 +186,10 @@ IRQ_RESTORE
   return count;
 }
 
+void chardev_initstate(struct chardev_state *state, int mode) {
+  state->mode = mode;
+  state->linebuf_head = 0;
+}
 
 static int chardev_check_major(devno_t devno) {
   int major = DEV_MAJOR(devno);

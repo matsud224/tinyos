@@ -36,14 +36,16 @@ void com2_isr(void);
 
 static int serial_open(int minor);
 static int serial_close(int minor);
-static u32 serial_read(int minor, char *dest, size_t count);
-static u32 serial_write(int minor, const char *src, size_t count);
+static int serial_read(int minor, char *dest, size_t count);
+static int serial_write(int minor, const char *src, size_t count);
+static struct chardev_state *serial_getstate(int minor);
 
 static const struct chardev_ops serial_chardev_ops = {
   .open = serial_open,
   .close = serial_close,
   .read = serial_read,
   .write = serial_write,
+  .getstate = serial_getstate,
 };
 
 static struct comport{
@@ -54,6 +56,7 @@ static struct comport{
   void (*inthandler)(void);
   struct chardev_buf *rxbuf;
   struct chardev_buf *txbuf;
+  struct chardev_state state;
 } comport[COMPORT_NUM] = {
   {.port = 0, .base = 0x3f8, .irq = 4, .intvec = IRQ_TO_INTVEC(4), .inthandler = com1_inthandler},
   {.port = 1, .base = 0x2f8, .irq = 3, .intvec = IRQ_TO_INTVEC(3), .inthandler = com2_inthandler}
@@ -83,6 +86,8 @@ DRIVER_INIT void serial_init() {
 
     comport[i].rxbuf = cdbuf_create(malloc(SERIAL_BUFSIZE), SERIAL_BUFSIZE);
     comport[i].txbuf = cdbuf_create(malloc(SERIAL_BUFSIZE), SERIAL_BUFSIZE);
+
+    chardev_initstate(&comport[i].state, CDMODE_CANON | CDMODE_ECHO);
 
     pic_clearmask(comport[i].irq);
 
@@ -121,17 +126,9 @@ void serial_isr_common(int port) {
       if(CDBUF_IS_EMPTY(comport[port].rxbuf))
         thread_wakeup(&serial_chardev_ops);
 
-      if(data == '\r')
-        data = '\n';
+      if(!CDBUF_IS_FULL(comport[port].rxbuf))
+        cdbuf_write(comport[port].rxbuf, &data, 1);
 
-
-      if(!CDBUF_IS_FULL(comport[port].rxbuf)) {
-        if(data == 0x7f) {
-          cdbuf_write(comport[port].rxbuf, "\b \b", 3);
-        } else {
-          cdbuf_write(comport[port].rxbuf, &data, 1);
-        }
-      }
       break;
     case 3:
       in8(base+LINESTAT);
@@ -170,25 +167,46 @@ static int serial_close(int minor) {
   return 0;
 }
 
-static u32 serial_read(int minor, char *dest, size_t count) {
+static int serial_read(int minor, char *dest, size_t count) {
   if(serial_check_minor(minor))
     return -1;
 
   struct comport *com = &comport[minor];
-  u32 n = cdbuf_read(com->rxbuf, dest, count);
-  //echo back
-  cdbuf_write(com->txbuf, dest, n);
+  int n = cdbuf_read(com->rxbuf, dest, count);
+
+  if(com->state.mode & CDMODE_ECHO) {
+    for(int i=0; i<n ; i++, dest++) {
+      switch(*dest) {
+      case '\r':
+        cdbuf_write(com->txbuf, "\n", 1);
+        break;
+      case 0x7f:
+        cdbuf_write(com->txbuf, "\b \b", 3);
+        break;
+      default:
+        cdbuf_write(com->txbuf, dest, 1);
+        break;
+      }
+    }
+    serial_send(com->port);
+  }
+  return n;
+}
+
+static int serial_write(int minor, const char *src, size_t count) {
+  if(serial_check_minor(minor))
+    return -1;
+
+  struct comport *com = &comport[minor];
+  int n = cdbuf_write(com->txbuf, src, count);
   serial_send(com->port);
   return n;
 }
 
-static u32 serial_write(int minor, const char *src, size_t count) {
+static struct chardev_state *serial_getstate(int minor) {
   if(serial_check_minor(minor))
     return -1;
 
-  struct comport *com = &comport[minor];
-  u32 n = cdbuf_write(com->txbuf, src, count);
-  serial_send(com->port);
-  return n;
+  return &comport[minor].state;
 }
 

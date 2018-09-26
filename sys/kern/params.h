@@ -45,3 +45,5 @@
 #define ROOTFS_DEV DEVNO(1, 0)
 
 #define INVALID_PID 0
+
+#define MAX_CHARDEV_LINE_CHARS  255

@@ -87,6 +87,6 @@ void thread_main(void *arg UNUSED) {
 
   thread_chdir("/");
 
-  thread_exec_in_usermode("/bin/init");
+  thread_exec_in_usermode("/bin/init", NULL, NULL);
   puts("exec failed");
 }

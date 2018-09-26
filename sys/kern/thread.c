@@ -104,10 +104,62 @@ struct thread *kthread_new(void (*func)(void *), void *arg, const char *name) {
   return t;
 }
 
+
+static char *next_string(char *ptr) {
+  while(*ptr++ != '\0');
+  return ptr;
+}
+
 int thread_exec_in_usermode(const char *path, char *const argv[], char *const envp[]) {
+#define ARGSBUFSIZE 1024
+  static char argsbuf[ARGSBUFSIZE];
+
+  //prepare argv&envp
+  int argc = 0, envc = 0;
+  int bufremain = ARGSBUFSIZE;
+  char *bufptr = argsbuf;
+  for(const char **ptr = argv; ptr != NULL && *ptr != NULL; ptr++, argc++) {
+    size_t len = strnlen(*ptr, ARGSBUFSIZE);
+    if(bufremain >= len+1) {
+      memcpy(bufptr, *ptr, len);
+      bufptr += len;
+      *bufptr++ = '\0';
+      bufremain -= len+1;
+    } else {
+      return -1;
+    }
+  }
+  for(const char **ptr = envp; ptr != NULL && *ptr != NULL; ptr++, envc++) {
+    size_t len = strnlen(*ptr, ARGSBUFSIZE);
+    if(bufremain >= len+1) {
+      memcpy(bufptr, *ptr, len);
+      bufptr += len;
+      *bufptr++ = '\0';
+      bufremain -= len+1;
+    } else {
+      return -1;
+    }
+  }
+
+  int strstart, tablestart;
+  strstart = bufremain;
+  bufremain = align(bufremain, sizeof(char **)) + sizeof(char **);
+  int table_and_argc_size = (argc+envc+2)*sizeof(char **) + sizeof(int);
+  if(bufremain < table_and_argc_size) {
+    return -1;
+  }
+  bufremain -= table_and_argc_size;
+  tablestart = bufremain;
+
   struct file *f = open(path, O_RDONLY);
   if(f == NULL)
     return -1;
+
+  if(!elf32_is_valid_exec(f)) {
+    return -1;
+  }
+
+  lseek(f, 0, SEEK_SET);
 
   vm_map_free(current->vmmap);
   current->vmmap = vm_map_new();
@@ -116,21 +168,36 @@ int thread_exec_in_usermode(const char *path, char *const argv[], char *const en
   void *brk;
   int (*entrypoint)(void) = elf32_load(f, &brk);
   close(f);
-  if(entrypoint == NULL)
-    return -1;
 
   //prepare user space stack
   struct mapper *m = anon_mapper_new();
   current->user_stack_bottom = USER_STACK_BOTTOM;
   current->user_stack_top = USER_STACK_BOTTOM - USER_STACK_INITIAL_SIZE;
   vm_add_area(current->vmmap, current->user_stack_top, USER_STACK_INITIAL_SIZE, m, 0);
-  //char *stackpage = (char *)anon_mapper_add_page(m, USER_STACK_BOTTOM);
+
+  //prepare argv&envp(continue)
+  void *stackpage = (char *)anon_mapper_add_page(m, USER_STACK_BOTTOM - PAGESIZE);
+  char *strptr = (u8 *)stackpage + strstart;
+  char **tableptr = (u8 *)stackpage + tablestart - sizeof(int);
+  memcpy(strptr, argsbuf, ARGSBUFSIZE - strstart);
+  *(int *)tableptr = argc; tableptr++;
+
+  for(int i=0; i<argc; i++) {
+    *tableptr++ = USER_STACK_BOTTOM - PAGESIZE + ((u32)strptr - (u32)stackpage);
+    strptr = next_string(strptr);
+  }
+  *tableptr++ = NULL;
+  for(int i=0; i<envc; i++) {
+    *tableptr++ = USER_STACK_BOTTOM - PAGESIZE + (u32)strptr - (u32)stackpage;
+    strptr = next_string(strptr);
+  }
+  *tableptr++ = NULL;
 
   current->brk = pagealign((u32)brk+(PAGESIZE-1));
 
   flushtlb(current->regs.cr3);
 
-  jmpto_userspace(entrypoint, (void *)(USER_STACK_BOTTOM - 4));
+  jmpto_userspace(entrypoint, (void *)(USER_STACK_BOTTOM - PAGESIZE + tablestart - sizeof(int)));
   return 0; //never return here
 }
 

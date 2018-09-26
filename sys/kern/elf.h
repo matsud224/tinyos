@@ -47,7 +47,7 @@ struct elf32_hdr {
   u16 e_shentsize;
   u16 e_shnum;
   u16 e_shstrndx;
-};
+} PACKED;
 
 
 enum sht {
@@ -108,6 +108,6 @@ struct elf32_phdr {
 };
 
 
-int elf32_is_valid_exec(struct elf32_hdr *hdr);
+int elf32_is_valid_exec(struct file *f);
 void *elf32_load(struct file *f, void **brk);
 

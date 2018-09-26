@@ -358,7 +358,7 @@ int sys_sbrk(int incr) {
   else if(incr == 0)
     return current->brk;
 
-  if(current->brk + incr > current->regs.esp)
+  if(current->brk + incr > current->user_stack_top)
     return -1;
 
   u32 prev_brk = (u32)current->brk;

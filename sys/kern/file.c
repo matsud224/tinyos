@@ -31,6 +31,7 @@ struct file *file_new(void *data, const struct file_ops *ops, int type, int flag
   f->offset = 0;
   mutex_init(&f->mtx);
   mutex_init(&f->rwmtx);
+
   if(f->ops->open) {
     if(f->ops->open(f, flags) != 0) {
       free(f);

@@ -6,12 +6,14 @@
 const struct chardev_ops *chardev_tbl[MAX_CHARDEV];
 static u16 nchardev;
 
+int chardev_file_open(struct file *f);
 int chardev_file_read(struct file *f, void *buf, size_t count);
 int chardev_file_write(struct file *f, const void *buf, size_t count);
 int chardev_file_close(struct file *f);
 int chardev_file_sync(struct file *f);
 
 const struct file_ops chardev_file_ops = {
+  .open = chardev_file_open,
   .read = chardev_file_read,
   .write = chardev_file_write,
   .close = chardev_file_close,
@@ -204,7 +206,7 @@ int chardev_file_open(struct file *f) {
   if(chardev_check_major(vno->devno))
     return -1;
 
-  return chardev_close(vno->devno);
+  return chardev_open(vno->devno);
 }
 
 int chardev_file_read(struct file *f, void *buf, size_t count) {

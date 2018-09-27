@@ -58,6 +58,7 @@ static void page_copy(struct page_entry *pe) {
     return;
   }
 
+  printf("page %x copied\n", pe->pinfo->start);
   struct page_info *pinew = malloc(sizeof(struct page_info));
   memcpy(pinew, pe->pinfo, sizeof(struct page_info));
   pinew->addr = page_alloc();
@@ -97,6 +98,7 @@ vaddr_t anon_mapper_add_page(struct mapper *m, vaddr_t start) {
 
 static void page_entry_free(struct page_entry *pe) {
   if(--(pe->pinfo->ref) == 0) {
+    printf("page %x freed\n", pe->pinfo->start);
     page_free(pe->pinfo->addr);
     free(pe->pinfo);
   }

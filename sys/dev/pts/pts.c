@@ -20,7 +20,7 @@ static const struct chardev_ops pts_chardev_ops = {
   .getstate = pts_getstate,
 };
 
-static int pts_MAJOR;
+static int PTS_MAJOR;
 static mutex pts_mutex;
 
 struct pts {
@@ -33,17 +33,17 @@ struct pts {
 DRIVER_INIT void pts_init() {
   mutex_init(&pts_mutex);
 
-  pts_MAJOR = chardev_register(&pts_chardev_ops);
-  if(pts_MAJOR < 0) {
+  PTS_MAJOR = chardev_register(&pts_chardev_ops);
+  if(PTS_MAJOR < 0) {
     puts("pts: failed to register");
     return;
   }
-  printf("pts: major number = 0x%x\n", pts_MAJOR);
+  printf("pts: major number = 0x%x\n", PTS_MAJOR);
 
   for(int i=0; i<PTS_NUM; i++) {
     pts[i].is_used = 0;
     pts[i].rxbuf = NULL;
-    chardev_initstate(&pts[i].state, CDMODE_CANON | CDMODE_ECHO);
+    chardev_initstate(&pts[i].state, 0);
   }
 }
 
@@ -55,8 +55,10 @@ static int pts_check_minor(int minor) {
 }
 
 static int pts_open(int minor) {
-  if(pts_check_minor(minor) || !pts[minor].is_used)
+  if(pts_check_minor(minor))
     return -1;
+
+  //printf("pts: minor %d,%d opened.\n", minor, PTS_PAIR(minor));
 
   if(pts[minor].rxbuf == NULL)
     pts[minor].rxbuf = cdbuf_create(malloc(PTS_BUFSIZE), PTS_BUFSIZE);
@@ -66,8 +68,6 @@ static int pts_open(int minor) {
 
   pts[minor].is_used = 1;
   pts[PTS_PAIR(minor)].is_used = 1;
-
-  printf("pts: minor %d,%d opened.\n", minor, PTS_PAIR(minor));
 
   return 0;
 }

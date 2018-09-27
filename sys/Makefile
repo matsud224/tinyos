@@ -29,6 +29,7 @@ all:
 .PHONY: clean
 clean:
 	$(RM) $(BINDIR)/kernel.elf
+	$(RM) $(OBJDIR)/*.o
 	$(RM) $(MAP)
 	list='$(SUBDIRS)'; for subdir in $$list; do \
 	$(MAKE) clean -C $$subdir;\

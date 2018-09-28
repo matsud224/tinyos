@@ -15,7 +15,6 @@ struct trap_stack {
 
 void gpe_isr(int errcode) {
   printf("General Protection Exception in thread#%d (%s)\n  errorcode = %d\n", current->pid, GET_THREAD_NAME(current), errcode);
-  while(1);
   thread_exit_with_error();
 }
 

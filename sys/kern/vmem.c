@@ -58,7 +58,6 @@ static void page_copy(struct page_entry *pe) {
     return;
   }
 
-  printf("page %x copied\n", pe->pinfo->start);
   struct page_info *pinew = malloc(sizeof(struct page_info));
   memcpy(pinew, pe->pinfo, sizeof(struct page_info));
   pinew->addr = page_alloc();
@@ -98,7 +97,6 @@ vaddr_t anon_mapper_add_page(struct mapper *m, vaddr_t start) {
 
 static void page_entry_free(struct page_entry *pe) {
   if(--(pe->pinfo->ref) == 0) {
-    printf("page %x freed\n", pe->pinfo->start);
     page_free(pe->pinfo->addr);
     free(pe->pinfo);
   }
@@ -193,6 +191,9 @@ paddr_t file_mapper_request(struct mapper *m, vaddr_t in_area_off) {
 }
 
 int file_mapper_yield(struct mapper *m, paddr_t pdt) {
+  //TODO: pages may be dirty!
+  return -1;
+  /*
   struct file_mapper *fm = container_of(m, struct file_mapper, mapper);
 
   int count = 0;
@@ -211,6 +212,7 @@ int file_mapper_yield(struct mapper *m, paddr_t pdt) {
     }
   }
   return (count > 0)?0:-1;
+  */
 }
 
 void file_mapper_free(struct mapper *m) {
@@ -287,6 +289,7 @@ struct vm_area *vm_area_dup(struct vm_area *olda) {
   struct vm_area  *newa = malloc(sizeof(struct vm_area));
   memcpy(newa, olda, sizeof(struct vm_area));
   newa->mapper = olda->mapper->ops->dup(olda->mapper);
+  newa->mapper->area = newa;
   return newa;
 }
 
@@ -348,6 +351,7 @@ struct vm_area *vm_findarea(struct vm_map *map, vaddr_t addr) {
     if(a->start <= addr && (a->start+a->size) > addr)
       return a;
   }
+  puts("not found");
   return NULL;
 }
 

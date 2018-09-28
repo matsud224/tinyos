@@ -63,7 +63,6 @@ paddr_t pagetbl_new() {
 }
 
 void pagetbl_add_mapping(u32 *pdt, vaddr_t vaddr, paddr_t paddr) {
-  //printf("add_mapping: pid %d, vaddr %x, paddr %x\n", current->pid, vaddr, paddr);
   u32 *v_pdt = (u32 *)PHYS_TO_KERN_VMEM(pdt);
   int pdtindex = vaddr>>22;
   int ptindex = (vaddr>>12) & 0x3ff;

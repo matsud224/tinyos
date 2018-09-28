@@ -336,8 +336,6 @@ void thread_set_alarm(void *cause, u32 expire) {
 }
 
 void thread_exit(int exit_code) {
-  printf("thread#%d (%s) exit with %d\n", current->pid, GET_THREAD_NAME(current), exit_code);
-
   for(int i=0; i<MAX_FILES; i++)
     if(current->files[i])
       close(current->files[i]);
@@ -354,6 +352,8 @@ void thread_exit(int exit_code) {
   } else {
     current->state = TASK_STATE_EXITED;
   }
+
+  printf("thread#%d (%s) exit with %d\n", current->pid, GET_THREAD_NAME(current), exit_code);
 
   thread_yield();
 }

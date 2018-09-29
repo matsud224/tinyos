@@ -351,7 +351,6 @@ struct vm_area *vm_findarea(struct vm_map *map, vaddr_t addr) {
     if(a->start <= addr && (a->start+a->size) > addr)
       return a;
   }
-  puts("not found");
   return NULL;
 }
 

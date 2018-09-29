@@ -156,7 +156,7 @@ struct minix3_vnode {
   struct vnode vnode;
 };
 
-#define MINIX3_INODES_PER_MBLOCK	(MBLOCKSIZE / sizeof (struct minix3_inode))
+#define MINIX3_INODES_PER_MBLOCK	(MBLOCKSIZE / sizeof(struct minix3_inode))
 #define MINIX3_DENTS_PER_MBLOCK		(MBLOCKSIZE / sizeof(struct minix3_dent))
 #define MINIX3_INODES_PER_BLOCK		(MINIX3_INODES_PER_MBLOCK / BLOCKS_PER_MBLOCK)
 #define MINIX3_DENTS_PER_BLOCK		(MINIX3_DENTS_PER_MBLOCK / BLOCKS_PER_MBLOCK)
@@ -385,7 +385,6 @@ static zone_t zone_vtop(struct minix3_vnode *m3vno, zone_t vzone, int is_write_a
     return 0;
   }
   vzone -= minix3->zone_boundary[depth-1];
-  //divisor = minix3->zone_divisor[depth-1];
 
   for(int i=0; i<depth; i++) {
     if(!is_write_access && current_zone == MINIX3_INVALID_ZONE)
@@ -526,6 +525,21 @@ static struct fs *minix3_mount(devno_t devno) {
   return &minix3->fs;
 }
 
+static void minix3_inode_show(struct minix3_fs *minix3, u32 number) {
+  if(number == MINIX3_INVALID_INODE)
+    return;
+
+  u32 inoblk = (number-1) / MINIX3_INODES_PER_BLOCK;
+  u32 inooff = (number-1) % MINIX3_INODES_PER_BLOCK;
+  struct blkbuf *bbuf = blkbuf_get(minix3->devno, get_inodetableblk(&minix3->sb) + inoblk);
+  blkbuf_read(bbuf);
+
+  struct minix3_inode *ino = (struct minix3_inode *)(bbuf->addr) + inooff;
+  printf("number %d: i_size = %d\n", number, ino->i_size);
+  blkbuf_release(bbuf);
+  return;
+}
+
 static struct vnode *minix3_getroot(struct fs *fs) {
   struct minix3_fs *minix3 = container_of(fs, struct minix3_fs, fs);
   return minix3_vnode_get(minix3, MINIX3_ROOT_INODE);
@@ -538,7 +552,6 @@ static int minix3_firstblk(struct minix3_vnode *m3vno, size_t file_off, int is_w
   zone_t current_zone = zone_vtop(m3vno, vzone, is_write_access);
 
   if(current_zone == MINIX3_INVALID_ZONE) {
-    puts("minix3: invalid zone");
     return -1;
   }
 
@@ -595,7 +608,8 @@ static struct vnode *minix3_dentop(struct vnode *vnode, const char *name, int op
         blkno > 0 && remain > 0; ) {
     bbuf = blkbuf_get(minix3->devno, blkno);
     blkno = minix3_nextblk(m3vno, blkno, pos + MINIX3_DENTS_PER_BLOCK*MINIX3_DENT_SIZE, is_write_access);
-    blkbuf_readahead(bbuf, blkno);
+    if(blkno > 0)
+      blkbuf_readahead(bbuf, blkno);
 
     struct minix3_dent *dent = (struct minix3_dent *)bbuf->addr;
     for(u32 i=0; i < MINIX3_DENTS_PER_BLOCK && remain > 0; i++, dent++) {
@@ -692,8 +706,8 @@ int minix3_read(struct file *f, void *buf, size_t count) {
     u32 inblk_off = pos % BLOCKSIZE;
     u32 copylen = MIN(BLOCKSIZE - inblk_off, remain);
     blkno = minix3_nextblk(m3vno, blkno, pos+copylen, 0);
-    //printf("-- blkno = %d\n", blkno);
-    blkbuf_readahead(bbuf, blkno);
+    if(blkno > 0)
+      blkbuf_readahead(bbuf, blkno);
     memcpy(buf, bbuf->addr + inblk_off, copylen);
     blkbuf_release(bbuf);
     buf += copylen;
@@ -817,7 +831,8 @@ int minix3_getdents(struct file *f, struct dirent *dirp, size_t count) {
     u32 inblk_off = pos % BLOCKSIZE;
     u32 inblk_remain = MIN(BLOCKSIZE - inblk_off, remain);
     blkno = minix3_nextblk(m3vno, blkno, pos + inblk_remain, 0);
-    blkbuf_readahead(bbuf, blkno);
+    if(blkno > 0)
+      blkbuf_readahead(bbuf, blkno);
     struct minix3_dent *dent = (struct minix3_dent *)(bbuf->addr + inblk_off);
 
     while(inblk_remain >= MINIX3_DENT_SIZE

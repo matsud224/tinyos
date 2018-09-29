@@ -463,7 +463,7 @@ int fstat(struct file *f, struct stat *buf) {
 
 
 int sys_open(const char *path, int flags) {
-  if(address_check(path))
+  if(string_check(path))
     return -1;
   int fd = fd_get();
   if(fd < 0)
@@ -475,25 +475,25 @@ int sys_open(const char *path, int flags) {
 }
 
 int sys_mknod(const char *path, int mode, devno_t devno) {
-  if(address_check(path))
+  if(string_check(path))
     return -1;
   return mknod(path, mode, devno);
 }
 
 int sys_link(const char *oldpath, const char *newpath) {
-  if(address_check(oldpath) || address_check(newpath))
+  if(string_check(oldpath) || string_check(newpath))
     return -1;
   return link(oldpath, newpath);
 }
 
 int sys_unlink(const char *path) {
-  if(address_check(path))
+  if(string_check(path))
     return -1;
   return unlink(path);
 }
 
 int sys_stat(const char *path, struct stat *buf) {
-  if(address_check(path) || buffer_check(buf, sizeof(struct stat)))
+  if(string_check(path) || buffer_check(buf, sizeof(struct stat)))
     return -1;
   return stat(path, buf);
 }

@@ -54,6 +54,7 @@ enum seek_whence {
   SEEK_END,
 };
 
+int is_invalid_fd_num(int fd);
 int is_invalid_fd(int fd);
 int fd_get(void);
 struct file *file_new(void *data, const struct file_ops *ops, int type, int flags);

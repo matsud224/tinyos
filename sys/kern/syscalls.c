@@ -37,6 +37,7 @@ u32 syscall_truncate(u32, u32, u32, u32, u32);
 u32 syscall_getdents(u32, u32, u32, u32, u32);
 u32 syscall_dup(u32, u32, u32, u32, u32);
 u32 syscall_chdir(u32, u32, u32, u32, u32);
+u32 syscall_dup2(u32, u32, u32, u32, u32);
 
 u32 (*syscall_table[NSYSCALLS])(u32, u32, u32, u32, u32) = {
   syscall_exit,     //0
@@ -69,15 +70,23 @@ u32 (*syscall_table[NSYSCALLS])(u32, u32, u32, u32, u32) = {
   syscall_dup,      //27
   syscall_getdents, //28
   syscall_chdir,    //29
+  syscall_dup,      //30
 };
 
 
-int address_check(const void *addr UNUSED) {
-  return 0; //TODO
+int string_check(const char *str) {
+  do {
+    if(str >= KERN_VMEM_ADDR)
+      return -1;
+  }while(*str++ != '\0');
+  return 0;
 }
 
-int buffer_check(const void *buf UNUSED, size_t count UNUSED) {
-  return 0; //TODO
+int buffer_check(const void *buf, size_t count) {
+  u64 tail = (u32)buf + count;
+  if(tail > KERN_VMEM_ADDR)
+    return -1;
+  return 0;
 }
 
 u32 syscall_exit(u32 a0, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
@@ -208,4 +217,8 @@ u32 syscall_dup(u32 a0, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUS
 
 u32 syscall_chdir(u32 a0, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
   return sys_chdir(a0);
+}
+
+u32 syscall_dup2(u32 a0, u32 a1, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
+  return sys_dup2(a0, a1);
 }

@@ -6,8 +6,11 @@
 #include <kern/syscalls.h>
 #include <kern/chardev.h>
 
+int is_invalid_fd_num(int fd) {
+  return (fd < 0) || (fd >= MAX_FILES);
+}
 int is_invalid_fd(int fd) {
-  return (fd < 0) || (fd >= MAX_FILES) || (current->files[fd] == NULL);
+  return is_invalid_fd_num(fd) || (current->files[fd] == NULL);
 }
 
 int fd_get() {
@@ -200,6 +203,21 @@ int sys_dup(int oldfd) {
   int newfd = fd_get();
   if(newfd < 0)
     return -1;
+  current->files[newfd] = dup(current->files[oldfd]);
+  if(current->files[newfd] == NULL)
+    return -1;
+  return newfd;
+}
+
+int sys_dup2(int oldfd, int newfd) {
+  if(is_invalid_fd(oldfd) || is_invalid_fd_num(newfd))
+    return -1;
+  if(oldfd == newfd)
+    return newfd;
+  if(current->files[newfd] != NULL) {
+    close(current->files[newfd]);
+    current->files[newfd] = NULL;
+  }
   current->files[newfd] = dup(current->files[oldfd]);
   if(current->files[newfd] == NULL)
     return -1;

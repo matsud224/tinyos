@@ -21,6 +21,7 @@ void gpe_isr(int errcode) {
 void pf_isr(vaddr_t addr, u32 eip, u32 esp, u32 eax) {
   //printf("Page fault in thread#%d (%s) addr=0x%x (eip=0x%x, esp=0x%x)\n", current->pid, GET_THREAD_NAME(current), addr, eip, esp);
   struct vm_area *varea;
+  int try = 0;
 try_findarea:
   varea = vm_findarea(current->vmmap, addr);
   if(varea == NULL) {
@@ -29,8 +30,8 @@ try_findarea:
       current->user_stack_top -= USER_STACK_GROW_SIZE;
       if(current->brk < current->user_stack_top) {
         vm_add_area(current->vmmap, current->user_stack_top, USER_STACK_GROW_SIZE, anon_mapper_new(), 0);
-        puts("STACK AUTO GROW");
-        goto try_findarea;
+        if(!try++)
+          goto try_findarea;
       }
     }
     printf("Segmentation Fault in thread#%d (%s) addr = 0x%x (eip = 0x%x, esp = 0x%x)\n", current->pid, GET_THREAD_NAME(current), addr, eip, esp);

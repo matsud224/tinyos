@@ -262,9 +262,10 @@ err:
     vnode_release(prevvno);
 
   if(parent != NULL)
-    *parent = NULL;
+    *parent = prevvno;
   if(fname != NULL)
-    *fname = NULL;
+    *fname = strdup(name);
+  printf("name = %s, parent = %x, root= %x\n", name?name:"?", prevvno, rootdir);
 
   return NULL;
 }

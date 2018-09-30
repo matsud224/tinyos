@@ -190,7 +190,7 @@ static struct minix3_vnode *minix3_vnode_new(struct fs *fs, u32 number, struct m
   return vno;
 }
 
-static struct vnode *minix3_vnode_get(struct minix3_fs *minix3, u32 number) {
+static struct vnode *minix3_vnode_get(struct minix3_fs *minix3, u32 number, struct minix3_inode *ino) {
   if(number == MINIX3_INVALID_INODE)
     return NULL;
 
@@ -201,15 +201,17 @@ static struct vnode *minix3_vnode_get(struct minix3_fs *minix3, u32 number) {
     return vno;
   }
 
-  u32 inoblk = (number-1) / MINIX3_INODES_PER_BLOCK;
-  u32 inooff = (number-1) % MINIX3_INODES_PER_BLOCK;
-  struct blkbuf *bbuf = blkbuf_get(minix3->devno, get_inodetableblk(&minix3->sb) + inoblk);
-  blkbuf_read(bbuf);
+  if(ino == NULL) {
+    u32 inoblk = (number-1) / MINIX3_INODES_PER_BLOCK;
+    u32 inooff = (number-1) % MINIX3_INODES_PER_BLOCK;
+    struct blkbuf *bbuf = blkbuf_get(minix3->devno, get_inodetableblk(&minix3->sb) + inoblk);
+    blkbuf_read(bbuf);
 
-  struct minix3_inode *ino = (struct minix3_inode *)(bbuf->addr) + inooff;
+    ino = (struct minix3_inode *)(bbuf->addr) + inooff;
+    blkbuf_release(bbuf);
+  }
   struct minix3_vnode *m3vno = minix3_vnode_new(&minix3->fs, number, ino);
   vno = &m3vno->vnode;
-  blkbuf_release(bbuf);
   if(vcache_add(&minix3->fs, vno)) {
     //vcache is full
     minix3_vfree(vno);
@@ -542,7 +544,7 @@ static void minix3_inode_show(struct minix3_fs *minix3, u32 number) {
 
 static struct vnode *minix3_getroot(struct fs *fs) {
   struct minix3_fs *minix3 = container_of(fs, struct minix3_fs, fs);
-  return minix3_vnode_get(minix3, MINIX3_ROOT_INODE);
+  return minix3_vnode_get(minix3, MINIX3_ROOT_INODE, NULL);
 }
 
 static int minix3_firstblk(struct minix3_vnode *m3vno, size_t file_off, int is_write_access) {
@@ -618,7 +620,7 @@ static struct vnode *minix3_dentop(struct vnode *vnode, const char *name, int op
         if(dent->inode == MINIX3_INVALID_INODE)
           break;
         if(strncmp(name, dent->name, MINIX3_MAX_NAME_LEN) == 0) {
-          result = minix3_vnode_get(minix3, dent->inode);
+          result = minix3_vnode_get(minix3, dent->inode, NULL);
           if(status != NULL)
             *status = LOOKUP_FOUND;
           goto exit;
@@ -628,7 +630,7 @@ static struct vnode *minix3_dentop(struct vnode *vnode, const char *name, int op
         if(dent->inode == MINIX3_INVALID_INODE)
           break;
         if(strcmp(".", dent->name) && strcmp("..", dent->name)) {
-          result = minix3_vnode_get(minix3, dent->inode);
+          result = minix3_vnode_get(minix3, dent->inode, NULL);
           goto exit;
         }
         break;
@@ -892,9 +894,11 @@ int minix3_mknod(struct vnode *parent, const char *name, int mode, devno_t devno
   ino_t number = minix3_inumber_get(minix3);
   if(number == MINIX3_INVALID_INODE)
     return -1;
-  struct vnode *vno = minix3_vnode_get(minix3, number);
+
+  struct vnode *vno = minix3_vnode_get(minix3, number, &inode);
   if(vno == NULL)
     return -1;
+
   struct minix3_vnode *m3vno = container_of(vno, struct minix3_vnode, vnode);
   m3vno->minix3 = inode;
   vnode_markdirty(vno);
@@ -910,7 +914,6 @@ int minix3_mknod(struct vnode *parent, const char *name, int mode, devno_t devno
     minix3_link(vno, "..", parent);
     break;
   }
-
 
   return 0;
 }

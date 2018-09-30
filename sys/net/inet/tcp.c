@@ -1288,7 +1288,6 @@ void *tcp_sock_accept(void *pcb, struct sockaddr *client_addr){
 retry:
     while(true){
       if(!queue_is_empty(&cb->cbqueue)) {
-        printf("newcb: %x\n", cb);
         pending = list_entry(queue_dequeue(&cb->cbqueue), struct tcpcb, qlink);
 
         pending->iss = tcp_geninitseq();
@@ -1304,9 +1303,7 @@ retry:
 
         break;
       } else {
-        printf("sleep: %x\n", cb);
         tcp_sleep_thread(cb);
-        printf("wakeup: %x\n", cb);
       }
     }
 

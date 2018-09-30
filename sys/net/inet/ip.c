@@ -210,7 +210,7 @@ void ip_rx(struct pktbuf *pkt) {
     if(list_is_empty(&info->holelist)) {
       //フラグメントが揃った
       //printf("fragmented packet (%dbytes)\n", info->headerlen + info->datalen);
-      pkt = pktbuf_alloc(info->headerlen + info->datalen);
+      pkt = pktbuf_alloc(info->headerlen + info->datalen, 0);
       pktbuf_copyin(pkt, info->head_frame->head - info->headerlen, info->headerlen, 0);
       iphdr = (struct ip_hdr *)pkt->head;
       pktbuf_remove_header(pkt, info->headerlen);
@@ -344,8 +344,8 @@ void ip_tx(struct pktbuf *data, in_addr_t srcaddr, in_addr_t dstaddr, u8 proto) 
         MIN(remainlen + sizeof(struct ip_hdr), MTU);
       size_t frag_datalen = frag_totallen - sizeof(struct ip_hdr);
       u8 offset = datalen - remainlen;
-      struct pktbuf *pkt = pktbuf_alloc(sizeof(struct ether_hdr) + frag_totallen);
-      pktbuf_reserve_headroom(pkt, sizeof(struct ether_hdr) + sizeof(struct ip_hdr));
+      struct pktbuf *pkt = pktbuf_alloc(MAX_HDRLEN_IP + frag_totallen, 0);
+      pktbuf_reserve_headroom(pkt, MAX_HDRLEN_IP);
       pktbuf_copyin(pkt, data->head + offset, frag_datalen, 0);
       fill_iphdr((struct ip_hdr *)pktbuf_add_header(pkt, sizeof(struct ip_hdr)), frag_datalen,
                    currentid, remainlen>0, offset, proto, r_dst, devno);

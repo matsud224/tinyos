@@ -4,6 +4,7 @@
 #include <kern/list.h>
 #include <kern/file.h>
 #include <kern/fs.h>
+#include <kern/lock.h>
 #include <stdint.h>
 #include <stddef.h>
 
@@ -81,6 +82,7 @@ int thread_exec_in_usermode(const char *path, char *const argv[], char *const en
 void thread_run(struct thread *t);
 void thread_sched(void);
 void thread_sleep(const void *cause);
+void thread_sleep_after_unlock(void *cause, mutex *mtx);
 void thread_wakeup(const void *cause);
 void thread_yield(void);
 void thread_set_alarm(void *cause, u32 expire);

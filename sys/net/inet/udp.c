@@ -238,7 +238,7 @@ static int udp_sock_sendto(void *pcb, const char *msg, size_t len, int flags UNU
   if(ip_routing(local_addr.addr, ((struct sockaddr_in *)dest_addr)->addr, &r_src, &r_dst, &devno))
     return -1; //no interface to send
 
-  struct pktbuf *udpseg = pktbuf_alloc(MAX_HDRLEN_UDP + len);
+  struct pktbuf *udpseg = pktbuf_alloc(MAX_HDRLEN_UDP + len, 0);
   pktbuf_reserve_headroom(udpseg, MAX_HDRLEN_UDP);
 
   pktbuf_copyin(udpseg, msg, len, 0);

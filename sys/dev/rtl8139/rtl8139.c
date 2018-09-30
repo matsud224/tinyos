@@ -213,7 +213,7 @@ void rtl8139_init(struct pci_dev *thisdev) {
   //enable rx&tx
   out8(RTLREG(CR), CR_RE|CR_TE);
   //setup interrupt
-  idt_register(rtldev.irq+0x20, IDT_INTGATE, rtl8139_inthandler); 
+  idt_register(rtldev.irq+0x20, IDT_INTGATE, rtl8139_inthandler);
   pic_clearmask(rtldev.irq);
 }
 
@@ -236,15 +236,14 @@ IRQ_DISABLE
       goto out;
     }
 
-
     pkt = list_entry(queue_dequeue(&rtldev.txqueue), struct pktbuf, link);
 
     out32(RTLREG(TX_TSAD[rtldev.txdesc_head]), KERN_VMEM_TO_PHYS(pkt->head));
     rtldev.txdesc_pkt[rtldev.txdesc_head] = pkt;
-    out32(RTLREG(TX_TSD[rtldev.txdesc_head]), pktbuf_get_size(pkt)); 
+    out32(RTLREG(TX_TSD[rtldev.txdesc_head]), pktbuf_get_size(pkt));
     rtldev.txdesc_free--;
     rtldev.txdesc_head = (rtldev.txdesc_head+1) % TXDESC_NUM;
-  }else {
+  } else {
     error = -2;
   }
 out:
@@ -285,14 +284,14 @@ IRQ_DISABLE
 	if(!queue_is_full(&rtldev.rxqueue)) {
     char *buf = malloc(rx_size-4);
     memcpy(buf, rtldev.rxbuf+offset+4, rx_size-4);
-    struct pktbuf *pkt = pktbuf_create(buf, rx_size-4, free);
+    struct pktbuf *pkt = pktbuf_create(buf, rx_size-4, free, 0);
     queue_enqueue(&pkt->link, &rtldev.rxqueue);
     //printf("received %dbytes\n", rx_size-4);
 	} else {
     //printf("dropped %dbytes\n", rx_size-4);
     error = -3;
   }
-  
+
 out:
   rtldev.rxbuf_index = (offset + rx_size + 4 + 3) & ~3;
   out16(RTLREG(CAPR), rtldev.rxbuf_index - 16);
@@ -318,14 +317,18 @@ void rtl8139_isr() {
 
   while(rtldev.txdesc_free < 4 &&
     (in32(RTLREG(TX_TSD[rtldev.txdesc_tail]))&(TSD_OWN|TSD_TOK)) == (TSD_OWN|TSD_TOK)) {
-    pktbuf_free(rtldev.txdesc_pkt[rtldev.txdesc_tail]);
+    struct pktbuf *txed_pkt = rtldev.txdesc_pkt[rtldev.txdesc_tail];
+    if((txed_pkt->flags & PKTBUF_SUPPRESS_FREE_AFTER_TX) == 0) {
+      pktbuf_free(txed_pkt);
+    }
+    rtldev.txdesc_pkt[rtldev.txdesc_tail] = NULL;
     rtldev.txdesc_tail = (rtldev.txdesc_tail+1) % TXDESC_NUM;
     rtldev.txdesc_free++;
   }
 
   if(isr & ISR_TOK)
     workqueue_add(tx_wq, rtl8139_tx_all, NULL);
-  
+
   if(isr & ISR_ROK)
     workqueue_add(rx_wq, rtl8139_rx_all, NULL);
 

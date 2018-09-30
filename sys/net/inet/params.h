@@ -26,5 +26,5 @@
 
 #define MAX_HDRLEN_ETHER (sizeof(struct ether_hdr))
 #define MAX_HDRLEN_IP (MAX_HDRLEN_ETHER+sizeof(struct ip_hdr)+MAX_OPTLEN_IP)
-#define MAX_HDRLEN_UDP (MAX_HDRLEN_ETHER+MAX_HDRLEN_IP+sizeof(struct udp_hdr))
-#define MAX_HDRLEN_TCP (MAX_HDRLEN_ETHER+MAX_HDRLEN_IP+60)
+#define MAX_HDRLEN_UDP (MAX_HDRLEN_IP+sizeof(struct udp_hdr))
+#define MAX_HDRLEN_TCP (MAX_HDRLEN_IP+60)

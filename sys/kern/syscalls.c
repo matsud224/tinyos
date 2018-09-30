@@ -70,7 +70,7 @@ u32 (*syscall_table[NSYSCALLS])(u32, u32, u32, u32, u32) = {
   syscall_dup,      //27
   syscall_getdents, //28
   syscall_chdir,    //29
-  syscall_dup,      //30
+  syscall_dup2,     //30
 };
 
 

@@ -184,9 +184,9 @@ void arp_rx(struct pktbuf *frm){
 
 static void send_arprequest(in_addr_t dstaddr, devno_t devno){
   struct pktbuf *req =
-    pktbuf_alloc(sizeof(struct ether_hdr) + sizeof(struct ether_arp));
+    pktbuf_alloc(MAX_HDRLEN_ETHER + sizeof(struct ether_arp), 0);
 
-  pktbuf_reserve_headroom(req, sizeof(struct ether_hdr) + sizeof(struct ether_arp));
+  pktbuf_reserve_headroom(req, MAX_HDRLEN_ETHER + sizeof(struct ether_arp));
   struct ether_arp *earp =
    (struct ether_arp *) pktbuf_add_header(req, sizeof(struct ether_arp));
 

@@ -104,7 +104,7 @@ static int pts_write(int minor, const char *src, size_t count) {
 
 static struct chardev_state *pts_getstate(int minor) {
   if(pts_check_minor(minor))
-    return -1;
+    return NULL;
 
   return &pts[minor].state;
 }

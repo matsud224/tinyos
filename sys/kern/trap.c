@@ -39,6 +39,7 @@ try_findarea:
   } else {
     paddr_t paddr = varea->mapper->ops->request(varea->mapper, addr - varea->start);
     pagetbl_add_mapping((u32 *)current->regs.cr3, addr, paddr);
+    u8 *vaddr = (u8 *)PHYS_TO_KERN_VMEM(paddr) + (addr & 0xfff);
     flushtlb(current->regs.cr3);
   }
 }

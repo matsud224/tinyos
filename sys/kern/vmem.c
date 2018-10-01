@@ -151,8 +151,6 @@ struct mapper *anon_mapper_new() {
 
 paddr_t file_mapper_request(struct mapper *m, vaddr_t in_area_off) {
   struct file_mapper *fm = container_of(m, struct file_mapper, mapper);
-  vaddr_t st = pagealign(in_area_off);
-  vaddr_t end = pagealign(in_area_off) + PAGESIZE;
 
   vaddr_t start = pagealign(m->area->start+in_area_off);
   struct page_entry *pe;
@@ -165,20 +163,30 @@ paddr_t file_mapper_request(struct mapper *m, vaddr_t in_area_off) {
       return NULL;
     list_pushback(&pe->link, &m->page_list);
 
+    u32 a_page = pagealign(in_area_off);
+    u32 f_st_page = pagealign(m->area->offset);
+    u32 f_end_page = pagealign(m->area->offset + fm->len);
     size_t readlen = PAGESIZE;
-    if(st <= m->area->offset + fm->len && end > m->area->offset + fm->len)
-      readlen -= end - (m->area->offset + fm->len);
-    if(st <= m->area->offset && end > m->area->offset)
-      readlen -= m->area->offset;
+    u32 buf_write_off = 0;
+    if(a_page < f_st_page || a_page > f_end_page)
+      readlen = 0;
+    else if(a_page > f_st_page && a_page < f_end_page)
+      readlen = PAGESIZE;
+    else {
+      if(a_page == f_st_page) {
+        buf_write_off = m->area->offset & (PAGESIZE-1);
+        readlen -= buf_write_off;
+      }
+      if(a_page == f_end_page) {
+        readlen -= PAGESIZE - ((m->area->offset + fm->len) & (PAGESIZE-1));
+      }
+    }
 
     if(readlen != 0) {
       u32 read_bytes;
       mutex_lock(&pe->pinfo->mtx);
-      lseek(fm->file, st + fm->file_off, SEEK_SET);
-      if(st <= m->area->offset && end > m->area->offset)
-        read_bytes = read(fm->file, pe->pinfo->addr+m->area->offset, readlen);
-      else
-        read_bytes = read(fm->file, pe->pinfo->addr, readlen);
+      lseek(fm->file, a_page + buf_write_off + fm->file_off - m->area->offset, SEEK_SET);
+      read_bytes = read(fm->file, pe->pinfo->addr + buf_write_off, readlen);
 
       if(read_bytes < readlen)
         puts("fatal: read failed");

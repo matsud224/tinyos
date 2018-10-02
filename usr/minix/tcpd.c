@@ -8,7 +8,7 @@
 #include <string.h>
 #include <ctype.h>
 
-#define TELNET_PORT    12345
+#define PORT_NUM       12345
 #define SHELL_NAME     "/bin/init"
 
 int wait_incoming() {
@@ -17,7 +17,7 @@ int wait_incoming() {
   struct sockaddr_in client;
   sock0 = socket(PF_INET, SOCK_STREAM);
   addr.family = PF_INET;
-  addr.port = hton16(TELNET_PORT);
+  addr.port = hton16(PORT_NUM);
   addr.addr = INADDR_ANY;
   bind(sock0, (struct sockaddr *)&addr);
   listen(sock0, 4);

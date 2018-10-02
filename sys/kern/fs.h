@@ -34,9 +34,23 @@ struct vnode {
 };
 
 struct stat {
-  u32 st_mode;
-  devno_t st_dev;
-  size_t st_size;
+  unsigned short st_dev;
+  unsigned short st_ino;
+  unsigned short st_mode;
+  unsigned short st_nlink;
+  unsigned short st_uid;
+  unsigned short st_gid;
+  int   st_rdev;
+  long  st_size;
+  long  st_atime;
+  long  st_spare1;
+  long  st_mtime;
+  long  st_spare2;
+  long  st_ctime;
+  long  st_spare3;
+  long  st_blksize;
+  long  st_blocks;
+  long	st_spare4[2];
 };
 
 struct dirent {

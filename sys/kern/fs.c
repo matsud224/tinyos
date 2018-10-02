@@ -265,7 +265,7 @@ err:
     *parent = prevvno;
   if(fname != NULL)
     *fname = strdup(name);
-  printf("name = %s, parent = %x, root= %x\n", name?name:"?", prevvno, rootdir);
+  //printf("name = %s, parent = %x, root= %x\n", name?name:"?", prevvno, rootdir);
 
   return NULL;
 }

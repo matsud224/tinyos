@@ -951,6 +951,8 @@ int minix3_stat(struct vnode *vno, struct stat *buf) {
 
   bzero(buf, sizeof(struct stat));
   buf->st_dev = minix3->devno;
+  buf->st_ino = vno->number;
+  buf->st_nlink = m3vno->minix3.i_nlinks;
   buf->st_mode =  m3vno->minix3.i_mode & S_IFMT;
   buf->st_size = m3vno->minix3.i_size;
 

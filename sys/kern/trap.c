@@ -30,7 +30,7 @@ try_findarea:
       current->user_stack_top -= USER_STACK_GROW_SIZE;
       if(current->brk < current->user_stack_top) {
         vm_add_area(current->vmmap, current->user_stack_top, USER_STACK_GROW_SIZE, anon_mapper_new(), 0);
-        if(!try++)
+        if(try++ < 5)
           goto try_findarea;
       }
     }

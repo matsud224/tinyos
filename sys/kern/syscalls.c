@@ -38,6 +38,7 @@ u32 syscall_getdents(u32, u32, u32, u32, u32);
 u32 syscall_dup(u32, u32, u32, u32, u32);
 u32 syscall_chdir(u32, u32, u32, u32, u32);
 u32 syscall_dup2(u32, u32, u32, u32, u32);
+u32 syscall_mknod(u32, u32, u32, u32, u32);
 
 u32 (*syscall_table[NSYSCALLS])(u32, u32, u32, u32, u32) = {
   syscall_exit,     //0
@@ -71,6 +72,7 @@ u32 (*syscall_table[NSYSCALLS])(u32, u32, u32, u32, u32) = {
   syscall_getdents, //28
   syscall_chdir,    //29
   syscall_dup2,     //30
+  syscall_mknod,    //31
 };
 
 
@@ -221,4 +223,8 @@ u32 syscall_chdir(u32 a0, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UN
 
 u32 syscall_dup2(u32 a0, u32 a1, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
   return sys_dup2(a0, a1);
+}
+
+u32 syscall_mknod(u32 a0, u32 a1, u32 a2, u32 a3 UNUSED, u32 a4 UNUSED) {
+  return sys_mknod(a0, a1, a2);
 }

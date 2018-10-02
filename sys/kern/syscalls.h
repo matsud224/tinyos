@@ -1,6 +1,6 @@
 #include <kern/kernlib.h>
 
-#define NSYSCALLS 31
+#define NSYSCALLS 32
 
 extern u32 (*syscall_table[NSYSCALLS])(u32, u32, u32, u32, u32);
 

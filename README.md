@@ -1,6 +1,8 @@
 # tinyos
 An UNIX-like toy operating system runs on x86 CPU
 
+Modified gcc and newlib for cross-compile of userland applications are [here](https://github.com/matsud224/tinyos-cross).
+
 # Build
 TODO
 

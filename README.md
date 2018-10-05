@@ -26,7 +26,7 @@ TODO
   * (implemented exit, close, execve, fork, fstat, getpid, isatty, link, lseek, open, read, sbrk, stat, unlink, wait and write)
 
 # References(random order)
-* OSDev.org(https://wiki.osdev.org/Porting_GCC_to_your_OS)
+* OSDev.org(https://wiki.osdev.org/Main_Page)
 * はじめて読む486(ASCII)
 * 0から作るOS開発(http://softwaretechnique.jp/OS_Development/scratchbuild.html)
 * はじめてのOSコードリーディング(技術評論社)

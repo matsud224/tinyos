@@ -1,6 +1,5 @@
 #pragma once
 #include <kern/kernlib.h>
-#include <kern/addrspace.h>
 #include <kern/lock.h>
 
 #define MAX_FILE_NAME 255

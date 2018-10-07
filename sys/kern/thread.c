@@ -161,6 +161,8 @@ int thread_exec_in_usermode(const char *path, char *const argv[], char *const en
 
   lseek(f, 0, SEEK_SET);
 
+  current->name = strdup(path);
+
   vm_map_free(current->vmmap);
   current->vmmap = vm_map_new();
   current->regs.cr3 = pagetbl_new();
@@ -392,6 +394,31 @@ int thread_chdir(const char *path) {
   return -1;
 }
 
+int gettents(struct threadent *thp, size_t count) {
+  size_t nfoundent = 0;
+  for(int i=0; i<MAX_THREADS && count > 0; i++) {
+    if(thread_tbl[i] != NULL) {
+      thp[nfoundent].state = thread_tbl[i]->state;
+      thp[nfoundent].flags = thread_tbl[i]->flags;
+      thp[nfoundent].pid   = thread_tbl[i]->pid;
+      thp[nfoundent].ppid  = thread_tbl[i]->ppid;
+      char *tname = thread_tbl[i]->name;
+      if(tname == NULL)
+        tname = "???";
+      strncpy(thp[nfoundent].name, tname, MAX_THREADNAME_LEN);
+      thp[nfoundent].brk   = thread_tbl[i]->brk;
+      thp[nfoundent].user_stack_size =
+        thread_tbl[i]->user_stack_bottom - thread_tbl[i]->user_stack_top;
+
+      nfoundent++;
+      count -= sizeof(struct threadent);
+    }
+  }
+
+  return nfoundent * sizeof(struct threadent);
+}
+
+
 int sys_execve(const char *filename, char *const argv[], char *const envp[]) {
   return thread_exec_in_usermode(filename, argv, envp);
 }
@@ -440,4 +467,8 @@ int sys_sbrk(int incr) {
 
 int sys_chdir(const char *path) {
   return thread_chdir(path);
+}
+
+int sys_gettents(struct threadent *thp, size_t count) {
+  return gettents(thp, count);
 }

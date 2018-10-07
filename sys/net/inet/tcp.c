@@ -211,6 +211,7 @@ int tcp_sock_close(void *pcb);
 int tcp_sock_bind(void *pcb, const struct sockaddr *addr);
 int tcp_sock_sendto(void *pcb UNUSED, const char *msg UNUSED, size_t len UNUSED, int flags UNUSED, struct sockaddr *dest_addr UNUSED);
 int tcp_sock_recvfrom(void *pcb UNUSED, char *buf UNUSED, size_t len UNUSED, int flags UNUSED, struct sockaddr *from_addr UNUSED);
+int tcp_sock_getstate(void *pcb);
 
 
 static const struct socket_ops tcp_sock_ops = {
@@ -222,6 +223,7 @@ static const struct socket_ops tcp_sock_ops = {
   .accept = tcp_sock_accept,
   .send = tcp_sock_send,
   .recv = tcp_sock_recv,
+  .getstate = tcp_sock_getstate,
 };
 
 
@@ -1463,6 +1465,14 @@ int tcp_sock_bind(void *pcb, const struct sockaddr *addr) {
   memcpy(&cb->local_addr, inaddr, sizeof(struct sockaddr_in));
   mutex_unlock(&tcp_mtx);
   return 0;
+}
+
+int tcp_sock_getstate(void *pcb) {
+  mutex_lock(&tcp_mtx);
+  struct tcpcb *cb = (struct tcpcb *)pcb;
+  int state = cb->state;
+  mutex_unlock(&tcp_mtx);
+  return state;
 }
 
 void timinfo_free(struct timinfo *tinfo) {

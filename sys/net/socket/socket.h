@@ -25,6 +25,12 @@ struct socket {
   void *pcb;
 };
 
+struct sockent {
+  int domain;
+  int type;
+  int state;
+};
+
 struct socket_ops {
   void *(*init)(void);
   int (*bind)(void *pcb, const struct sockaddr *addr);
@@ -36,6 +42,7 @@ struct socket_ops {
   int (*recvfrom)(void *pcb, char *buf, size_t len, int flags, struct sockaddr *from_addr);
   int (*send)(void *pcb, const char *msg, size_t len, int flags);
   int (*recv)(void *pcb, char *buf, size_t len, int flags);
+  int (*getstate)(void *pcb);
 };
 
 int socket_register_ops(int domain, int type, const struct socket_ops *ops);
@@ -59,4 +66,4 @@ int sys_listen(int fd, int backlog);
 int sys_accept(int fd, struct sockaddr *client_addr);
 int sys_send(int fd, const char *msg, size_t len, int flags);
 int sys_recv(int fd, char *buf, size_t len, int flags);
- 
+int sys_getsents(struct sockent *sockp, size_t count);

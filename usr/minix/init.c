@@ -16,6 +16,8 @@ struct command {
 };
 
 void cmd_ls(void);
+void cmd_ps(void);
+void cmd_netstat(void);
 void cmd_rm(void);
 void cmd_ln(void);
 void cmd_cat(void);
@@ -25,6 +27,8 @@ void cmd_exit(void);
 
 struct command cmd_table[] = {
   {"ls", cmd_ls},
+  {"ps", cmd_ps},
+  {"netstat", cmd_netstat},
   {"rm", cmd_rm},
   {"ln", cmd_ln},
   {"cat", cmd_cat},
@@ -94,6 +98,55 @@ void cmd_ls() {
   close(dir);
 }
 
+const char *thread_state_name[] = {
+  "RUNNING",
+  "WAITING",
+  "EXITED",
+  "ZOMBIE",
+};
+
+void cmd_ps() {
+  struct threadent threadents[64];
+  int bytes = gettents(threadents, sizeof(threadents));
+  for(int i=0; i<bytes/sizeof(struct threadent); i++) {
+    printf("%u %u %s \"%s\" %x %x\n", threadents[i].pid, threadents[i].ppid, thread_state_name[threadents[i].state],  threadents[i].name, threadents[i].brk, threadents[i].user_stack_size);
+  }
+}
+
+const char *sock_domain_name[] = {
+  "LINK",
+  "INET",
+};
+
+const char *sock_type_name[] = {
+  "STREAM",
+  "DGRAM",
+};
+
+const char *tcp_state_name[] = {
+  "CLOSED",
+  "LISTEN",
+  "SYN_RCVD",
+  "SYN_SENT",
+  "ESTABLISHED",
+  "FIN_WAIT_1",
+  "FIN_WAIT_2",
+  "CLOSING",
+  "TIME_WAIT",
+  "CLOSE_WAIT",
+  "LAST_ACK",
+};
+void cmd_netstat() {
+  struct sockent sockents[64];
+  int bytes = getsents(sockents, sizeof(sockents));
+  for(int i=0; i<bytes/sizeof(struct sockent); i++) {
+    printf("%s %s", sock_domain_name[sockents[i].domain], sock_type_name[sockents[i].type]);
+    if(sockents[i].type == 0)
+      printf(" %s\n", tcp_state_name[sockents[i].state]);
+    else
+      printf("\n");
+  }
+}
 
 #define MAX_ARGS 128
 char *argv[MAX_ARGS];

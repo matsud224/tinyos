@@ -239,3 +239,26 @@ int sys_recv(int fd, char *buf, size_t len, int flags) {
   return recv(current->files[fd], buf, len, flags);
 }
 
+int sys_getsents(struct sockent *sockp, size_t count) {
+  size_t nfoundent = 0;
+  struct list_head *p;
+
+  mutex_lock(&socklist_mtx);
+  list_foreach(p, &socket_list) {
+    if(!(count > 0)) break;
+
+    struct socket *s = list_entry(p, struct socket, link);
+    sockp[nfoundent].domain = s->domain;
+    sockp[nfoundent].type   = s->type;
+    if(s->ops->getstate)
+      sockp[nfoundent].state  = s->ops->getstate(s->pcb);
+    else
+      sockp[nfoundent].state  = -1;
+
+    nfoundent++;
+    count -= sizeof(struct sockent);
+  }
+  mutex_unlock(&socklist_mtx);
+
+  return nfoundent * sizeof(struct sockent);
+}

@@ -72,6 +72,16 @@ struct thread {
   vaddr_t user_stack_top;
 };
 
+struct threadent {
+  u8 state;
+  u32 flags;
+  pid_t pid;
+  pid_t ppid;
+  char name[MAX_THREADNAME_LEN];
+  u32 brk;
+  u32 user_stack_size;
+};
+
 #define GET_THREAD_NAME(th) ((th)->name?(th)->name:"???")
 
 void dispatcher_init(void);
@@ -97,3 +107,4 @@ int sys_execve(const char *filename, char *const argv[], char *const envp[]);
 int sys_fork(void);
 int sys_sbrk(int incr);
 int sys_chdir(const char *path);
+int sys_gettents(struct threadent *thp, size_t count);

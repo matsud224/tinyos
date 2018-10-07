@@ -106,6 +106,7 @@ const char *thread_state_name[] = {
 };
 
 void cmd_ps() {
+  printf("pid, ppid, state, name, brk, user_stack_size\n");
   struct threadent threadents[64];
   int bytes = gettents(threadents, sizeof(threadents));
   for(int i=0; i<bytes/sizeof(struct threadent); i++) {
@@ -137,6 +138,7 @@ const char *tcp_state_name[] = {
   "LAST_ACK",
 };
 void cmd_netstat() {
+  printf("domain, type, state\n");
   struct sockent sockents[64];
   int bytes = getsents(sockents, sizeof(sockents));
   for(int i=0; i<bytes/sizeof(struct sockent); i++) {

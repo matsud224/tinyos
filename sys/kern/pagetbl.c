@@ -41,12 +41,12 @@ void pagetbl_init() {
   vaddr_t addr = 0x0;
   for(int i = st_start_index; i < st_end_index;
         i++, addr += 0x400000){
-    kernspace_pdt[i] = addr | PDE_PRESENT | PDE_RW | PDE_SIZE_4MB | PDE_USER;
+    kernspace_pdt[i] = addr | PDE_PRESENT | PDE_RW | PDE_SIZE_4MB;
   }
   //kernel space virtual area
   for(int i = st_end_index; i < TOTAL_NUM_PDE; i++) {
     u32 *pt = get_zeropage();
-    kernspace_pdt[i] = KERN_VMEM_TO_PHYS((vaddr_t)pt) | PDE_PRESENT | PDE_RW | PDE_USER;
+    kernspace_pdt[i] = KERN_VMEM_TO_PHYS((vaddr_t)pt) | PDE_PRESENT | PDE_RW;
   }
 
   flushtlb(KERN_VMEM_TO_PHYS(kernspace_pdt));

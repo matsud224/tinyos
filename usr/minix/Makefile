@@ -6,7 +6,7 @@ RM				= rm -f
 
 OBJDIR		= obj
 BINDIR		= bin
-BINS			= $(BINDIR)/init $(BINDIR)/sh $(BINDIR)/socktest $(BINDIR)/forktest $(BINDIR)/argvtest $(BINDIR)/ptstest $(BINDIR)/ptstest2 $(BINDIR)/tcpd $(BINDIR)/filetest
+BINS			= $(BINDIR)/init $(BINDIR)/sh $(BINDIR)/socktest $(BINDIR)/forktest $(BINDIR)/argvtest $(BINDIR)/ptstest $(BINDIR)/ptstest2 $(BINDIR)/tcpd $(BINDIR)/filetest $(BINDIR)/badapp
 
 
 MYLIBS 		= $(OBJDIR)/socket.o $(OBJDIR)/syscall.oo $(OBJDIR)/tinyos.o
@@ -39,6 +39,9 @@ $(BINDIR)/tcpd: $(MYLIBS) $(OBJDIR)/tcpd.o
 	$(CC) $(CFLAGS) -o $@ $^
 
 $(BINDIR)/filetest: $(MYLIBS) $(OBJDIR)/filetest.o
+	$(CC) $(CFLAGS) -o $@ $^
+
+$(BINDIR)/badapp: $(MYLIBS) $(OBJDIR)/badapp.o
 	$(CC) $(CFLAGS) -o $@ $^
 
 $(OBJDIR)/%.o: %.c

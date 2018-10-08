@@ -4,6 +4,7 @@
 int main() {
   int n;
   printf("input number: ");
+  fflush(stdout);
   scanf("%d", &n);
   switch(n) {
     case 0:

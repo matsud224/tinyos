@@ -35,11 +35,11 @@ struct vnode {
 struct stat {
   unsigned short st_dev;
   unsigned short st_ino;
-  unsigned short st_mode;
+  unsigned int   st_mode;
   unsigned short st_nlink;
   unsigned short st_uid;
   unsigned short st_gid;
-  int   st_rdev;
+  unsigned short st_rdev;
   long  st_size;
   long  st_atime;
   long  st_spare1;

@@ -18,6 +18,7 @@ struct threadent {
   uint32_t user_stack_size;
   uint32_t num_pfs;
   uint32_t num_files;
+  uint32_t priority;
 };
 
 struct sockent {

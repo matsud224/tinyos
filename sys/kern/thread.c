@@ -18,7 +18,7 @@ struct thread *current = NULL;
 static struct thread *thread_tbl[MAX_THREADS];
 static pid_t pid_last = INVALID_PID+1;
 
-static struct list_head run_queue;
+static struct list_head run_queue[MAX_PRIORITY];
 static struct list_head wait_queue;
 
 
@@ -30,12 +30,19 @@ void thread_idle(UNUSED void *arg) {
     cpu_halt();
 }
 
+void thread_set_priority(u32 priority) {
+  if(priority < MAX_PRIORITY)
+    current->priority = priority;
+}
+
 void dispatcher_init() {
   for(int i=0; i<MAX_THREADS; i++)
     thread_tbl[i] = NULL;
 
+  for(int i=0; i<MAX_PRIORITY; i++)
+    list_init(&run_queue[i]);
+
   current = NULL;
-  list_init(&run_queue);
   list_init(&wait_queue);
 
   bzero(&tss, sizeof(struct tss));
@@ -44,8 +51,8 @@ void dispatcher_init() {
   gdt_init();
   gdt_settssbase(&tss);
   ltr(GDT_SEL_TSS);
-  thread_run(kthread_new(thread_idle, NULL, "idle"));
-  thread_run(kthread_new(thread_main, NULL, "main"));
+  thread_run(kthread_new(thread_idle, NULL, "idle", PRIORITY_IDLE));
+  thread_run(kthread_new(thread_main, NULL, "main", PRIORITY_USER));
 }
 
 void dispatcher_run() {
@@ -74,7 +81,7 @@ pid_t get_next_pid() {
   return INVALID_PID;
 }
 
-struct thread *kthread_new(void (*func)(void *), void *arg, const char *name) {
+struct thread *kthread_new(void (*func)(void *), void *arg, const char *name, u32 priority) {
   pid_t pid = get_next_pid();
   if(pid == INVALID_PID)
     return NULL;
@@ -100,7 +107,10 @@ struct thread *kthread_new(void (*func)(void *), void *arg, const char *name) {
   t->regs.esp -= 4*5;
   *(u32 *)t->regs.esp = 0x200; //initial eflags(IF=1)
 
+  t->priority = priority;
+
   thread_tbl[t->pid] = t;
+
   return t;
 }
 
@@ -260,7 +270,7 @@ void thread_run(struct thread *t) {
   if(current == NULL)
     current = t;
   else
-    list_pushback(&(t->link), &run_queue);
+    list_pushback(&(t->link), &run_queue[t->priority]);
 }
 
 static void thread_free(struct thread *t) {
@@ -278,7 +288,7 @@ static void thread_free(struct thread *t) {
 void thread_sched() {
   switch(current->state) {
   case TASK_STATE_RUNNING:
-    list_pushback(&(current->link), &run_queue);
+    list_pushback(&(current->link), &run_queue[current->priority]);
     break;
   case TASK_STATE_WAITING:
     list_pushback(&(current->link), &wait_queue);
@@ -290,12 +300,18 @@ void thread_sched() {
     break;
   }
 
-  struct list_head *next = list_pop(&run_queue);
+  struct list_head *next = NULL;
+  for(int i=0; i<MAX_PRIORITY; i++) {
+    next = list_pop(&run_queue[i]);
+    if(next != NULL)
+      break;
+  }
   if(next == NULL) {
     puts("no thread!");
     while(1)
       cpu_halt();
   }
+
   current = container_of(next, struct thread, link);
   //printf("sched: pid=%d\n", current->pid);
 }
@@ -329,7 +345,7 @@ void thread_wakeup(const void *cause) {
       //printf("thread#%d (%s) wakeup for %x\n", t->pid, GET_THREAD_NAME(t), cause);
       t->state = TASK_STATE_RUNNING;
       list_remove(h);
-      list_pushfront(h, &run_queue);
+      list_pushfront(h, &run_queue[t->priority]);
     }
   }
 }
@@ -415,6 +431,8 @@ int gettents(struct threadent *thp, size_t count) {
       for(int j=0; j<MAX_FILES; j++)
         if(thread_tbl[i]->files[j])
           thp[nfoundent].num_files++;
+
+      thp[nfoundent].priority = thread_tbl[i]->priority;
 
       nfoundent++;
       count -= sizeof(struct threadent);

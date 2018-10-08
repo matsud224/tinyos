@@ -52,6 +52,11 @@ struct thread_state {
 #define TASK_STATE_EXITED		2
 #define TASK_STATE_ZOMBIE		3
 
+#define MAX_PRIORITY 4
+#define PRIORITY_SYSTEM 0
+#define PRIORITY_USER   1
+#define PRIORITY_IDLE   (MAX_PRIORITY-1)
+
 struct thread {
   struct thread_state regs; //do not move from here
   struct list_head link;
@@ -71,6 +76,7 @@ struct thread {
   vaddr_t user_stack_bottom;
   vaddr_t user_stack_top;
   u32 num_pfs;
+  u32 priority;
 };
 
 struct threadent {
@@ -83,14 +89,16 @@ struct threadent {
   u32 user_stack_size;
   u32 num_pfs;
   u32 num_files;
+  u32 priority;
 };
 
 #define GET_THREAD_NAME(th) ((th)->name?(th)->name:"???")
 
 void dispatcher_init(void);
 void dispatcher_run(void);
+void thread_set_priority(u32 priority);
 void kstack_setaddr(void);
-struct thread *kthread_new(void (*func)(void *), void *arg, const char *name);
+struct thread *kthread_new(void (*func)(void *), void *arg, const char *name, u32 priority);
 int thread_exec_in_usermode(const char *path, char *const argv[], char *const envp[]);
 void thread_run(struct thread *t);
 void thread_sched(void);

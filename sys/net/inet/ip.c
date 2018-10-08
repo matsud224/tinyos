@@ -79,7 +79,7 @@ void ip_10sec_thread(void *);
 NET_INIT void ip_init(){
   list_init(&reasm_ongoing);
   mutex_init(&reasm_ongoing_mtx);
-  thread_run(kthread_new(ip_10sec_thread, NULL, "ip_10sec"));
+  thread_run(kthread_new(ip_10sec_thread, NULL, "ip_10sec", PRIORITY_SYSTEM));
 }
 
 void ip_10sec_thread(void *arg UNUSED) {

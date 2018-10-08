@@ -110,9 +110,9 @@ void cmd_ps() {
   int bytes = gettents(threadents, sizeof(threadents));
   for(int i=0; i<bytes/sizeof(struct threadent); i++) {
     if(threadents[i].brk == 0)
-      printf("%3u %3u %s (kernel thread)            \"%s\" \n", threadents[i].pid, threadents[i].ppid, thread_state_name[threadents[i].state], threadents[i].name);
+      printf("%3u %3u %s (kernel thread)               \"%s\" \n", threadents[i].pid, threadents[i].ppid, thread_state_name[threadents[i].state], threadents[i].name);
     else
-      printf("%3u %3u %s %8x %8x %3d %4d \"%s\" \n", threadents[i].pid, threadents[i].ppid, thread_state_name[threadents[i].state], threadents[i].brk, threadents[i].user_stack_size, threadents[i].num_files, threadents[i].num_pfs, threadents[i].name);
+      printf("%3u %3u %s %2d %8x %8x %3d %4d \"%s\" \n", threadents[i].pid, threadents[i].ppid, thread_state_name[threadents[i].state], threadents[i].priority, threadents[i].brk, threadents[i].user_stack_size, threadents[i].num_files, threadents[i].num_pfs, threadents[i].name);
   }
 }
 

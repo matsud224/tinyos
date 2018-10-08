@@ -246,6 +246,7 @@ int fork_main(u32 ch_esp, u32 ch_eflags, u32 ch_edi, u32 ch_esi, u32 ch_ebx, u32
   t->vmmap = vm_map_dup(current->vmmap);
 
   t->flags = current->flags;
+  t->num_pfs = 0;
 
   t->regs.eip = fork_child_epilogue;
   thread_tbl[t->pid] = t;
@@ -409,6 +410,11 @@ int gettents(struct threadent *thp, size_t count) {
       thp[nfoundent].brk   = thread_tbl[i]->brk;
       thp[nfoundent].user_stack_size =
         thread_tbl[i]->user_stack_bottom - thread_tbl[i]->user_stack_top;
+      thp[nfoundent].num_pfs = thread_tbl[i]->num_pfs;
+      thp[nfoundent].num_files = 0;
+      for(int j=0; j<MAX_FILES; j++)
+        if(thread_tbl[i]->files[j])
+          thp[nfoundent].num_files++;
 
       nfoundent++;
       count -= sizeof(struct threadent);

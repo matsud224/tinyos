@@ -16,6 +16,8 @@ struct threadent {
   char name[MAX_THREADNAME_LEN];
   uint32_t brk;
   uint32_t user_stack_size;
+  uint32_t num_pfs;
+  uint32_t num_files;
 };
 
 struct sockent {

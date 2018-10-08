@@ -70,6 +70,7 @@ struct thread {
   struct vnode *curdir;
   vaddr_t user_stack_bottom;
   vaddr_t user_stack_top;
+  u32 num_pfs;
 };
 
 struct threadent {
@@ -80,6 +81,8 @@ struct threadent {
   char name[MAX_THREADNAME_LEN];
   u32 brk;
   u32 user_stack_size;
+  u32 num_pfs;
+  u32 num_files;
 };
 
 #define GET_THREAD_NAME(th) ((th)->name?(th)->name:"???")

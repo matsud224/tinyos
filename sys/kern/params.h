@@ -24,7 +24,7 @@
 #define MAX_FILENAME_LEN   255 //null is not contained
 #define MAX_THREADNAME_LEN 64  //null is not contained
 
-#define NBLKBUF				64
+#define NBLKBUF				1024
 #define NVCACHE				1024
 
 #define CLASS_BLKDEV	1

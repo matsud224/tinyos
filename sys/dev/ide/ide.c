@@ -98,7 +98,7 @@ enum primary_secondary {
   IDE_PRIMARY      = 0x00,
   IDE_SECONDARY    = 0x01,
 };
- 
+
 enum ata_direction {
   ATA_READ      = 0x00,
   ATA_WRITE     = 0x01,
@@ -310,7 +310,7 @@ DRIVER_INIT void ide_init() {
       ide_dev[drvno].signature = *(u16 *)(ide_buf + IDENT_DEVICETYPE);
       ide_dev[drvno].capabilities = *(u16 *)(ide_buf + IDENT_CAPABILITIES);
       ide_dev[drvno].cmdsets = *(u32 *)(ide_buf + IDENT_COMMANDSETS);
-     
+
       if(ide_dev[drvno].cmdsets & (1<<26))
         ide_dev[drvno].size = *(u32 *)(ide_buf + IDENT_MAX_LBA_EXT);
       else
@@ -380,7 +380,7 @@ int ide_ata_access(u8 dir, u8 drv, u32 lba, u8 nsect) {
     // LBA is not supported
     return -3;
   }
- 
+
   ide_clrnien(chan);
 
   if(lba_mode == 0)
@@ -434,7 +434,7 @@ void ide_write_to_datareg(struct request *req, u8 chan) {
     req->next_addr += sizeof(u16);
   }
 }
-   
+
 void ide_cache_flush(struct request *req, u8 chan) {
   struct ide_dev *dev = &ide_dev[DEV_MINOR(req->buf->devno)];
   ide_drivesel(chan, dev->drive & 1);

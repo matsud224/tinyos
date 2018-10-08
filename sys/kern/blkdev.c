@@ -267,8 +267,8 @@ void blkbuf_markdirty(struct blkbuf *buf) {
 
 void blkbuf_iodone(struct blkbuf *buf) {
   buf->state = BB_DONE;
-  if(buf->state & BB_DIRTY)
-    buf->state &= ~BB_DIRTY;
+  if(buf->flags & BB_DIRTY)
+    buf->flags &= ~BB_DIRTY;
 }
 
 void blkbuf_readerror(struct blkbuf *buf) {
@@ -278,7 +278,7 @@ void blkbuf_readerror(struct blkbuf *buf) {
 
 void blkbuf_writeerror(struct blkbuf *buf) {
   buf->flags |= BB_ERROR;
-  buf->state |= BB_DIRTY;
+  buf->flags |= BB_DIRTY;
 }
 
 int blkdev_sync(devno_t devno) {

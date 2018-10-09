@@ -16,7 +16,7 @@
 #define PIT_LOAD16 0x30
 #define PIT_CNT0 0x0
 
-#define PIT_IRQ 0 
+#define PIT_IRQ 0
 
 #define CNT_100HZ 0x2e9b
 
@@ -27,6 +27,7 @@ void pit_inthandler(void);
 void pit_isr() {
   timer_tick();
   pic_sendeoi(PIT_IRQ);
+  thread_check_signal();
   thread_yield();
 }
 

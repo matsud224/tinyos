@@ -136,8 +136,8 @@ u32 syscall_fstat(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u3
   return sys_fstat(a0, (void *)a1);
 }
 
-u32 syscall_kill(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
-  return -1;
+u32 syscall_kill(u32 a0, u32 a1, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {
+  return sys_kill(a0, a1);
 }
 
 u32 syscall_link(u32 a0 UNUSED, u32 a1 UNUSED, u32 a2 UNUSED, u32 a3 UNUSED, u32 a4 UNUSED) {

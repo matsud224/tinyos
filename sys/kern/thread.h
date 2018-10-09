@@ -77,6 +77,7 @@ struct thread {
   vaddr_t user_stack_top;
   u32 num_pfs;
   u32 priority;
+  int signal;
 };
 
 struct threadent {
@@ -102,6 +103,7 @@ struct thread *kthread_new(void (*func)(void *), void *arg, const char *name, u3
 int thread_exec_in_usermode(const char *path, char *const argv[], char *const envp[]);
 void thread_run(struct thread *t);
 void thread_sched(void);
+void thread_check_signal(void);
 void thread_sleep(const void *cause);
 void thread_sleep_after_unlock(void *cause, mutex *mtx);
 void thread_wakeup(const void *cause);

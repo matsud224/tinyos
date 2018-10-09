@@ -19,6 +19,7 @@ void gpe_isr(int errcode) {
 }
 
 void pf_isr(vaddr_t addr, u32 eip, u32 esp, u32 eax) {
+  thread_check_signal();
   //printf("Page fault in thread#%d (%s) addr=0x%x (eip=0x%x, esp=0x%x)\n", current->pid, GET_THREAD_NAME(current), addr, eip, esp);
   struct vm_area *varea;
   int try = 0;
@@ -43,15 +44,22 @@ try_findarea:
     u8 *vaddr = (u8 *)PHYS_TO_KERN_VMEM(paddr) + (addr & 0xfff);
     flushtlb(current->regs.cr3);
   }
+
+  thread_check_signal();
 }
 
 u32 syscall_isr(u32 eax, u32 ebx, u32 ecx, u32 edx, u32 esi, u32 edi) {
   //printf("syscall in thread#%d (%s) eax=%d,ebx=%x,ecx=%x,edx=%x,esi=%x,edi=%x\n", current->pid, GET_THREAD_NAME(current), eax, ebx, ecx, edx, esi, edi);
+  thread_check_signal();
+
   if(eax >= NSYSCALLS) {
     printf("syscall#%d is invalid.\n", eax);
     thread_exit_with_error();
   }
   int ret = syscall_table[eax](ebx, ecx, edx, esi, edi);
+
+  thread_check_signal();
+
   //printf("pid %d : return from syscall_isr eax=%d ret=%d  (%x)\n", current->pid, eax, ret, &ret);
   return ret;
 }

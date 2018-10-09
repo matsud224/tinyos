@@ -276,9 +276,13 @@ void thread_run(struct thread *t) {
 static void thread_free(struct thread *t) {
   thread_tbl[t->pid] = NULL;
 
-  for(int i=0; i<MAX_THREADS; i++)
-    if(thread_tbl[i] && thread_tbl[i]->ppid == t->pid)
+  for(int i=0; i<MAX_THREADS; i++) {
+    if(thread_tbl[i] && thread_tbl[i]->ppid == t->pid) {
       thread_tbl[i]->ppid = INVALID_PID;
+      if(thread_tbl[i]->state == TASK_STATE_ZOMBIE)
+        thread_free(thread_tbl[i]);
+    }
+  }
 
   page_free(t->kstack);
   pagetbl_free(t->regs.cr3);
@@ -322,11 +326,17 @@ void thread_yield() {
   IRQ_RESTORE
 }
 
+void thread_check_signal() {
+  if(current->signal > 0)
+    thread_exit_with_error();
+}
+
 void thread_sleep(const void *cause) {
   //printf("thread#%d (%s) sleep for %x\n", current->pid, GET_THREAD_NAME(current), cause);
   current->state = TASK_STATE_WAITING;
   current->waitcause = cause;
   thread_yield();
+  thread_check_signal();
 }
 
 void thread_sleep_after_unlock(void *cause, mutex *mtx) {
@@ -495,4 +505,15 @@ int sys_chdir(const char *path) {
 
 int sys_gettents(struct threadent *thp, size_t count) {
   return gettents(thp, count);
+}
+
+int sys_kill(pid_t pid, int sig) {
+  if(pid >= MAX_THREADS || thread_tbl[pid] == NULL)
+    return -1;
+
+  thread_tbl[pid]->signal = sig;
+  if(thread_tbl[pid]->state == TASK_STATE_WAITING)
+    thread_wakeup(thread_tbl[pid]->waitcause);
+
+  return 0;
 }

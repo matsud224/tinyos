@@ -3,6 +3,8 @@
 #define MAX_FILENAME_LEN   255 //null is not contained
 #define MAX_THREADNAME_LEN 64  //null is not contained
 
+#define SIGKILL 9
+
 struct dirent {
   uint32_t d_vno;
   char d_name[MAX_FILENAME_LEN+1];

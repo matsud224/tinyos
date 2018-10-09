@@ -23,6 +23,7 @@ void cmd_ln(void);
 void cmd_cat(void);
 void cmd_cd(void);
 void cmd_mkdir(void);
+void cmd_kill(void);
 void cmd_exit(void);
 
 struct command cmd_table[] = {
@@ -34,6 +35,7 @@ struct command cmd_table[] = {
   {"cat", cmd_cat},
   {"cd", cmd_cd},
   {"mkdir", cmd_mkdir},
+  {"kill", cmd_kill},
   {"exit", cmd_exit},
   {NULL, NULL}
 };
@@ -234,6 +236,14 @@ void cmd_mkdir() {
 
   if(mkdir(dirname, 0))
     puts("failed to mkdir");
+}
+
+void cmd_kill() {
+  char *arg1 = next_arg();
+  if(arg1 == NULL)
+    puts("invalid argument");
+  else
+    kill(atoi(arg1), SIGKILL);
 }
 
 void cmd_exit() {

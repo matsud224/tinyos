@@ -43,3 +43,6 @@ TODO
 * Linux Kernel Documents(https://ja.osdn.net/projects/linux-kernel-docs/)
 * Understanding TCP/IP Network Stack & Writing Network Apps(https://www.cubrid.org/blog/understanding-tcp-ip-network-stack)
 * ...
+
+# License
+* Unlicense(Public Domain)

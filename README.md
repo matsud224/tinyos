@@ -25,6 +25,11 @@ TODO
 * Ported Newlib C library
   * (implemented exit, close, execve, fork, fstat, getpid, isatty, link, lseek, open, read, sbrk, stat, unlink, wait and write)
 
+
+![Screenshot](https://user-images.githubusercontent.com/20959559/77240903-c35a6c80-6c2e-11ea-81ed-fa77791dbb41.png)
+Logging in via TCP/IP and running `mruby`, `lua`, `ls` and `objdump`.
+
+
 # References(random order)
 * OSDev.org(https://wiki.osdev.org/Main_Page)
 * はじめて読む486(ASCII)

@@ -34,6 +34,8 @@
 #define DEVNO(ma, mi) (((ma)<<8) | (mi))
 #define BAD_MAJOR 0
 
+typedef int jmp_buf[6];
+
 int abs(int n);
 char *strncpy(char *dest, const char *src, size_t n);
 size_t strnlen(const char *s, size_t n);
@@ -43,10 +45,19 @@ char *strdup(const char *str);
 void *memcpy(void *dest, const void *src, size_t n);
 void bzero(void *s, size_t n);
 void *memset(void *s, int c, size_t n);
+int memcmp(const void *s1, const void *s2, size_t n);
+void *memmove(void *dest, const void *src, size_t n);
+void *memchr(const void *s, int c, size_t n);
+char *strchr(const char *s, int c);
+int setjmp(jmp_buf env);
+void longjmp(jmp_buf env, int val);
 void *malloc(size_t request);
+void *realloc(void *ptr, size_t size);
 void free(void *addr);
 int putchar(int c);
 int puts(const char *str);
 void printf(const char *fmt, ...);
 void show_line(void);
 void show_number(u32);
+void abort(void);
+void exit(int status);

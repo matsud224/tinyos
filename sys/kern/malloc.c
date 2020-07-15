@@ -100,3 +100,18 @@ IRQ_DISABLE
   }
 IRQ_RESTORE
 }
+
+/*
+void *realloc(void *ptr, size_t size) {
+  if (ptr == NULL) {
+    return malloc(size);
+  } else if (size == 0) {
+    free(ptr);
+    return NULL;
+  }
+
+  void *new = malloc(size);
+
+}
+*/
+

@@ -292,3 +292,28 @@ fork_child_epilogue:
   mov eax, 0
   ret
 
+global setjmp
+setjmp:
+  mov eax, [esp+4]
+  mov [eax], ebx
+  mov [eax+4], edi
+  mov [eax+8], esi
+  mov [eax+12], esp
+  mov [eax+16], ebp
+  mov edx, [esp]
+  mov [eax+20], edx ; return address
+  ret
+
+global longjmp
+longjmp:
+  mov ecx, [esp+4]
+  mov eax, [esp+8]
+  mov ebx, [ecx]
+  mov edi, [ecx+4]
+  mov esi, [ecx+8]
+  mov esp, [ecx+12]
+  mov ebp, [ecx+16]
+  add esp, 4
+  mov edx, [ecx+20]
+  push edx
+  ret

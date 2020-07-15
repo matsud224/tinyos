@@ -66,10 +66,62 @@ void *memset(void *s, int c, size_t n) {
   return s;
 }
 
+int memcmp(const void *s1, const void *s2, size_t n) {
+  u8 *p1 = (u8 *)s1;
+  u8 *p2 = (u8 *)s2;
+
+  while(n-- != 0 && *p1 == *p2) {
+    p1++; p2++;
+  }
+  return *p1 - *p2;
+}
+
+void *memmove(void *dest, const void *src, size_t n) {
+  if (src + n > dest) {
+    src += n - 1;
+    dest += n - 1;
+    for(size_t i=0; i<n; i++)
+      *(u8 *)dest-- = *(u8 *)src--;
+  } else {
+    memcpy(dest, src, n);
+  }
+
+  return dest;
+}
+
+void *memchr(const void *s, int c, size_t n) {
+  u8 *p = (u8 *)s;
+  for (size_t i=0; i<n; i++, p++) {
+    if (*p == c)
+      return p;
+  }
+  return NULL;
+}
+
+char *strchr(const char *s, int c) {
+  char *p = (char *)s;
+
+  while(*p != '\0' && *p != c)
+    p++;
+
+  if (*p == '\0')
+    return NULL;
+  else
+    return p;
+}
+
 void show_line() {
   puts("-------------------");
 }
 
 void show_number(u32 num) {
   printf("%x", num);
+}
+
+void abort(void) {
+  abort_for_mrb();
+}
+
+void exit(int status) {
+  exit_for_mrb(status);
 }

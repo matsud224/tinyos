@@ -7,6 +7,7 @@
 
 #define SIZE_BASE		8
 #define MAX_BIN			(((PAGESIZE - sizeof(struct chunkhdr)) >> 1) / SIZE_BASE)
+#define USE_BIN_THRESHOLD (SIZE_BASE * MAX_BIN)
 
 struct chunkhdr {
   struct list_head link;
@@ -16,15 +17,15 @@ struct chunkhdr {
   int nfree;
 };
 
-struct list_head bin[MAX_BIN];
+struct list_head bin[MAX_BIN + 1];
 
 void malloc_init() {
-  for(unsigned int i=0; i<MAX_BIN; i++)
+  for(unsigned int i = 0; i <= MAX_BIN; i++)
     list_init(&bin[i]);
 }
 
 static struct chunkhdr *getnewchunk(size_t objsize) {
-  if(objsize < 4 || objsize > PAGESIZE-sizeof(struct chunkhdr)) {
+  if(objsize < 4 || objsize > PAGESIZE - sizeof(struct chunkhdr)) {
     return NULL;
   }
 
@@ -32,6 +33,7 @@ static struct chunkhdr *getnewchunk(size_t objsize) {
   if(newchunk == NULL)
    puts("malloc: page_alloc failed.");
 
+  newchunk->size = objsize;
   newchunk->freelist = NULL;
   int nobjs = (PAGESIZE - sizeof(struct chunkhdr)) / objsize;
   newchunk->nobjs = newchunk->nfree = nobjs;
@@ -71,12 +73,14 @@ void *malloc(size_t request) {
   void *m = NULL;
 IRQ_DISABLE
   size_t size = (request + (SIZE_BASE-1)) & ~(SIZE_BASE-1);
-  if(size > SIZE_BASE * MAX_BIN && size <= PAGESIZE) {
-    m = page_alloc(PAGESIZE, 0);
-  }else if(size > SIZE_BASE * MAX_BIN) {
-    printf("malloc: objsize=%d byte is not supported.", size);
+
+  if(size > USE_BIN_THRESHOLD) {
+    int npages =  (size + sizeof(struct chunkhdr) + (PAGESIZE-1)) & ~(PAGESIZE-1);
+    struct chunkhdr *ch = page_alloc(PAGESIZE * npages, 0);
+    ch->size = size;
+    m = (void *)(ch + 1);
   }else {
-    m = getobj(size/SIZE_BASE);
+    m = getobj(size / SIZE_BASE);
     if(m == NULL)
      puts("warn: malloc failed.");
   }
@@ -86,12 +90,12 @@ IRQ_RESTORE
 
 void free(void *addr) {
 IRQ_DISABLE
-  if(((vaddr_t)addr & (PAGESIZE-1)) == 0) {
-    page_free(addr);
+  struct chunkhdr *ch = (struct chunkhdr *)pagealign((u32)addr);
+  if (ch->size > USE_BIN_THRESHOLD) {
+    page_free(ch);
   } else {
-    struct chunkhdr *ch = (struct chunkhdr *)pagealign((u32)addr);
     ch->nfree++;
-    if(ch->nfree == ch->nobjs) {
+    if (ch->nfree == ch->nobjs) {
       list_remove(&ch->link);
       page_free(ch);
     } else {

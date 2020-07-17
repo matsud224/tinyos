@@ -29,7 +29,7 @@ struct file_mapper {
 };
 
 struct page_entry *page_entry_new(vaddr_t start) {
-  void *p = get_zeropage();
+  void *p = get_zeropage(PAGESIZE);
   if(p == NULL)
     return NULL;
 
@@ -60,7 +60,7 @@ static void page_copy(struct page_entry *pe) {
 
   struct page_info *pinew = malloc(sizeof(struct page_info));
   memcpy(pinew, pe->pinfo, sizeof(struct page_info));
-  pinew->addr = page_alloc();
+  pinew->addr = page_alloc(PAGESIZE, 0);
   memcpy(pinew->addr, pe->pinfo->addr, PAGESIZE);
   pinew->ref = 1;
   mutex_init(&pinew->mtx);

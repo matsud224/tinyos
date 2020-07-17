@@ -51,6 +51,7 @@ void dispatcher_init() {
   gdt_init();
   gdt_settssbase(&tss);
   ltr(GDT_SEL_TSS);
+
   thread_run(kthread_new(thread_idle, NULL, "idle", PRIORITY_IDLE));
   thread_run(kthread_new(thread_main, NULL, "main", PRIORITY_USER));
 }
@@ -96,8 +97,8 @@ struct thread *kthread_new(void (*func)(void *), void *arg, const char *name, u3
   t->regs.cr3 = pagetbl_new();
   t->regs.eip = 0;
   //prepare kernel stack
-  t->kstack = get_zeropage();
-  t->kstacksize = PAGESIZE;
+  t->kstack = get_zeropage(KSTACK_SIZE);
+  t->kstacksize = KSTACK_SIZE;
   t->regs.esp = (u32)((u8 *)(t->kstack) + t->kstacksize - 4);
   *(u32 *)t->regs.esp = (u32)arg;
   t->regs.esp -= 4;
@@ -230,11 +231,11 @@ int fork_main(u32 ch_esp, u32 ch_eflags, u32 ch_edi, u32 ch_esi, u32 ch_ebx, u32
   flushtlb(current->regs.cr3);
 
   //prepare kernel stack
-  t->kstack = get_zeropage();
-  t->kstacksize = PAGESIZE;
+  t->kstack = get_zeropage(KSTACK_SIZE);
+  t->kstacksize = KSTACK_SIZE;
   u32 current_esp = getesp();
   u32 distance = current_esp - (u32)current->kstack;
-  memcpy(t->kstack + distance, current_esp, PAGESIZE - distance);
+  memcpy(t->kstack + distance, current_esp, t->kstacksize - distance);
   //ch_esp points a return address to sys_fork
   t->regs.esp = (u32)t->kstack + (ch_esp - (u32)current->kstack);
 
@@ -257,8 +258,8 @@ int fork_main(u32 ch_esp, u32 ch_eflags, u32 ch_edi, u32 ch_esi, u32 ch_ebx, u32
 
   t->flags = current->flags;
   t->num_pfs = 0;
-
   t->regs.eip = fork_child_epilogue;
+
   thread_tbl[t->pid] = t;
   thread_run(t);
 

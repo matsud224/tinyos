@@ -21,7 +21,7 @@
 #include <kern/timer.h>
 #include <net/socket/socket.h>
 #include <net/util.h>
-#include <mruby.h>
+//#include <mruby.h>
 
 
 void _init(void);
@@ -55,6 +55,7 @@ KERNENTRY void kernel_main(void) {
   ip_set_defaultgw(IPADDR(192,168,4,1));
   pit_init();
 
+  /*
 	printf("mrb_open... ");
   mrb_state *mrb = mrb_open();
 	puts("ok");
@@ -62,6 +63,7 @@ KERNENTRY void kernel_main(void) {
 	printf("mrb_close... ");
   mrb_close(mrb);
 	puts("ok");
+  */
 
   dispatcher_run();
 

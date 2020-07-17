@@ -27,7 +27,7 @@ static struct chunkhdr *getnewchunk(size_t objsize) {
     return NULL;
   }
 
-  struct chunkhdr *newchunk = (struct chunkhdr *)page_alloc();
+  struct chunkhdr *newchunk = (struct chunkhdr *)page_alloc(PAGESIZE, 0);
   if(newchunk == NULL)
    puts("malloc: page_alloc failed.");
 
@@ -71,7 +71,7 @@ void *malloc(size_t request) {
 IRQ_DISABLE
   size_t size = (request + (SIZE_BASE-1)) & ~(SIZE_BASE-1);
   if(size > SIZE_BASE * MAX_BIN && size <= PAGESIZE) {
-    m = page_alloc();
+    m = page_alloc(PAGESIZE, 0);
   }else if(size > SIZE_BASE * MAX_BIN) {
     printf("malloc: objsize=%d byte is not supported.", size);
   }else {

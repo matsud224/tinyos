@@ -75,7 +75,7 @@ static void *blkbuf_alloc() {
     chunklist = c;
     c->freelist = NULL;
     c->nobjs = c->nfree = PAGESIZE/BLOCKSIZE;
-    u8 *obj = page_alloc();
+    u8 *obj = page_alloc(PAGESIZE, 0);
     c->addr = obj;
     for(int i=0; i<c->nobjs; i++) {
       *(void **)obj = c->freelist;

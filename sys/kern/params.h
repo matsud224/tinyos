@@ -13,6 +13,8 @@
 
 #define PAGESIZE			4096
 
+#define KSTACK_SIZE (PAGESIZE * 4)
+
 #define MAX_BLKDEV		64
 #define MAX_CHARDEV		128
 #define MAX_NETDEV		64

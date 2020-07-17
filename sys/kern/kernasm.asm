@@ -302,6 +302,7 @@ setjmp:
   mov [eax+16], ebp
   mov edx, [esp]
   mov [eax+20], edx ; return address
+  xor eax, eax
   ret
 
 global longjmp

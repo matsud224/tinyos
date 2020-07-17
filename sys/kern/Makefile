@@ -1,6 +1,7 @@
 NASM			= nasm
 CC				= i686-elf-gcc
-CFLAGS		= -std=gnu99 -O2 -Wall -Wextra -g -I../ -I../mruby/include
+MRB_CFLAGS=  -I../mruby/include -DMRB_WITHOUT_FLOAT -DMRB_DISABLE_STDIO -DMRB_CONSTRAINED_BASELINE_PROFILE
+CFLAGS		= -std=gnu99 -O2 -Wall -Wextra -g -I../ $(MRB_CFLAGS)
 OBJCOPY		= i686-elf-objcopy
 RM				= rm -f
 

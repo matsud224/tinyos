@@ -21,11 +21,18 @@
 #include <kern/timer.h>
 #include <net/socket/socket.h>
 #include <net/util.h>
-//#include <mruby.h>
+#include <mruby.h>
 
 
 void _init(void);
 
+jmp_buf jbuf;
+void f(int n) {
+  if (n == 3)
+    longjmp(jbuf, 123);
+  else
+    f(n + 1);
+}
 
 KERNENTRY void kernel_main(void) {
   a20_enable();
@@ -33,6 +40,7 @@ KERNENTRY void kernel_main(void) {
 	puts("Starting kernel...");
   malloc_init();
   page_init();
+
   idt_init();
   //for(int i=0; i<=0xff; i++)
     //idt_register(i, IDT_INTGATE, spurious_inthandler);
@@ -52,10 +60,13 @@ KERNENTRY void kernel_main(void) {
   _init();
   //switch_to_chardev();
 
-  ip_set_defaultgw(IPADDR(192,168,4,1));
-  pit_init();
+  int a = setjmp(jbuf);
+  if (a == 0) {
+    f(0);
+  } else {
+    printf("setjmp returns %d\n", a);
+  }
 
-  /*
 	printf("mrb_open... ");
   mrb_state *mrb = mrb_open();
 	puts("ok");
@@ -63,7 +74,9 @@ KERNENTRY void kernel_main(void) {
 	printf("mrb_close... ");
   mrb_close(mrb);
 	puts("ok");
-  */
+
+  ip_set_defaultgw(IPADDR(192,168,4,1));
+  pit_init();
 
   dispatcher_run();
 

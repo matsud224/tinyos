@@ -25,7 +25,7 @@ all:
 	$(MAKE) -C $$subdir || exit 1;\
 	done
 	-mkdir -p $(BINDIR)
-	$(CC) -T $(LDSCR) -o $(BINDIR)/kernel.elf -Wl,-Map=$(MAP) -ffreestanding -nostdlib -lgcc $(CRTI_OBJ) $(CRTBEGIN_OBJ) $(OBJDIR)/*.o $(CRTEND_OBJ) $(CRTN_OBJ)
+	$(CC) -T $(LDSCR) -o $(BINDIR)/kernel.elf -Wl,-Map=$(MAP) -ffreestanding -nostdlib -lgcc $(CRTI_OBJ) $(CRTBEGIN_OBJ) $(OBJDIR)/*.o $(MRUBY_LIB) $(CRTEND_OBJ) $(CRTN_OBJ)
 	$(OBJCOPY) -O binary $(BINDIR)/kernel.elf $(BINDIR)/kernel.bin
 
 .PHONY: clean

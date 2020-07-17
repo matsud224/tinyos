@@ -73,6 +73,10 @@ retry:
 
 void *malloc(size_t request) {
   void *m = NULL;
+
+  if (request == 0)
+    return NULL;
+
 IRQ_DISABLE
   size_t size = (request + (SIZE_BASE-1)) & ~(SIZE_BASE-1);
 
@@ -81,7 +85,7 @@ IRQ_DISABLE
     struct chunkhdr *ch = page_alloc(PAGESIZE * npages, 0);
     ch->size = size;
     m = (void *)(ch + 1);
-  }else {
+  } else {
     m = getobj(size / SIZE_BASE);
     if(m == NULL)
      puts("warn: malloc failed.");
@@ -119,6 +123,7 @@ void *realloc(void *ptr, size_t size) {
   struct chunkhdr *ch = GET_CHUNKHDR(ptr);
   void *new = malloc(size);
   memcpy(new, ptr, MIN(ch->size, size));
+  free(ptr);
 
   return new;
 }

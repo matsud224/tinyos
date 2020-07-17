@@ -17,6 +17,8 @@ struct chunkhdr {
   int nfree;
 };
 
+#define GET_CHUNKHDR(p) ((struct chunkhdr *)pagealign((u32)(p)))
+
 struct list_head bin[MAX_BIN + 1];
 
 void malloc_init() {
@@ -90,7 +92,7 @@ IRQ_RESTORE
 
 void free(void *addr) {
 IRQ_DISABLE
-  struct chunkhdr *ch = (struct chunkhdr *)pagealign((u32)addr);
+  struct chunkhdr *ch = GET_CHUNKHDR(addr);
   if (ch->size > USE_BIN_THRESHOLD) {
     page_free(ch);
   } else {
@@ -106,7 +108,6 @@ IRQ_DISABLE
 IRQ_RESTORE
 }
 
-/*
 void *realloc(void *ptr, size_t size) {
   if (ptr == NULL) {
     return malloc(size);
@@ -115,8 +116,9 @@ void *realloc(void *ptr, size_t size) {
     return NULL;
   }
 
+  struct chunkhdr *ch = GET_CHUNKHDR(ptr);
   void *new = malloc(size);
+  memcpy(new, ptr, MIN(ch->size, size));
 
+  return new;
 }
-*/
-

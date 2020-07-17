@@ -45,7 +45,7 @@ NET_INIT void arp_init() {
   for(int i=0;i<MAX_ARPTABLE;i++)
     list_init(&arptable[i].pending);
 
-  thread_run(kthread_new(arp_10sec_thread, NULL, "arp_10sec", PRIORITY_SYSTEM));
+  thread_run(kthread_new(arp_10sec_thread, NULL, "arp_10sec", PRIORITY_SYSTEM, 1));
 }
 
 static struct pending_frame *pending_frame_new(struct pktbuf *frm, u16 proto, devno_t devno) {

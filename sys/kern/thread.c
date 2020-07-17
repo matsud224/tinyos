@@ -52,8 +52,8 @@ void dispatcher_init() {
   gdt_settssbase(&tss);
   ltr(GDT_SEL_TSS);
 
-  thread_run(kthread_new(thread_idle, NULL, "idle", PRIORITY_IDLE));
-  thread_run(kthread_new(thread_main, NULL, "main", PRIORITY_USER));
+  thread_run(kthread_new(thread_idle, NULL, "idle", PRIORITY_IDLE, 1));
+  thread_run(kthread_new(thread_main, NULL, "main", PRIORITY_USER, 1));
 }
 
 void dispatcher_run() {
@@ -82,7 +82,7 @@ pid_t get_next_pid() {
   return INVALID_PID;
 }
 
-struct thread *kthread_new(void (*func)(void *), void *arg, const char *name, u32 priority) {
+struct thread *kthread_new(void (*func)(void *), void *arg, const char *name, u32 priority, int is_preemptive) {
   pid_t pid = get_next_pid();
   if(pid == INVALID_PID)
     return NULL;
@@ -106,7 +106,7 @@ struct thread *kthread_new(void (*func)(void *), void *arg, const char *name, u3
   t->regs.esp -= 4;
   *(u32 *)t->regs.esp = (u32)func;
   t->regs.esp -= 4*5;
-  *(u32 *)t->regs.esp = 0x200; //initial eflags(IF=1)
+  *(u32 *)t->regs.esp = is_preemptive ? 0x200 : 0x000; //initial eflags
 
   t->priority = priority;
 

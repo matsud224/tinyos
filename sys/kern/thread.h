@@ -99,7 +99,7 @@ void dispatcher_init(void);
 void dispatcher_run(void);
 void thread_set_priority(u32 priority);
 void kstack_setaddr(void);
-struct thread *kthread_new(void (*func)(void *), void *arg, const char *name, u32 priority);
+struct thread *kthread_new(void (*func)(void *), void *arg, const char *name, u32 priority, int is_preemptive);
 int thread_exec_in_usermode(const char *path, char *const argv[], char *const envp[]);
 void thread_run(struct thread *t);
 void thread_sched(void);

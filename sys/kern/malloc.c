@@ -10,6 +10,7 @@
 
 struct chunkhdr {
   struct list_head link;
+  size_t size;
   void *freelist;
   int nobjs;
   int nfree;

@@ -110,6 +110,111 @@ char *strchr(const char *s, int c) {
     return p;
 }
 
+char *strcpy(char *dest, const char *src) {
+  do {
+    *dest++ = *src;
+  } while (*src++ != '\0');
+  return dest;
+}
+
+char *strncat(char *dest, const char *src, size_t n) {
+  size_t destlen = strlen(dest);
+  size_t i;
+
+  for (i = 0; i < n; i++) {
+    dest[destlen + i] = src[i];
+  }
+
+  dest[destlen + i] = '\0';
+  return dest;
+}
+
+char *strcat(char *dest, const char *src) {
+  size_t destlen = strlen(dest);
+  strcpy(dest + destlen, src);
+  return dest;
+}
+
+int isspace(int c) {
+  return (c == ' ' || c == '\f' || c == '\n' ||
+          c == '\r' || c == '\t' || c == '\v');
+}
+
+int tolower(int c) {
+  if (c >= 'A' && c <= 'Z')
+    return c + ('a' - 'A');
+  else
+    return c;
+}
+
+static int isvalidnumchar(char c, int base) {
+  c = tolower(c);
+
+  if (c >= '0' && c <= '9') {
+    return (c - '0') < base;
+  } else if (c >= 'a' && c <= 'z') {
+    return ((c - 'a') + 10) < base;
+  }
+
+  return 0;
+}
+
+#define ULONG_MAX (~(unsigned long)0)
+
+unsigned long int strtoul(const char *nptr, char **endptr, int base) {
+  const char *p = nptr;
+  int is_minus = 0;
+  unsigned long result = 0;
+
+  while(isspace(*p)) p++;
+
+  if (*p == '-') {
+    is_minus = 1;
+    p++;
+  } else if (*p == '+') {
+    p++;
+  }
+
+  if (*p == '0' && *(p + 1) == 'x') {
+    if (base == 0 || base == 16)
+      base = 16;
+    else
+      goto error;
+
+    p += 2;
+  } else if (*p == '0') {
+    if (base == 0)
+      base = 8;
+    else if (base != 10)
+      goto error;
+
+    p += 1;
+  } else {
+    if (base == 0)
+      base = 10;
+  }
+
+  while (isvalidnumchar(*p, base)) {
+    unsigned long temp = (result * base) + *p;
+    if (result > temp)
+      result = ULONG_MAX;
+    else
+      result = temp;
+
+    p++;
+  }
+
+  if (is_minus) {
+    result = (unsigned long)(-(long)result);
+  }
+
+error:
+  if (endptr != NULL)
+    *endptr = p;
+
+  return result;
+}
+
 void show_line() {
   puts("-------------------");
 }
@@ -118,10 +223,12 @@ void show_number(u32 num) {
   printf("%x", num);
 }
 
+void abort_for_mrb(void);
 void abort(void) {
   abort_for_mrb();
 }
 
+void exit_for_mrb(int);
 void exit(int status) {
   exit_for_mrb(status);
 }

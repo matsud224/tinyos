@@ -36,7 +36,7 @@ try_findarea:
           goto try_findarea;
       }
     }
-    printf("Segmentation Fault in thread#%d (%s) addr = 0x%x (eip = 0x%x, esp = 0x%x)\n", current->pid, GET_THREAD_NAME(current), addr, eip, esp);
+    printf("Segmentation Fault in thread#%d (%s) addr = 0x%x (eip = 0x%x, esp = 0x%x(%x))\n", current->pid, GET_THREAD_NAME(current), addr, eip, esp, getesp());
     thread_exit_with_error();
   } else {
     paddr_t paddr = varea->mapper->ops->request(varea->mapper, addr - varea->start);

@@ -26,6 +26,7 @@ all:
 	done
 	-mkdir -p $(BINDIR)
 	$(CC) -T $(LDSCR) -o $(BINDIR)/kernel.elf -Wl,-Map=$(MAP) -ffreestanding -nostdlib -lgcc $(CRTI_OBJ) $(CRTBEGIN_OBJ) $(OBJDIR)/*.o $(MRUBY_LIB) $(CRTEND_OBJ) $(CRTN_OBJ)
+	strip $(BINDIR)/kernel.elf
 	$(OBJCOPY) -O binary $(BINDIR)/kernel.elf $(BINDIR)/kernel.bin
 
 .PHONY: clean

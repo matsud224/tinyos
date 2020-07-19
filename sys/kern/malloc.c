@@ -33,13 +33,13 @@ static struct chunkhdr *getnewchunk(size_t objsize) {
 
   struct chunkhdr *newchunk = (struct chunkhdr *)page_alloc(PAGESIZE, 0);
   if(newchunk == NULL)
-   puts("malloc: page_alloc failed.");
+    puts("malloc: page_alloc failed.");
 
   newchunk->size = objsize;
   newchunk->freelist = NULL;
   int nobjs = (PAGESIZE - sizeof(struct chunkhdr)) / objsize;
   newchunk->nobjs = newchunk->nfree = nobjs;
-  u8 *obj = (u8 *)(newchunk+1);
+  u8 *obj = (u8 *)(newchunk + 1);
   for(int i=0; i<nobjs; i++) {
     *(void **)obj = newchunk->freelist;
     newchunk->freelist = obj;
@@ -66,7 +66,7 @@ retry:
   if(newch == NULL)
     return NULL;
 
-  list_pushback(&newch->link, &bin[binindex]);
+  list_pushfront(&newch->link, &bin[binindex]);
 
   goto retry;
 }
@@ -81,8 +81,10 @@ IRQ_DISABLE
   size_t size = (request + (SIZE_BASE-1)) & ~(SIZE_BASE-1);
 
   if(size > USE_BIN_THRESHOLD) {
-    int npages =  (size + sizeof(struct chunkhdr) + (PAGESIZE-1)) & ~(PAGESIZE-1);
-    struct chunkhdr *ch = page_alloc(PAGESIZE * npages, 0);
+    size_t allocsz =  (size + sizeof(struct chunkhdr) + (PAGESIZE-1)) & ~(PAGESIZE-1);
+    struct chunkhdr *ch = page_alloc(allocsz , 0);
+    if(ch == NULL)
+     puts("warn: malloc failed.");
     ch->size = size;
     m = (void *)(ch + 1);
   } else {
@@ -95,6 +97,9 @@ IRQ_RESTORE
 }
 
 void free(void *addr) {
+  if (addr == NULL)
+    return;
+
 IRQ_DISABLE
   struct chunkhdr *ch = GET_CHUNKHDR(addr);
   if (ch->size > USE_BIN_THRESHOLD) {

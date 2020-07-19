@@ -7,7 +7,7 @@ BINDIR		= ../bin
 .PHONY: all
 all: $(BINDIR)/boot.bin
 
-$(BINDIR)/boot.bin:
+$(BINDIR)/boot.bin: boot.asm
 	-mkdir -p $(BINDIR)
 	$(NASM) -o $@ boot.asm
 

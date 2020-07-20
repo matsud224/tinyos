@@ -21,6 +21,10 @@ SECTIONS
     *(.stack)
     *(.text)
     *(.text.*)
+    *(.ctors)
+    *(.dtors)
+    *(.jcr)
+    *(.eh_frame)
   } > kernvirt AT> protmem
 
   .rodata BLOCK(4K) : ALIGN(4K)

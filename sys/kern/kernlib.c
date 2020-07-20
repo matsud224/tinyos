@@ -159,6 +159,18 @@ static int isvalidnumchar(char c, int base) {
   return 0;
 }
 
+static int converttoint(char c) {
+  c = tolower(c);
+
+  if (c >= '0' && c <= '9') {
+    return c - '0';
+  } else if (c >= 'a' && c <= 'z') {
+    return (c - 'a') + 10;
+  }
+
+  return 0;
+}
+
 #define ULONG_MAX (~(unsigned long)0)
 
 unsigned long int strtoul(const char *nptr, char **endptr, int base) {
@@ -195,7 +207,7 @@ unsigned long int strtoul(const char *nptr, char **endptr, int base) {
   }
 
   while (isvalidnumchar(*p, base)) {
-    unsigned long temp = (result * base) + *p;
+    unsigned long temp = (result * base) + converttoint(*p);
     if (result > temp)
       result = ULONG_MAX;
     else

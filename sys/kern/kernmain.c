@@ -34,16 +34,16 @@ void kernel_main(struct multiboot_info *bootinfo) {
   malloc_init();
   page_init(bootinfo);
 
-  /*
   printf("mrb_open... ");
   mrb_state *mrb = mrb_open();
 	puts(mrb ? "ok" : "fail");
 
   if (mrb) {
-    mrb_load_string(mrb, "p 'hello world!'");
+    const char *code = "[1,2]";
+    printf("code => %s\n", code);
+    mrb_load_string(mrb, code);
     mrb_close(mrb);
   }
-  */
 
   idt_init();
   //for(int i=0; i<=0xff; i++)

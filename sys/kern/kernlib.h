@@ -8,7 +8,6 @@
 #include <kern/kernasm.h>
 
 #define INLINE __inline__
-#define KERNENTRY __attribute__ ((section (".entry")))
 #define PACKED __attribute__ ((packed))
 #define UNUSED __attribute__ ((unused))
 #define ASM __asm__ __volatile__
@@ -67,3 +66,4 @@ void show_line(void);
 void show_number(u32);
 void abort(void);
 void exit(int status);
+void panic(const char *msg);

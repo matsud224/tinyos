@@ -21,18 +21,18 @@
 #include <kern/timer.h>
 #include <net/socket/socket.h>
 #include <net/util.h>
+#include <kern/multiboot.h>
 #include <mruby.h>
 #include <mruby/compile.h>
 
 
 void _init(void);
 
-KERNENTRY void kernel_main(void) {
-  a20_enable();
+void kernel_main(struct multiboot_info *bootinfo) {
 	vga_init();
 	puts("Starting kernel...");
   malloc_init();
-  page_init();
+  page_init(bootinfo);
 
   /*
   printf("mrb_open... ");

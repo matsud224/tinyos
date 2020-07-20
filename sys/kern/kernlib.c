@@ -232,3 +232,10 @@ void exit_for_mrb(int);
 void exit(int status) {
   exit_for_mrb(status);
 }
+
+void panic(const char *msg) {
+  show_line();
+  printf("PANIC: %s\n");
+  show_line();
+  while(1);
+}

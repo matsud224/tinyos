@@ -38,7 +38,8 @@ void pagetbl_init() {
   int st_start_index = KERN_VMEM_ADDR / 0x400000; //0x400000 = 4MB
   KERN_PDE_START = st_start_index;
   int st_end_index = st_start_index + (KERN_STRAIGHT_MAP_SIZE/0x400000);
-  vaddr_t addr = 0x0;
+  paddr_t addr = 0x0;
+  //memcpy(kernspace_pdt, PHYS_TO_KERN_VMEM(0x2000), PAGESIZE);
   for(int i = st_start_index; i < st_end_index;
         i++, addr += 0x400000){
     kernspace_pdt[i] = addr | PDE_PRESENT | PDE_RW | PDE_SIZE_4MB;

@@ -1,13 +1,7 @@
 #include <kern/page.h>
 #include <kern/thread.h>
 #include <kern/kernlib.h>
-
-// address region descriptor
-struct ardesc {
-  u64 base;
-  u64 len;
-  u32 type;
-};
+#include <kern/multiboot.h>
 
 #define PAGE_ALLOCATED 0x1
 #define PAGE_RESERVED  0x2
@@ -229,17 +223,27 @@ void page_free(void *addr) {
   while(try_merge_buddy(this_idx, &this_idx, 0) == 0);
 }
 
-void page_init() {
-  struct ardesc *map = (struct ardesc *)(KERN_VMEM_ADDR+MEMORYMAP_ADDR);
-  while(map->base || map->len) {
-    if(map->type == 1)
-      memsize = (u32)(map->base + map->len);
-    map++;
+extern void *_kernel_end;
+
+void page_init(struct multiboot_info *bootinfo) {
+  if (bootinfo->flags & 0x40) {
+    struct multiboot_mmap_entry *mmap = (u32 *)PHYS_TO_KERN_VMEM((char *)bootinfo->mmap_addr);
+    struct multiboot_mmap_entry *mmap_end = (struct multiboot_mmap_entry *)((u8 *)mmap + bootinfo->mmap_length);
+    //printf("memory map: %x / %x\n", mmap, bootinfo->mmap_length);
+    for (; mmap < mmap_end; mmap = (u8 *)mmap + mmap->size + sizeof(mmap->size)) {
+      //printf("size=%u, addr=%x, len=%x, type=%d\n", mmap->size, (u32)(mmap->addr & 0xffffffff), (u32)(mmap->length & 0xffffffff), mmap->type);
+      if (mmap->type == MULTIBOOT_MEMORY_AVAILABLE)
+        memsize = MAX(memsize, (u32)(mmap->addr & 0xffffffff) + (u32)(mmap->length & 0xffffffff));
+    }
+  } else if (bootinfo->flags & 0x2) {
+    memsize = bootinfo->mem_upper * 1024;
+  } else {
+    panic("can't detect memory info.");
   }
+
   memsize = MIN(memsize, KERN_STRAIGHT_MAP_SIZE);
   memsize = memsize & ~(PAGESIZE-1);
-
-  pageinfo = (struct page *)(KERN_VMEM_ADDR+PROTMEM_ADDR);
+  pageinfo = (struct page *)&_kernel_end;
   page_total = memsize / PAGESIZE;
   for (u32 i=0; i<page_total; i++)
     pageinfo[i].flags = PAGE_RESERVED;

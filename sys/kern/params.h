@@ -2,9 +2,6 @@
 #include <kern/types.h>
 
 #define KERN_VMEM_ADDR					((vaddr_t)0xc0000000u)
-#define MEMORYMAP_ADDR					((paddr_t)0x500u)
-#define KERN_CODE_ADDR					((paddr_t)0x7e00u)
-#define KERN_STACK_ADDR					((paddr_t)0x7bffu)
 #define PROTMEM_ADDR						((paddr_t)0x100000u)
 #define KERN_STRAIGHT_MAP_SIZE	((size_t)0x38000000) //896MB
 

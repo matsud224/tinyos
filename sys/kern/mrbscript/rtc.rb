@@ -8,23 +8,22 @@ def read_rtc_register(reg)
   return IOPort.in_8(CMOS_DATA)
 end
 
-second = read_rtc_register(0x00);
-minute = read_rtc_register(0x02);
-hour   = read_rtc_register(0x04);
-day    = read_rtc_register(0x07);
-month  = read_rtc_register(0x08);
-year   = read_rtc_register(0x09);
+def fromBCD(i)
+  (i & 0x0f) + (((i & 0xf0) / 16) * 10)
+end
 
-registerB = read_rtc_register(0x0B);
+second, minute, hour, day, month, year, registerB =
+  [0x0, 0x2, 0x4, 0x7, 0x8, 0x9, 0xb]
+  .map { |r| read_rtc_register(r) }
 
 # Convert BCD to binary values if necessary
 if (registerB & 0x04) == 0
-  second = (second & 0x0F) + ((second / 16) * 10)
-  minute = (minute & 0x0F) + ((minute / 16) * 10)
-  hour = ( (hour & 0x0F) + (((hour & 0x70) / 16) * 10) ) | (hour & 0x80)
-  day = (day & 0x0F) + ((day / 16) * 10)
-  month = (month & 0x0F) + ((month / 16) * 10)
-  year = (year & 0x0F) + ((year / 16) * 10)
+  second = fromBCD(second)
+  minute = fromBCD(minute)
+  hour   = ( (hour & 0x0F) + (((hour & 0x70) / 16) * 10) ) | (hour & 0x80)
+  day    = fromBCD(day)
+  month  = fromBCD(month)
+  year   = fromBCD(year)
 end
 
 # Convert 12 hour clock to 24 hour clock if necessary

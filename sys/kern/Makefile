@@ -6,12 +6,23 @@ OBJCOPY		= i686-elf-objcopy
 RM				= rm -f
 
 OBJDIR		= ../obj
+MRBSRCDIR = mrbscript
 SRCS			= $(wildcard *.c)
 ASMS			= $(wildcard *.asm)
 OBJS			= $(addprefix $(OBJDIR)/, $(notdir $(SRCS:.c=.o))) $(addprefix $(OBJDIR)/, $(notdir $(ASMS:.asm=.o)))
 
 .PHONY: all
-all: $(OBJS)
+all: mrbscript_list.h $(OBJS)
+
+mrbscript_list.h:
+	$(MAKE) -C mrbscript all
+	bash gen_mrbscript_list.sh
+
+.PHONY: rerun-mrb
+rerun-mrb:
+	$(RM) mrbscript_list.h
+	$(RM) $(OBJDIR)/kernmrb.o
+	$(MAKE)
 
 $(OBJDIR)/%.o: %.c
 	-mkdir -p $(OBJDIR)
@@ -23,5 +34,5 @@ $(OBJDIR)/%.o: %.asm
 
 .PHONY: clean
 clean:
-	$(RM) $(OBJS)
+	$(RM) $(OBJS) mrbscript_list.h
 

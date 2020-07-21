@@ -49,7 +49,7 @@ void kernel_main(struct multiboot_info *bootinfo) {
   fs_init();
   kernelmrb_init();
 
-  kernelmrb_load_string("puts 'hello from mruby!'");
+  kernelmrb_load_all_builtin_scripts();
 
   _init();
   //switch_to_chardev();

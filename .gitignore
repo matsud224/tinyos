@@ -5,3 +5,4 @@ kern/obj/
 *.bin
 *.elf
 *.tar.gz
+sys/kern/mrbscript_list.h

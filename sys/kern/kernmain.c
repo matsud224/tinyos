@@ -22,8 +22,6 @@
 #include <net/socket/socket.h>
 #include <net/util.h>
 #include <kern/multiboot.h>
-#include <mruby.h>
-#include <mruby/compile.h>
 
 
 void _init(void);
@@ -49,28 +47,15 @@ void kernel_main(struct multiboot_info *bootinfo) {
   chardev_init();
   netdev_init();
   fs_init();
+  kernelmrb_init();
+
+  kernelmrb_load_string("puts 'hello from mruby!'");
 
   _init();
   //switch_to_chardev();
 
 	ip_set_defaultgw(IPADDR(192,168,4,1));
   pit_init();
-
-  printf("mrb_open... ");
-  mrb_state *mrb = mrb_open();
-	puts(mrb ? "ok" : "fail");
-
-  if (mrb) {
-    const char *code =
-      "puts 'hello, world'\n"
-      "a=[1,2]\n"
-      "a.push(3)\n"
-      "a.collect!{|e| e**2}\n"
-      "p a\n";
-    printf("code => %s\n", code);
-    mrb_load_string(mrb, code);
-    mrb_close(mrb);
-  }
 
   dispatcher_run();
 

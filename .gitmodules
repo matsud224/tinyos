@@ -1,0 +1,3 @@
+[submodule "sys/mruby"]
+	path = sys/mruby
+	url = https://github.com/matsud224/mruby-tinyos.git

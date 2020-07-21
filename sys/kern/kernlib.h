@@ -53,6 +53,7 @@ char *strncat(char *dest, const char *src, size_t n);
 char *strcat(char *dest, const char *src);
 int isspace(int c);
 unsigned long int strtoul(const char *nptr, char **endptr, int base);
+int toupper(int c);
 int tolower(int c);
 int setjmp(jmp_buf env);
 void longjmp(jmp_buf env, int val);

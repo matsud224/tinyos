@@ -145,6 +145,12 @@ int isspace(int c) {
           c == '\r' || c == '\t' || c == '\v');
 }
 
+int toupper(int c) {
+  if (c >= 'a' && c <= 'z')
+    return c - ('a' - 'A');
+  else
+    return c;
+}
 int tolower(int c) {
   if (c >= 'A' && c <= 'Z')
     return c + ('a' - 'A');

@@ -24,6 +24,7 @@ TODO
 * Socket
 * Ported Newlib C library
   * (implemented exit, close, execve, fork, fstat, getpid, isatty, link, lseek, open, read, sbrk, stat, unlink, wait and write)
+* mruby in the kernel space
 
 
 ![Screenshot](https://user-images.githubusercontent.com/20959559/77240903-c35a6c80-6c2e-11ea-81ed-fa77791dbb41.png)

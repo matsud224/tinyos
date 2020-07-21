@@ -67,13 +67,18 @@ void *memset(void *s, int c, size_t n) {
 }
 
 int memcmp(const void *s1, const void *s2, size_t n) {
+  size_t i;
   u8 *p1 = (u8 *)s1;
   u8 *p2 = (u8 *)s2;
 
-  while(n-- != 0 && *p1 == *p2) {
-    p1++; p2++;
+  for (i = 0; i < n; i++, p1++, p2++) {
+    if (*p1 != *p2)
+      break;
   }
-  return *p1 - *p2;
+  if (i == n)
+    return 0;
+  else
+    return *p1 - *p2;
 }
 
 void *memmove(void *dest, const void *src, size_t n) {

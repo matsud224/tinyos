@@ -34,17 +34,6 @@ void kernel_main(struct multiboot_info *bootinfo) {
   malloc_init();
   page_init(bootinfo);
 
-  printf("mrb_open... ");
-  mrb_state *mrb = mrb_open();
-	puts(mrb ? "ok" : "fail");
-
-  if (mrb) {
-    const char *code = "[1,2]";
-    printf("code => %s\n", code);
-    mrb_load_string(mrb, code);
-    mrb_close(mrb);
-  }
-
   idt_init();
   //for(int i=0; i<=0xff; i++)
     //idt_register(i, IDT_INTGATE, spurious_inthandler);
@@ -66,6 +55,22 @@ void kernel_main(struct multiboot_info *bootinfo) {
 
 	ip_set_defaultgw(IPADDR(192,168,4,1));
   pit_init();
+
+  printf("mrb_open... ");
+  mrb_state *mrb = mrb_open();
+	puts(mrb ? "ok" : "fail");
+
+  if (mrb) {
+    const char *code =
+      "puts 'hello, world'\n"
+      "a=[1,2]\n"
+      "a.push(3)\n"
+      "a.collect!{|e| e**2}\n"
+      "p a\n";
+    printf("code => %s\n", code);
+    mrb_load_string(mrb, code);
+    mrb_close(mrb);
+  }
 
   dispatcher_run();
 

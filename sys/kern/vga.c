@@ -92,6 +92,11 @@ static int putstr(const char *str) {
   return 0;
 }
 
+static int putnstr(const char *str, int len) {
+  while(len-- > 0 && *str) putchar(*str++);
+  return 0;
+}
+
 int puts(const char *str) {
 IRQ_DISABLE
   putstr(str);
@@ -133,13 +138,31 @@ static void print_num_unsigned(u32 val, int base) {
 }
 
 
+static int read_precision(const char **fmt, int **argbase) {
+  if (**fmt == '.') {
+    (*fmt)++;
+    if (**fmt >= '0' && **fmt <= '9') {
+      // FIXME: >=10
+      return *(*fmt)++ - '0';
+    } else if (**fmt == '*') {
+      (*fmt)++;
+      return *(*argbase)++;
+    }
+  }
+
+  return -1;
+}
+
 void printf(const char *fmt, ...) {
 IRQ_DISABLE
   int *argbase = ((int *)&fmt)+1;
   while(*fmt) {
     switch(*fmt) {
     case '%':
-      switch(*(++fmt)) {
+      fmt++;
+      int precision = read_precision(&fmt, &argbase);
+
+      switch(*fmt) {
       case 'd':
         print_num_signed(*argbase++, 10);
         break;
@@ -153,7 +176,10 @@ IRQ_DISABLE
         putchar((char)*argbase++);
         break;
       case 's':
-        putstr((char *)*argbase++);
+        if (precision >= 0)
+          putnstr((char *)*argbase++, precision);
+        else
+          putstr((char *)*argbase++);
         break;
       case '%':
         putchar('%');

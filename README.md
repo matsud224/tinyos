@@ -9,6 +9,7 @@ TODO
 # Features
 * Preemptive multitasking
 * Paging
+* Buddy memory allocation
 * Interrupts(PIC)
 * Timer(PIT)
 * Application runs in usermode
